@@ -40,6 +40,8 @@ Business management and accounting software for a farm (built first for a duck &
 | When a buyer pays old dues | Manager | **New → Receive payment** and apply it to their open চালান. |
 | When paying a supplier | Manager | **New → Pay supplier**. |
 | When medicine, vaccine, trays etc. are used | Farm worker | **New → Use stock**: item and quantity; it leaves stock and is booked as that expense. |
+| When someone gives the farm money | Manager | **New → Grant received**: who gave it (name, phone), amount. Booked as grant income, shown under *Other income*. |
+| When money goes to the cow/chicken side projects | Manager | **Cash & bank → Side projects → Send / receive money**. Never counted as a duck-farm expense. |
 | End of day | Manager | **Cash & bank → Cash count**: count the cash box; the app shows any shortage/excess. |
 | Weekly | Owner | Dashboard, receivables (who owes us), low feed stock. |
 | Monthly | Manager | **Inventory → Use / count stock → Physical stock count**: enter what is actually there; only the difference is posted. |

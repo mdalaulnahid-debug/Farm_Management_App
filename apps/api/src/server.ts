@@ -15,6 +15,7 @@ import masterRoutes from './routes/master.js';
 import transactionRoutes from './routes/transactions.js';
 import reportRoutes from './routes/reports.js';
 import importRoutes from './routes/import.js';
+import projectRoutes from './routes/projects.js';
 import { ensureReferenceData } from './services/reference.js';
 
 export async function buildApp() {
@@ -52,6 +53,7 @@ export async function buildApp() {
     await api.register(transactionRoutes);
     await api.register(reportRoutes);
     await api.register(importRoutes);
+    await api.register(projectRoutes);
   }, { prefix: '/api/v1' });
 
   // In production the API also serves the built web app.

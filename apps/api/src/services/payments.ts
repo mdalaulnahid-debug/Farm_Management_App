@@ -18,6 +18,8 @@ export interface PaymentInput {
   reference?: string | null;
   notes?: string | null;
   allocations?: { invoiceId?: string; billId?: string; amount: number }[];
+  /** Business line for both lines of the entry (defaults to the main project). */
+  projectId?: string | null;
 }
 
 const statusFor = (total: number, paid: number) => (isZero(paid) ? 'POSTED' : paid + 0.005 >= total ? 'PAID' : 'PARTIAL');
@@ -71,8 +73,8 @@ export async function createPayment(db: Db, actor: Actor | null, input: PaymentI
 
   const memo = `${input.direction === 'IN' ? 'Receipt' : 'Payment'} ${number}${input.notes ? ` — ${input.notes}` : ''}`;
   const lines = input.direction === 'IN'
-    ? [{ accountId: cash.id, debit: amount }, { accountId: counterAccountId, credit: amount, partyId: input.partyId }]
-    : [{ accountId: counterAccountId, debit: amount, partyId: input.partyId }, { accountId: cash.id, credit: amount }];
+    ? [{ accountId: cash.id, debit: amount, projectId: input.projectId }, { accountId: counterAccountId, credit: amount, partyId: input.partyId, projectId: input.projectId }]
+    : [{ accountId: counterAccountId, debit: amount, partyId: input.partyId, projectId: input.projectId }, { accountId: cash.id, credit: amount, projectId: input.projectId }];
   const je = await postEntry(db, actor, { date: input.date, memo, sourceType: 'PAYMENT', sourceId: payment.id, lines });
   await db.payment.update({ where: { id: payment.id }, data: { journalEntryId: je.id } });
   await audit(db, actor, 'create', 'payment', payment.id, `${memo} (${amount})`);

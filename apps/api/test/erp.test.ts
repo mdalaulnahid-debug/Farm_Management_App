@@ -52,7 +52,9 @@ describe('October workbook history', () => {
     const pl = (await call('GET', '/reports/profit-loss?from=2026-10-01&to=2026-10-31')).body;
     expect(pl.revenue).toBe(80618);
     expect(pl.totalExpenses).toBe(70719);
-    expect(pl.netProfit).toBe(9899);
+    expect(pl.operatingProfit).toBe(9899);
+    expect(pl.otherIncome.lines.find((l: any) => l.code === '4510').amount).toBe(15000);
+    expect(pl.netProfit).toBe(24899);
     const tb = (await call('GET', '/reports/trial-balance?asOf=2026-10-31')).body;
     expect(tb.balanced).toBe(true);
     const cf = (await call('GET', '/reports/cash-flow?from=2026-10-01&to=2026-10-31')).body;
@@ -150,6 +152,46 @@ describe('stock: medicine usage and physical count', () => {
   });
 });
 
+describe('grants and side projects', () => {
+  it('records a grant from a person as grant income and adds the donor to contacts', async () => {
+    const r = await call('POST', '/grants', { date: '2026-11-16', donor: { name: 'Abdul Karim', phone: '01811-000111' }, amount: 5000, cashAccountId: await id('1010') });
+    expect(r.status).toBe(200);
+    expect(r.body.party.kind).toBe('DONOR');
+    const again = await call('POST', '/grants', { date: '2026-11-17', donor: { name: 'A. Karim', phone: '+8801811000111' }, amount: 1000, cashAccountId: await id('1010') });
+    expect(again.body.party.id).toBe(r.body.party.id);
+    const pl = (await call('GET', '/reports/profit-loss?from=2026-11-16&to=2026-11-17')).body;
+    expect(pl.otherIncome.lines.find((l: any) => l.code === '4510').amount).toBe(6000);
+    expect(pl.revenue).toBe(0);
+    expect((await call('GET', '/grants')).body.total).toBe(21000);
+  });
+
+  it('moves money to a side project without touching the duck farm profit', async () => {
+    const projects = (await call('GET', '/projects')).body.data;
+    const duck = projects.find((p: any) => p.code === 'DUCK');
+    const cow = projects.find((p: any) => p.code === 'COW');
+    expect(duck.isMain).toBe(true);
+    const out = await call('POST', '/project-transfers', { date: '2026-11-18', projectId: cow.id, direction: 'OUT', cashAccountId: await id('1010'), amount: 8000 });
+    expect(out.status).toBe(200);
+    await call('POST', '/project-transfers', { date: '2026-11-20', projectId: cow.id, direction: 'IN', cashAccountId: await id('1010'), amount: 3000 });
+    const summary = (await call('GET', '/projects/summary')).body.data;
+    expect(summary.find((p: any) => p.code === 'COW')).toMatchObject({ sent: 8000, returned: 3000, held: 5000 });
+    const plDuck = (await call('GET', `/reports/profit-loss?from=2026-11-18&to=2026-11-20&projectId=${duck.id}`)).body;
+    expect(plDuck.totalExpenses).toBe(0);
+    const bs = (await call('GET', '/reports/balance-sheet?asOf=2026-11-30')).body;
+    expect(bs.currentAssets.lines.find((l: any) => l.code === '1400').amount).toBe(5000);
+    expect(bs.balanced).toBe(true);
+    expect((await call('POST', '/project-transfers', { date: '2026-11-18', projectId: duck.id, direction: 'OUT', cashAccountId: await id('1010'), amount: 1 })).status).toBe(400);
+  });
+
+  it('can void a side-project transfer', async () => {
+    const list = (await call('GET', '/project-transfers')).body.data;
+    expect(list).toHaveLength(2);
+    expect((await call('POST', `/journals/${list[0].id}/void`, { reason: 'entered by mistake' })).status).toBe(200);
+    const summary = (await call('GET', '/projects/summary')).body.data;
+    expect(summary.find((p: any) => p.code === 'COW').held).toBe(8000);
+  });
+});
+
 describe('accounting controls', () => {
   it('refuses an unpaid bill with no supplier', async () => {
     const r = await call('POST', '/bills', { date: '2026-11-10', lines: [{ accountId: await id('6090'), quantity: 1, unitPrice: 500 }] });
@@ -205,7 +247,9 @@ describe('workbook backlog import', () => {
     expect(await octCash()).toBe(15897);
     const pl = (await call('GET', '/reports/profit-loss?from=2026-10-01&to=2026-10-31')).body;
     expect(pl.revenue).toBe(80618);
-    expect(pl.netProfit).toBe(9899);
+    expect(pl.operatingProfit).toBe(9899);
+    expect(pl.otherIncome.lines.find((l: any) => l.code === '4510').amount).toBe(15000);
+    expect(pl.netProfit).toBe(24899);
 
     const batches = (await call('GET', '/import/batches')).body.data;
     const live = batches.filter((b: any) => b.status === 'POSTED');

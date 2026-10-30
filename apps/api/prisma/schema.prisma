@@ -145,17 +145,36 @@ model JournalLine {
   credit    Decimal      @default(0)
   partyId   String?
   party     Party?       @relation(fields: [partyId], references: [id])
+  projectId String?      // business line (duck, cow, chicken...); every line is tagged, main project by default
+  project   Project?     @relation(fields: [projectId], references: [id])
   memo      String?
 
   @@index([accountId])
   @@index([partyId])
+  @@index([projectId])
+}
+
+// A business line of the farm. The duck farm is the main project; side projects (cow, chicken)
+// get their own profit & loss from the same ledger, and money moved between them is tracked.
+model Project {
+  id        String        @id @default(cuid())
+  code      String        @unique // DUCK, COW, CHICKEN ...
+  name      String
+  nameBn    String?
+  kind      String        // POULTRY_EGGS | DAIRY | FATTENING | POULTRY_MEAT | OTHER
+  isMain    Boolean       @default(false)
+  active    Boolean       @default(true)
+  notes     String?
+  lines     JournalLine[]
+  flocks    Flock[]
+  createdAt DateTime      @default(now())
 }
 
 // ───────────────────────── Master data ─────────────────────────
 
 model Party {
   id           String         @id @default(cuid())
-  kind         String         // CUSTOMER | SUPPLIER | BOTH | EMPLOYEE
+  kind         String         // CUSTOMER | SUPPLIER | BOTH | EMPLOYEE | DONOR
   name         String
   phone        String?
   email        String?
@@ -365,6 +384,8 @@ model Flock {
   breed        String?
   siteId       String?
   site         Site?           @relation(fields: [siteId], references: [id])
+  projectId    String?
+  project      Project?        @relation(fields: [projectId], references: [id])
   startDate    DateTime
   openingCount Int
   currentCount Int

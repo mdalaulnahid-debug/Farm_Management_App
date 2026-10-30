@@ -24,6 +24,7 @@ export const SYS = {
   BANK: '1020',
   MOBILE: '1030',
   AR: '1100',
+  SIDE_PROJECTS: '1400',
   INV_FEED: '1210',
   INV_MEDICINE: '1220',
   INV_PRODUCE: '1230',
@@ -39,6 +40,7 @@ export const SYS = {
   SALES_OTHER: '4090',
   SALES_DISCOUNT: '4900',
   OTHER_INCOME: '4500',
+  GRANT_INCOME: '4510',
   COGS: '5010',
   FEED_EXPENSE: '6010',
   MEDICINE_EXPENSE: '6020',
@@ -46,7 +48,8 @@ export const SYS = {
   CASH_SHORTAGE: '6810',
 } as const;
 
-export const PARTY_KINDS = ['CUSTOMER', 'SUPPLIER', 'BOTH', 'EMPLOYEE'] as const;
+export const PARTY_KINDS = ['CUSTOMER', 'SUPPLIER', 'BOTH', 'EMPLOYEE', 'DONOR'] as const;
+export const PROJECT_KINDS = ['POULTRY_EGGS', 'DAIRY', 'FATTENING', 'POULTRY_MEAT', 'OTHER'] as const;
 export const ITEM_CATEGORIES = ['PRODUCE', 'FEED', 'MEDICINE', 'LIVESTOCK', 'SUPPLY', 'SERVICE'] as const;
 // MOBILE = bKash / Nagad / Rocket, CARD = debit/credit card. Recorded manually with the transaction ID;
 // online gateway collection is planned for the next phase.

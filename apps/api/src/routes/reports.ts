@@ -13,7 +13,7 @@ import { actorOf, can } from '../auth/auth.js';
 import * as R from '../services/reports.js';
 
 const monthStart = () => `${today().slice(0, 8)}01`;
-const range = z.object({ from: z.string().optional(), to: z.string().optional() });
+const range = z.object({ from: z.string().optional(), to: z.string().optional(), projectId: z.string().optional() });
 const resolve = (q: unknown) => {
   const r = parse(range, q);
   const from = parse(zDate, r.from || monthStart());
@@ -29,7 +29,8 @@ export default async function reportRoutes(app: FastifyInstance) {
   });
   app.get('/reports/profit-loss', { preHandler: can('reports.view') }, async req => {
     const { from, to } = resolve(req.query);
-    return R.profitAndLoss(from, to);
+    const projectId = (req.query as { projectId?: string }).projectId || null;
+    return R.profitAndLoss(from, to, projectId);
   });
   app.get('/reports/balance-sheet', { preHandler: can('reports.view') }, async req => R.balanceSheet(asOf(req.query)));
   app.get('/reports/trial-balance', { preHandler: can('reports.view') }, async req => R.trialBalance(asOf(req.query)));

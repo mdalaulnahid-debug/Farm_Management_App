@@ -356,7 +356,7 @@ export async function importWorkbook(db: Db, actor: Actor | null, p: ParsedWorkb
     docs.payments.push(pay.id);
   }
   if (p.params.contribution > 0) {
-    docs.payments.push((await createPayment(db, actor, { direction: 'IN', date: to, cashAccountId: cash, counterAccountId: await acc(SYS.OWNER_CAPITAL), amount: p.params.contribution, notes: `Cash grant / contribution (${monthName} workbook)` })).id);
+    docs.payments.push((await createPayment(db, actor, { direction: 'IN', date: to, cashAccountId: cash, counterAccountId: await acc(SYS.GRANT_INCOME), amount: p.params.contribution, notes: `Cash grant (${monthName} workbook)` })).id);
   }
 
   const summary = totals(p);
