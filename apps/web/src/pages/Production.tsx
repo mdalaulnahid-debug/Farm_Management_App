@@ -139,7 +139,7 @@ function DailyLog() {
         <Select style={{ width: 'auto' }} value={flockId} onChange={e => { setFlockId(e.target.value); setPage(1); }} placeholder={t('All flocks', 'সব ঝাঁক')}
           options={(flocks.data?.data ?? []).map(f => ({ value: f.id, label: `${f.code} · ${f.name}` }))} />
         <RangePicker value={range} onChange={x => { setRange(x); setPage(1); }} />
-        <button className="btn" onClick={exportCsv} disabled={!list.data?.data.length}><Download size={16} />{t('Export', 'রপ্তানি')}</button>
+        <button className="btn" onClick={exportCsv} disabled={!list.data?.data.length}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>
       </>}>
         <DataTable rows={list.data?.data} columns={columns} page={page} pageSize={50} total={list.data?.total} onPage={setPage}
           empty={t('No production recorded for this period yet.', 'এই সময়ে এখনো কোনো উৎপাদন লেখা হয়নি।')} />
@@ -182,7 +182,7 @@ function Flocks({ flocks, onEdit }: { flocks: Flock[] | undefined; onEdit?: (f: 
     <Card title={t('Flocks', 'ঝাঁক')} subtitle={t('Bird counts drive laying rate and mortality figures. Production logs reduce the current count automatically.', 'পাখির সংখ্যা থেকেই ডিম পাড়ার হার ও মৃত্যুহার হিসাব হয়। উৎপাদন খাতায় মৃত্যু লিখলে বর্তমান সংখ্যা নিজে থেকেই কমে।')}
       actions={<>
         <Segmented value={status} onChange={setStatus} options={[{ value: 'ACTIVE', label: t('Active', 'সক্রিয়') }, { value: 'CLOSED', label: t('Closed', 'বন্ধ') }, { value: 'all', label: t('All', 'সব') }]} />
-        <button className="btn" onClick={exportCsv} disabled={!rows?.length}><Download size={16} />{t('Export', 'রপ্তানি')}</button>
+        <button className="btn" onClick={exportCsv} disabled={!rows?.length}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>
       </>}>
       <DataTable rows={rows} columns={columns} onRow={onEdit}
         empty={status === 'ACTIVE' ? t('No active flocks. Add a flock to start recording production.', 'কোনো সক্রিয় ঝাঁক নেই। উৎপাদন লিখতে একটি ঝাঁক যোগ করুন।') : t('No flocks to show.', 'দেখানোর মতো কোনো ঝাঁক নেই।')} />

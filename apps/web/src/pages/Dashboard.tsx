@@ -43,7 +43,7 @@ export default function Dashboard() {
       {(noBirds || (k?.overdueCount ?? 0) > 0 || (d?.lowStock?.length ?? 0) > 0) && (
         <div className="stack">
           {noBirds && <Alert tone="warn">{t('An active flock has 0 birds recorded. Set the bird count in Production → Flocks so laying rate and mortality % can be calculated.', 'একটি সক্রিয় ঝাঁকে ০টি পাখি লেখা আছে। ডিম পাড়ার হার হিসাবের জন্য উৎপাদন → ঝাঁক-এ পাখির সংখ্যা দিন।')} <Link to="/production">{t('Open flocks', 'ঝাঁক খুলুন')}</Link></Alert>}
-          {(k?.overdueCount ?? 0) > 0 && <Alert tone="warn">{t(`${k.overdueCount} invoice(s) are overdue, totalling ${fmtMoney(k.overdueAmount, lang)}.`, `${k.overdueCount}টি ইনভয়েস মেয়াদোত্তীর্ণ, মোট ${fmtMoney(k.overdueAmount, lang)}।`)} <Link to="/customers">{t('Review receivables', 'পাওনা দেখুন')}</Link></Alert>}
+          {(k?.overdueCount ?? 0) > 0 && <Alert tone="warn">{t(`${k.overdueCount} invoice(s) are overdue, totalling ${fmtMoney(k.overdueAmount, lang)}.`, `${k.overdueCount}টি চালান মেয়াদোত্তীর্ণ, মোট ${fmtMoney(k.overdueAmount, lang)}।`)} <Link to="/customers">{t('Review receivables', 'পাওনা দেখুন')}</Link></Alert>}
           {(d?.lowStock?.length ?? 0) > 0 && <Alert tone="warn">{t('Low stock: ', 'মজুদ কম: ')}{d.lowStock.map((i: any) => `${i.name} (${fmtNum(i.qtyOnHand, lang)} ${i.unit})`).join(', ')}</Alert>}
         </div>
       )}
@@ -119,7 +119,7 @@ export default function Dashboard() {
 
         <div className="grid g2">
           {showMoney && (
-            <Card title={t('Top customers', 'শীর্ষ ক্রেতা')} subtitle={t('By invoiced amount in the period', 'সময়কালে ইনভয়েসের পরিমাণ অনুযায়ী')}>
+            <Card title={t('Top customers', 'শীর্ষ ক্রেতা')} subtitle={t('By invoiced amount in the period', 'সময়কালে চালানের পরিমাণ অনুযায়ী')}>
               {d.topCustomers.length ? <table className="table"><tbody>{d.topCustomers.map((c: any, i: number) => <tr key={i}><td>{c.name}</td><td className="num"><Money v={c.total} /></td></tr>)}</tbody></table> : <Empty icon={Landmark}>{t('No sales in this period.', 'এই সময়ে বিক্রি নেই।')}</Empty>}
             </Card>
           )}

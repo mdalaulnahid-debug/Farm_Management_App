@@ -34,7 +34,7 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({ date: ymd(), dueDate: '', customerId: '', discount: '0', reference: '', notes: '' });
   const [lines, setLines] = useState<Line[]>([blank()]);
   const [receive, setReceive] = useState({ mode: 'full' as 'full' | 'partial' | 'none', amount: '', cashAccountId: '' });
-  const save = useSave('post', '/invoices', t('Invoice saved and posted.', 'ইনভয়েস সংরক্ষিত ও পোস্ট হয়েছে।'));
+  const save = useSave('post', '/invoices', t('Invoice saved and posted.', 'চালান সংরক্ষিত ও পোস্ট হয়েছে।'));
 
   useEffect(() => {
     const walkIn = customers.data?.data.find(c => c.name.startsWith('Walk-in'));
@@ -57,13 +57,13 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
   }, { onSuccess: onClose });
 
   return (
-    <Drawer title={t('New sales invoice', 'নতুন বিক্রয় ইনভয়েস')} subtitle={t('Posts revenue and receivable, reduces stock, and records cash received.', 'আয় ও পাওনা পোস্ট করে, মজুদ কমায় এবং প্রাপ্ত নগদ লেখে।')} onClose={onClose}
+    <Drawer title={t('New sales invoice', 'নতুন বিক্রয় চালান')} subtitle={t('Posts revenue and receivable, reduces stock, and records cash received.', 'আয় ও পাওনা পোস্ট করে, মজুদ কমায় এবং প্রাপ্ত নগদ লেখে।')} onClose={onClose}
       footer={<><div className="left">{t('Total', 'মোট')}: <b><Money v={total} /></b></div><button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button><button className="btn primary" disabled={save.isPending || !form.customerId || total < 0} onClick={submit}>{t('Save & post', 'সংরক্ষণ ও পোস্ট')}</button></>}>
       <div className="form-grid three">
         <Field label={t('Customer', 'ক্রেতা')} className="full"><Select value={form.customerId} onChange={e => setForm({ ...form, customerId: e.target.value })} placeholder={t('Choose…', 'বাছাই করুন…')} options={(customers.data?.data ?? []).filter(c => c.active).map(c => ({ value: c.id, label: c.name }))} /></Field>
         <Field label={t('Invoice date', 'তারিখ')}><Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></Field>
         <Field label={t('Due date', 'পরিশোধের শেষ তারিখ')} hint={t('Blank = customer terms', 'খালি = ক্রেতার শর্ত')}><Input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} /></Field>
-        <Field label={t('Reference', 'রেফারেন্স')}><Input value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })} placeholder={t('Memo / challan no.', 'মেমো / চালান নং')} /></Field>
+        <Field label={t('Reference', 'রেফারেন্স')}><Input value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })} placeholder={t('Memo / reference no.', 'মেমো / রেফারেন্স নং')} /></Field>
       </div>
       <div className="lines stack-sm">
         <table>

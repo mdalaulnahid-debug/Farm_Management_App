@@ -30,6 +30,25 @@ Business management and accounting software for a farm (built first for a duck &
 - Role-based access enforced on **every API endpoint** (the UI only hides what the role cannot use).
 - Audit trail of every create, void, sign-in, settings and user change.
 
+## Daily use
+
+| When | Who | What they do in FarmLedger |
+|---|---|---|
+| Every morning/evening | Farm worker / operator | **New → Daily production**: eggs collected, broken, deaths, feed used. |
+| Every sale | Whoever sells | **New → Sales invoice (চালান)**: customer, eggs/ducks, price. Choose *paid in full*, *part payment* or *on credit*. |
+| Every expense | Whoever pays | **New → Expense**: what it was for and the amount (paid now). For things bought on credit or into stock (feed), use **New → Purchase bill**. |
+| When a buyer pays old dues | Manager | **New → Receive payment** and apply it to their open চালান. |
+| When paying a supplier | Manager | **New → Pay supplier**. |
+| End of day | Manager | **Cash & bank → Cash count**: count the cash box; the app shows any shortage/excess. |
+| Weekly | Owner | Dashboard, receivables (who owes us), low feed stock. |
+| Month end | Owner / accountant | Reports → P&L, balance sheet, cash flow; download a backup; **close the month** (period lock). |
+
+All bookkeeping (journals, ledgers, receivables, payables, stock, profit) is produced automatically from these entries.
+
+## Importing past months (backlog)
+
+*Users & settings → Import past data.* Upload a month in the same workbook layout as the October sheet. The app shows a preview, checks its closing cash against the sheet, and only posts when you press **Import**. If that month already has records, tick *Replace existing records* (they are voided, not deleted). Every import can be undone from **Import history**.
+
 ## Run it on Windows (single computer or office network)
 
 1. Install [Node.js 20+](https://nodejs.org).

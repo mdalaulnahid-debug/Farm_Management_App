@@ -55,7 +55,7 @@ export default function Parties({ kind }: { kind: Kind }) {
       <PageHeader crumb={isCust ? t('Sales', 'বিক্রয়') : t('Purchases', 'ক্রয়')} title={isCust ? t('Customers', 'ক্রেতা') : t('Suppliers', 'সরবরাহকারী')}
         subtitle={isCust ? t('Everyone you sell to, what they owe you and their full history.', 'যাদের কাছে বিক্রি করেন, তাদের কাছে পাওনা ও সম্পূর্ণ লেনদেনের ইতিহাস।') : t('Everyone you buy from, what you owe them and their full history.', 'যাদের কাছ থেকে কেনেন, তাদের কাছে দেনা ও সম্পূর্ণ লেনদেনের ইতিহাস।')}
         actions={<>
-          <button className="btn" onClick={exportCsv} disabled={!rows.length}><Download size={16} />{t('Export', 'রপ্তানি')}</button>
+          <button className="btn" onClick={exportCsv} disabled={!rows.length}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>
           {isCust && can('sales.create') && <button className="btn" onClick={() => setPaying(true)}><Receipt size={16} />{t('Receive payment', 'টাকা আদায়')}</button>}
           {!isCust && can('purchases.create') && <button className="btn" onClick={() => setPaying(true)}><HandCoins size={16} />{t('Pay supplier', 'সরবরাহকারীকে পরিশোধ')}</button>}
           {can('parties.manage') && <button className="btn primary" onClick={() => setEditing('new')}><Plus size={16} />{isCust ? t('New customer', 'নতুন ক্রেতা') : t('New supplier', 'নতুন সরবরাহকারী')}</button>}
@@ -63,7 +63,7 @@ export default function Parties({ kind }: { kind: Kind }) {
 
       {can(agingPerm) && (
         <Card title={isCust ? t('Receivables ageing', 'পাওনার বয়স বিশ্লেষণ') : t('Payables ageing', 'দেনার বয়স বিশ্লেষণ')}
-          subtitle={isCust ? t('Unpaid invoices by days past due date', 'শেষ তারিখ পার হওয়ার দিন অনুযায়ী অপরিশোধিত ইনভয়েস') : t('Unpaid bills by days past due date', 'শেষ তারিখ পার হওয়ার দিন অনুযায়ী অপরিশোধিত বিল')}>
+          subtitle={isCust ? t('Unpaid invoices by days past due date', 'শেষ তারিখ পার হওয়ার দিন অনুযায়ী অপরিশোধিত চালান') : t('Unpaid bills by days past due date', 'শেষ তারিখ পার হওয়ার দিন অনুযায়ী অপরিশোধিত বিল')}>
           {!B ? <Loading /> : (
             <div className="card-body">
               <div className="grid g3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
@@ -170,7 +170,7 @@ function PartyDetail({ id, kind, onClose, onEdit }: { id: string; kind: Kind; on
   // receipts reduce it; on a supplier page bills raise what we owe and payments reduce it.
   const stmt = useMemo<StmtRow[]>(() => {
     if (!d) return [];
-    const docs = (isCust ? d.invoices : d.bills).map(x => ({ id: x.id, date: x.date, type: isCust ? t('Invoice', 'ইনভয়েস') : t('Bill', 'বিল'), number: x.number, status: x.status, charge: Number(x.total), credit: 0, isPayment: false }));
+    const docs = (isCust ? d.invoices : d.bills).map(x => ({ id: x.id, date: x.date, type: isCust ? t('Invoice', 'চালান') : t('Bill', 'বিল'), number: x.number, status: x.status, charge: Number(x.total), credit: 0, isPayment: false }));
     const pays = d.payments.map(x => {
       const reduces = isCust ? x.direction === 'IN' : x.direction === 'OUT';
       return {

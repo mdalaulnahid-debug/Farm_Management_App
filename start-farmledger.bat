@@ -17,6 +17,8 @@ if not exist "apps\api\prisma\farmledger.db" (
   echo [3/4] Creating the database and loading starting data...
   call npm run db:setup -w apps/api || goto :fail
 )
+rem Apply any new tables/columns from updates (additive; existing data is kept).
+call npm run db:push -w apps/api >nul || goto :fail
 if not exist "apps\web\dist\index.html" (
   echo [4/4] Building the web app...
   call npm run build || goto :fail

@@ -6,5 +6,5 @@ export const prisma = new PrismaClient();
 export type Db = PrismaClient | Prisma.TransactionClient;
 
 /** Run a unit of work atomically. Every posting service is called inside one of these. */
-export const tx = <T>(fn: (db: Prisma.TransactionClient) => Promise<T>) =>
-  prisma.$transaction(fn, { maxWait: 10_000, timeout: 30_000 });
+export const tx = <T>(fn: (db: Prisma.TransactionClient) => Promise<T>, timeout = 30_000) =>
+  prisma.$transaction(fn, { maxWait: 10_000, timeout });

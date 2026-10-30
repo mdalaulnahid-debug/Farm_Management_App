@@ -44,7 +44,7 @@ describe('authentication & authorization', () => {
 describe('October workbook history', () => {
   it('reconciles to the workbook closing figures', async () => {
     const bs = (await call('GET', '/reports/balance-sheet?asOf=2026-10-31')).body;
-    const cash = bs.currentAssets.lines.find((l: any) => l.code === '1010').amount;
+    const cash = bs.currentAssets.lines.find((l: any) => l.code === '1010')?.amount ?? 0;
     const ar = bs.currentAssets.lines.find((l: any) => l.code === '1100').amount;
     expect(cash).toBe(15897);
     expect(ar).toBe(7072);
@@ -133,5 +133,47 @@ describe('accounting controls', () => {
   it('records an audit trail', async () => {
     const r = await call('GET', '/audit');
     expect(r.body.total).toBeGreaterThan(10);
+  });
+});
+
+describe('workbook backlog import', () => {
+  const file = async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const dir = new URL('../../../upload/', import.meta.url);
+    const name = readdirSync(dir).find(f => f.endsWith('.xlsx'))!;
+    return { fileName: name, fileBase64: readFileSync(new URL(name, dir)).toString('base64') };
+  };
+  const octCash = async () => (await call('GET', '/reports/balance-sheet?asOf=2026-10-31')).body.currentAssets.lines.find((l: any) => l.code === '1010')?.amount ?? 0;
+
+  it('previews the workbook and reconciles closing cash with the sheet', async () => {
+    const r = await call('POST', '/import/workbook/preview', await file());
+    expect(r.status).toBe(200);
+    expect(r.body.period).toEqual({ from: '2026-10-01', to: '2026-10-31' });
+    expect(r.body.rows).toHaveLength(5);
+    expect(r.body.totals.closingCash).toBe(15897);
+    expect(r.body.totals.cashMatches).toBe(true);
+    expect(r.body.totals.netSales).toBe(80618);
+    expect(r.body.hasExisting).toBe(true);
+    expect(r.body.errors).toEqual([]);
+  });
+
+  it('refuses to import over existing records unless replacing is confirmed', async () => {
+    expect((await call('POST', '/import/workbook', await file())).status).toBe(400);
+  });
+
+  it('replaces the period without double counting, and can be undone', async () => {
+    const r = await call('POST', '/import/workbook', { ...(await file()), replaceExisting: true });
+    expect(r.status).toBe(200);
+    expect(await octCash()).toBe(15897);
+    const pl = (await call('GET', '/reports/profit-loss?from=2026-10-01&to=2026-10-31')).body;
+    expect(pl.revenue).toBe(80618);
+    expect(pl.netProfit).toBe(9899);
+
+    const batches = (await call('GET', '/import/batches')).body.data;
+    const live = batches.filter((b: any) => b.status === 'POSTED');
+    expect(live).toHaveLength(1);
+    expect((await call('POST', `/import/batches/${live[0].id}/undo`, { reason: 'testing undo' })).status).toBe(200);
+    expect(await octCash()).toBe(0);
+    expect((await call('GET', '/reports/trial-balance?asOf=2026-12-31')).body.balanced).toBe(true);
   });
 });

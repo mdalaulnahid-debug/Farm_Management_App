@@ -164,7 +164,7 @@ function RegisterTab() {
         <Segmented value={dir} onChange={v => { setDir(v); setPage(1); }} options={[{ value: 'all', label: t('All', 'সব') }, { value: 'IN', label: t('Money in', 'প্রাপ্তি') }, { value: 'OUT', label: t('Money out', 'প্রদান') }]} />
         <SearchBox value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder={t('No., party, reference…', 'নং, নাম, রেফারেন্স…')} />
         <RangePicker value={range} onChange={r => { setRange(r); setPage(1); }} />
-        <button className="btn" onClick={exportCsv} disabled={!list.data?.data.length}><Download size={16} />{t('Export', 'রপ্তানি')}</button>
+        <button className="btn" onClick={exportCsv} disabled={!list.data?.data.length}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>
       </>}>
       <DataTable rows={list.data?.data} columns={columns} page={page} pageSize={50} total={list.data?.total} onPage={setPage}
         empty={search || dir !== 'all' ? t('No transactions match these filters.', 'এই ফিল্টারে কোনো লেনদেন নেই।') : t('No receipts or payments in this period.', 'এই সময়ে কোনো আদায় বা পরিশোধ নেই।')} />
