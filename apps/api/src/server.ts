@@ -15,6 +15,7 @@ import masterRoutes from './routes/master.js';
 import transactionRoutes from './routes/transactions.js';
 import reportRoutes from './routes/reports.js';
 import importRoutes from './routes/import.js';
+import { ensureReferenceData } from './services/reference.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -75,6 +76,7 @@ export async function buildApp() {
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
+  await ensureReferenceData();
   const app = await buildApp();
   const port = Number(process.env.PORT || 4000);
   await app.listen({ port, host: process.env.HOST || '0.0.0.0' });

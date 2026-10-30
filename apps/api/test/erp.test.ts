@@ -112,6 +112,44 @@ describe('order-to-cash and procure-to-pay', () => {
   });
 });
 
+describe('customer by name + phone on the চালান', () => {
+  it('adds a new buyer to the customer list, then recognises the same phone typed differently', async () => {
+    const eggs = await prisma.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
+    const first = await call('POST', '/invoices', { date: '2026-11-12', customer: { name: 'Karim Mia', phone: '01711-223344' }, lines: [{ itemId: eggs.id, quantity: 10, unitPrice: 16 }] });
+    expect(first.status).toBe(200);
+    expect(first.body.customer.name).toBe('Karim Mia');
+    expect(first.body.customer.phone).toBe('01711223344');
+    const lookup = await call('GET', `/parties/lookup?phone=${encodeURIComponent('+880 ১৭১১ ২২৩৩৪৪')}`);
+    expect(lookup.body.match?.id).toBe(first.body.customer.id);
+    const second = await call('POST', '/invoices', { date: '2026-11-12', customer: { name: 'Karim', phone: '8801711223344' }, lines: [{ itemId: eggs.id, quantity: 5, unitPrice: 16 }] });
+    expect(second.body.customer.id).toBe(first.body.customer.id);
+    expect(await prisma.party.count({ where: { name: { startsWith: 'Karim' } } })).toBe(1);
+  });
+  it('uses Walk-in customers when no name or phone is given', async () => {
+    const eggs = await prisma.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
+    const r = await call('POST', '/invoices', { date: '2026-11-12', customer: {}, lines: [{ itemId: eggs.id, quantity: 1, unitPrice: 16 }] });
+    expect(r.body.customer.name).toBe('Walk-in customers');
+  });
+});
+
+describe('stock: medicine usage and physical count', () => {
+  it('buys vaccine into stock, expenses it when used, and posts a count difference', async () => {
+    const vac = await prisma.item.findUniqueOrThrow({ where: { sku: 'VAC-PLAGUE' } });
+    expect(vac.trackInventory && vac.valued).toBe(true);
+    const bill = await call('POST', '/bills', { date: '2026-11-13', lines: [{ itemId: vac.id, quantity: 10, unitPrice: 120 }], paid: { amount: 1200, cashAccountId: await id('1010') } });
+    expect(bill.status).toBe(200);
+    const use = await call('POST', '/stock-adjustments', { date: '2026-11-14', itemId: vac.id, type: 'USAGE', quantity: 3 });
+    expect(use.body.value).toBe(360);
+    const pl = (await call('GET', '/reports/profit-loss?from=2026-11-14&to=2026-11-14')).body;
+    expect(pl.operating.lines.find((l: any) => l.code === '6020').amount).toBe(360);
+    const count = await call('POST', '/stock-adjustments', { date: '2026-11-15', itemId: vac.id, type: 'COUNT', quantity: 6 });
+    expect(count.body.difference).toBe(-1);
+    expect(Number((await prisma.item.findUniqueOrThrow({ where: { id: vac.id } })).qtyOnHand)).toBe(6);
+    const same = await call('POST', '/stock-adjustments', { date: '2026-11-15', itemId: vac.id, type: 'COUNT', quantity: 6 });
+    expect(same.body.difference).toBe(0);
+  });
+});
+
 describe('accounting controls', () => {
   it('refuses an unpaid bill with no supplier', async () => {
     const r = await call('POST', '/bills', { date: '2026-11-10', lines: [{ accountId: await id('6090'), quantity: 1, unitPrice: 500 }] });

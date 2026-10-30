@@ -329,8 +329,8 @@ export async function importWorkbook(db: Db, actor: Actor | null, p: ParsedWorkb
       const inv = await wrap(createInvoice(db, actor, { date, customerId: creditParty.id, notes, lines: [{ itemId: egg.id, quantity: r.creditEggs, unitPrice: price }] }));
       docs.invoices.push(inv.id);
     }
-    if (r.donated > 0) docs.adjustments.push((await wrap(adjustStock(db, actor, { date, itemId: egg.id, type: 'GIFT', quantity: r.donated, notes }))).sourceId);
-    if (r.waste > 0) docs.adjustments.push((await wrap(adjustStock(db, actor, { date, itemId: egg.id, type: 'WASTE', quantity: r.waste, notes }))).sourceId);
+    if (r.donated > 0) docs.adjustments.push((await wrap(adjustStock(db, actor, { date, itemId: egg.id, type: 'GIFT', quantity: r.donated, notes }))).sourceId!);
+    if (r.waste > 0) docs.adjustments.push((await wrap(adjustStock(db, actor, { date, itemId: egg.id, type: 'WASTE', quantity: r.waste, notes }))).sourceId!);
     const lines = [
       r.feed && { accountId: await acc(SYS.FEED_EXPENSE), description: 'Feed purchase (expensed: consumption not recorded in workbook)', quantity: 1, unitPrice: r.feed },
       r.snails && { accountId: await acc('6015'), description: 'Snails / supplementary feed', quantity: 1, unitPrice: r.snails },

@@ -84,14 +84,28 @@ Versioned REST under `/api/v1`: `auth/*`, `users`, `roles`, `settings`, `account
 
 ## Roadmap (next phases)
 
-1. **Payroll**: employees (Party kind `EMPLOYEE` exists), attendance, monthly wages → wages payable.
+### Phase 2 — digital payments
+Today bKash / Nagad / Rocket, card and bank payments are **recorded** with their transaction ID (method on every receipt and চালান).
+Next: collect them **through** the app.
+- bKash / Nagad merchant APIs and/or a gateway (SSLCommerz, aamarPay) for cards and wallets.
+- Payment link and QR code printed on each চালান; the webhook marks it paid automatically.
+- Daily settlement report matching gateway payouts to receipts (gateway fees posted to 7020 Bank & mobile charges).
+
+### Phase 2 — barcode / POS sales
+Groundwork in place: every item has an optional **barcode** field.
+- Fast POS screen: a USB or Bluetooth scanner (acts as a keyboard) adds the item to the চালান; the buyer's phone links the sale to the customer.
+- Printed barcode labels for egg trays/packs; thermal receipt printing.
+- Stock updates instantly on every scan (already true for every sale).
+
+### Later
+1. **Payroll**: employees, attendance, monthly wages → wages payable.
 2. **Fixed assets & depreciation** schedule posting monthly to 6080/1690.
-3. **Budgets & forecasts** vs actuals, feed planning.
+3. **Budgets & feed planning** vs actuals; reorder suggestions from usage rate.
 4. **Attachments** (receipt photos) in private object storage.
-5. **Excel import** wizard with preview/reconciliation before posting.
-6. **Multi-farm**: `Site` already exists for flocks; extend to inventory locations and per-site P&L.
-7. **Notifications** (SMS/WhatsApp) for overdue customers and low feed.
-8. **Offline-first** mobile entry for production logs.
+5. **SMS / WhatsApp**: send the চালান to the buyer's phone; due reminders.
+6. **Multi-farm**: per-site stock locations and per-site P&L.
+7. **Offline-first** mobile entry for production logs.
+8. **Flock health**: vaccination schedule with reminders, linked to vaccine stock.
 
 ## Decisions for the farm owner
 

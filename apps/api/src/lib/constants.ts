@@ -48,8 +48,11 @@ export const SYS = {
 
 export const PARTY_KINDS = ['CUSTOMER', 'SUPPLIER', 'BOTH', 'EMPLOYEE'] as const;
 export const ITEM_CATEGORIES = ['PRODUCE', 'FEED', 'MEDICINE', 'LIVESTOCK', 'SUPPLY', 'SERVICE'] as const;
-export const PAYMENT_METHODS = ['CASH', 'BANK', 'MOBILE', 'CHEQUE'] as const;
-export const ADJUSTMENT_TYPES = ['ADJUSTMENT', 'GIFT', 'WASTE', 'OPENING'] as const;
+// MOBILE = bKash / Nagad / Rocket, CARD = debit/credit card. Recorded manually with the transaction ID;
+// online gateway collection is planned for the next phase.
+export const PAYMENT_METHODS = ['CASH', 'BANK', 'MOBILE', 'CARD', 'CHEQUE'] as const;
+// USAGE = used on the farm (medicine given, disinfectant, trays...); COUNT = physical stock count (quantity = counted).
+export const ADJUSTMENT_TYPES = ['ADJUSTMENT', 'GIFT', 'WASTE', 'OPENING', 'USAGE', 'COUNT'] as const;
 
 // ───────────── Permissions (RBAC) ─────────────
 

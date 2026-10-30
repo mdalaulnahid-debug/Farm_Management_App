@@ -9,6 +9,7 @@ import { audit } from '../services/common.js';
 import { actorOf, can } from '../auth/auth.js';
 import { accountBalance, clearAccountCache } from '../services/ledger.js';
 import { round2, num } from '../lib/money.js';
+import { normalizePhone } from '../lib/phone.js';
 
 export default async function masterRoutes(app: FastifyInstance) {
   // ───── Organization ─────
@@ -88,6 +89,15 @@ export default async function masterRoutes(app: FastifyInstance) {
     return { data: parties.map(p => ({ ...p, receivable: arMap.get(p.id) ?? 0, payable: apMap.get(p.id) ?? 0 })) };
   });
 
+  // Live lookup while typing a buyer's phone on a চালান.
+  app.get('/parties/lookup', { preHandler: can('sales.view') }, async req => {
+    const phone = normalizePhone((req.query as { phone?: string }).phone);
+    if (!phone || phone.length < 6) return { match: null };
+    const parties = await prisma.party.findMany({ where: { kind: { in: ['CUSTOMER', 'BOTH'] }, phone: { not: null } } });
+    const match = parties.find(p => normalizePhone(p.phone) === phone);
+    return { match: match ? { id: match.id, name: match.name, phone: match.phone } : null, phone };
+  });
+
   app.get('/parties/:id', { preHandler: can() }, async req => {
     const { id } = req.params as { id: string };
     const party = await prisma.party.findUnique({ where: { id } });
@@ -107,14 +117,14 @@ export default async function masterRoutes(app: FastifyInstance) {
   });
   app.post('/parties', { preHandler: can('parties.manage') }, async req => {
     const body = parse(partyBody, req.body);
-    const p = await prisma.party.create({ data: body });
+    const p = await prisma.party.create({ data: { ...body, phone: normalizePhone(body.phone) } });
     await audit(prisma, actorOf(req), 'create', 'party', p.id, `${p.kind.toLowerCase()} ${p.name}`);
     return p;
   });
   app.put('/parties/:id', { preHandler: can('parties.manage') }, async req => {
     const { id } = req.params as { id: string };
     const body = parse(partyBody, req.body);
-    const p = await prisma.party.update({ where: { id }, data: body });
+    const p = await prisma.party.update({ where: { id }, data: { ...body, phone: normalizePhone(body.phone) } });
     await audit(prisma, actorOf(req), 'update', 'party', id, `Updated ${p.name}`);
     return p;
   });
@@ -126,7 +136,7 @@ export default async function masterRoutes(app: FastifyInstance) {
   });
 
   const itemBody = z.object({
-    sku: z.string().trim().min(2).max(30), name: z.string().trim().min(2).max(100), nameBn: zOptText(100), category: z.enum(ITEM_CATEGORIES),
+    sku: z.string().trim().min(2).max(30), barcode: zOptText(64), name: z.string().trim().min(2).max(100), nameBn: zOptText(100), category: z.enum(ITEM_CATEGORIES),
     unit: z.string().trim().min(1).max(20), salePrice: z.coerce.number().min(0).default(0), purchasePrice: z.coerce.number().min(0).default(0),
     trackInventory: z.boolean().default(true), valued: z.boolean().default(true), reorderLevel: z.coerce.number().min(0).default(0),
     incomeAccountId: zOptText(40), expenseAccountId: zOptText(40), inventoryAccountId: zOptText(40), active: z.boolean().default(true),
@@ -134,6 +144,7 @@ export default async function masterRoutes(app: FastifyInstance) {
   app.post('/items', { preHandler: can('inventory.manage') }, async req => {
     const body = parse(itemBody, req.body);
     if (await prisma.item.findUnique({ where: { sku: body.sku } })) throw conflict(`SKU ${body.sku} is already used.`);
+    if (body.barcode && (await prisma.item.findFirst({ where: { barcode: body.barcode } }))) throw conflict(`Barcode ${body.barcode} is already used.`);
     const item = await prisma.item.create({ data: body });
     await audit(prisma, actorOf(req), 'create', 'item', item.id, `Item ${item.sku} ${item.name}`);
     return item;
@@ -143,6 +154,7 @@ export default async function masterRoutes(app: FastifyInstance) {
     const body = parse(itemBody, req.body);
     const existing = await prisma.item.findUnique({ where: { id } });
     if (!existing) throw notFound('Item');
+    if (body.barcode && (await prisma.item.findFirst({ where: { barcode: body.barcode, id: { not: id } } }))) throw conflict(`Barcode ${body.barcode} is already used.`);
     if ((existing.valued !== body.valued || existing.trackInventory !== body.trackInventory) && (await prisma.stockMove.count({ where: { itemId: id } }))) {
       throw conflict('Stock tracking and valuation cannot change after stock movements exist.');
     }

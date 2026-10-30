@@ -6,7 +6,7 @@ import { Badge, Card, Field, Loading, PageHeader, Segmented, useToast } from '..
 import { ChangePassword } from './Login';
 
 export default function MyAccount() {
-  const { t, lang, theme, density, fontSize, set } = usePrefs();
+  const { t, lang, theme, density, fontSize, accent, set } = usePrefs();
   const { me, logout } = useAuth();
   const toast = useToast();
   if (!me) return <Loading />;
@@ -46,13 +46,20 @@ export default function MyAccount() {
               <Field label={t('Theme', 'থিম')}>
                 <div><Segmented value={theme} onChange={v => set({ theme: v })} options={[{ value: 'light', label: t('Light', 'উজ্জ্বল') }, { value: 'dark', label: t('Dark', 'গাঢ়') }]} /></div>
               </Field>
+              <Field label={t('Accent colour', 'মূল রং')}>
+                <div className="row" style={{ gap: 10 }}>
+                  {([['green', '#157347', t('Farm green', 'খামার সবুজ')], ['blue', '#2563eb', t('Blue', 'নীল')], ['purple', '#7c3aed', t('Purple', 'বেগুনি')], ['amber', '#d97706', t('Amber', 'কমলা')]] as const).map(([k, c, label]) => (
+                    <button key={k} type="button" className={`swatch ${accent === k ? 'on' : ''}`} style={{ background: c }} title={label} aria-label={label} aria-pressed={accent === k} onClick={() => set({ accent: k })} />
+                  ))}
+                </div>
+              </Field>
               <Field label={t('Density', 'ঘনত্ব')} hint={t('Compact fits more rows on screen.', 'কমপ্যাক্টে পর্দায় বেশি সারি আঁটে।')}>
                 <div><Segmented value={density} onChange={v => set({ density: v })} options={[{ value: 'comfortable', label: t('Comfortable', 'আরামদায়ক') }, { value: 'compact', label: t('Compact', 'কমপ্যাক্ট') }]} /></div>
               </Field>
               <Field label={t(`Text size — ${fontSize}px`, `লেখার আকার — ${fontSize}px`)}>
                 <div className="row">
                   <span className="muted small">A</span>
-                  <input type="range" min={13} max={18} step={1} value={fontSize} onChange={e => set({ fontSize: Number(e.target.value) })} style={{ flex: 1, maxWidth: 260, accentColor: 'var(--brand)' }} aria-label={t('Text size', 'লেখার আকার')} />
+                  <input type="range" min={12} max={20} step={1} value={fontSize} onChange={e => set({ fontSize: Number(e.target.value) })} style={{ flex: 1, maxWidth: 260, accentColor: 'var(--brand)' }} aria-label={t('Text size', 'লেখার আকার')} />
                   <span className="muted" style={{ fontSize: '1.3em' }}>A</span>
                   {fontSize !== 14 && <button type="button" className="btn ghost sm" onClick={() => set({ fontSize: 14 })}>{t('Reset', 'রিসেট')}</button>}
                 </div>

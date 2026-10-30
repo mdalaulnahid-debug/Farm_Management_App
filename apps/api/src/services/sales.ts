@@ -8,11 +8,39 @@ import { accountId, postEntry, reverseEntry, type LineInput } from './ledger.js'
 import { issueStock, reverseStockForSource } from './inventory.js';
 import { createPayment } from './payments.js';
 import { audit, nextNumber, type Actor } from './common.js';
+import { normalizePhone } from '../lib/phone.js';
+
+/**
+ * Find the buyer by phone (any format), else by exact name; create them in the customer list if new.
+ * With neither, the sale goes to the "Walk-in customers" account.
+ */
+export async function resolveCustomer(db: Db, actor: Actor | null, c: { name?: string | null; phone?: string | null }) {
+  const phone = normalizePhone(c.phone);
+  const name = c.name?.trim() || null;
+  const customers = { kind: { in: ['CUSTOMER', 'BOTH'] } };
+  if (phone) {
+    const withPhone = await db.party.findMany({ where: { ...customers, phone: { not: null } } });
+    const hit = withPhone.find(p => normalizePhone(p.phone) === phone);
+    if (hit) return { party: hit, created: false };
+  } else if (name) {
+    const hit = (await db.party.findMany({ where: { ...customers } })).find(p => p.name.toLowerCase() === name.toLowerCase());
+    if (hit) return { party: hit, created: false };
+  } else {
+    const walkIn = (await db.party.findFirst({ where: { name: 'Walk-in customers' } }))
+      ?? (await db.party.create({ data: { kind: 'CUSTOMER', name: 'Walk-in customers', notes: 'Counter / cash sales without a named customer.' } }));
+    return { party: walkIn, created: false };
+  }
+  const party = await db.party.create({ data: { kind: 'CUSTOMER', name: name ?? phone!, phone } });
+  await audit(db, actor, 'create', 'party', party.id, `Customer ${party.name}${phone ? ` (${phone})` : ''} added from a sales চালান`);
+  return { party, created: true };
+}
 
 export interface InvoiceInput {
   date: Date;
   dueDate?: Date | null;
-  customerId: string;
+  /** Either an existing customer id, or the buyer's name/phone (matched or added automatically). */
+  customerId?: string | null;
+  customer?: { name?: string | null; phone?: string | null } | null;
   lines: { itemId?: string | null; description?: string; quantity: number; unitPrice: number; accountId?: string | null }[];
   discount?: number;
   reference?: string | null;
@@ -22,7 +50,9 @@ export interface InvoiceInput {
 }
 
 export async function createInvoice(db: Db, actor: Actor | null, input: InvoiceInput) {
-  const customer = await db.party.findUnique({ where: { id: input.customerId } });
+  const customer = input.customerId
+    ? await db.party.findUnique({ where: { id: input.customerId } })
+    : (await resolveCustomer(db, actor, input.customer ?? {})).party;
   if (!customer || !['CUSTOMER', 'BOTH'].includes(customer.kind)) throw badRequest('Choose a valid customer.');
   if (!input.lines.length) throw badRequest('Add at least one line.');
 

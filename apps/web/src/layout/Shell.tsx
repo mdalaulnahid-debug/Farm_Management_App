@@ -7,11 +7,12 @@ import {
 import { usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { BillDrawer, InvoiceDrawer, PaymentDrawer, ProductionDrawer } from '../components/forms';
+import { AdjustDrawer } from '../pages/Inventory';
 
-type Quick = 'invoice' | 'receipt' | 'bill' | 'expense' | 'payment' | 'production' | null;
+type Quick = 'invoice' | 'receipt' | 'bill' | 'expense' | 'payment' | 'production' | 'usage' | null;
 
 export default function Shell({ children }: { children: ReactNode }) {
-  const { t, lang, theme, set } = usePrefs();
+  const { t, lang, theme, fontSize, set } = usePrefs();
   const { me, can, logout } = useAuth();
   const [navOpen, setNavOpen] = useState(false);
   const [quick, setQuick] = useState<Quick>(null);
@@ -51,8 +52,9 @@ export default function Shell({ children }: { children: ReactNode }) {
     { key: 'bill', label: t('Purchase bill', 'ক্রয় বিল'), icon: ShoppingCart, perm: 'purchases.create' },
     { key: 'payment', label: t('Pay supplier', 'সরবরাহকারীকে পরিশোধ'), icon: Wallet, perm: 'purchases.create' },
     { key: 'production', label: t('Daily production', 'দৈনিক উৎপাদন'), icon: Bird, perm: 'production.manage' },
+    { key: 'usage', label: t('Use stock (medicine, trays…)', 'মজুদ ব্যবহার (ওষুধ, ট্রে…)'), icon: Package, perm: 'inventory.manage|production.manage' },
   ];
-  const allowedQuick = quickItems.filter(q => can(q.perm));
+  const allowedQuick = quickItems.filter(q => q.perm.split('|').some(can));
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const close = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenu(null); };
@@ -75,6 +77,9 @@ export default function Shell({ children }: { children: ReactNode }) {
             {g.links.map(l => <NavLink key={l.to} to={l.to} end={l.to === '/'} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><l.icon size={17} />{l.label}</NavLink>)}
           </nav>
         ))}
+        <nav className="nav-group">
+          <NavLink to="/account" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><Settings size={17} />{t('Display & language', 'প্রদর্শন ও ভাষা')}</NavLink>
+        </nav>
         <div className="sidebar-foot">
           {me?.organization.lockDate && <div>🔒 {t('Books closed to', 'বই বন্ধ')} {me.organization.lockDate.slice(0, 10)}</div>}
           <div>FarmLedger ERP v1.0</div>
@@ -98,7 +103,14 @@ export default function Shell({ children }: { children: ReactNode }) {
               <div className="menu">
                 <div className="menu-head"><b>{me?.user.name}</b><div className="muted small">{me?.user.email}</div><div className="small">{me?.user.role.name}</div></div>
                 <hr />
-                <NavLink to="/account"><Settings size={16} />{t('My account & preferences', 'আমার অ্যাকাউন্ট ও পছন্দ')}</NavLink>
+                <div className="menu-head row between">
+                  <span className="small">{t('Text size', 'লেখার আকার')}</span>
+                  <div className="row" style={{ gap: 4 }}>
+                    <button className="btn sm" style={{ width: 'auto' }} disabled={fontSize <= 12} onClick={() => set({ fontSize: fontSize - 1 })} aria-label={t('Smaller text', 'ছোট লেখা')}>A−</button>
+                    <button className="btn sm" style={{ width: 'auto' }} disabled={fontSize >= 20} onClick={() => set({ fontSize: fontSize + 1 })} aria-label={t('Larger text', 'বড় লেখা')}>A+</button>
+                  </div>
+                </div>
+                <NavLink to="/account"><Settings size={16} />{t('Display, language & password', 'প্রদর্শন, ভাষা ও পাসওয়ার্ড')}</NavLink>
                 <button onClick={() => logout()}><LogOut size={16} />{t('Sign out', 'সাইন আউট')}</button>
               </div>
             )}
@@ -112,6 +124,7 @@ export default function Shell({ children }: { children: ReactNode }) {
       {quick === 'expense' && <BillDrawer expense onClose={() => setQuick(null)} />}
       {quick === 'payment' && <PaymentDrawer direction="OUT" onClose={() => setQuick(null)} />}
       {quick === 'production' && <ProductionDrawer onClose={() => setQuick(null)} />}
+      {quick === 'usage' && <AdjustDrawer initialType="USAGE" onClose={() => setQuick(null)} />}
     </div>
   );
 }
