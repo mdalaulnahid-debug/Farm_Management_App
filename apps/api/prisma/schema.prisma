@@ -1,0 +1,395 @@
+// FarmLedger ERP database schema.
+//
+// Conventions
+// - Money columns are DECIMAL(14,2); quantities are DECIMAL(14,3). Never floats.
+// - Every financial document posts a balanced JournalEntry. Reports read the ledger,
+//   never the documents, so the books always reconcile.
+// - Posted documents are never deleted: they are voided, which posts a reversing entry.
+// - String columns stand in for enums so the same schema runs on SQLite and PostgreSQL;
+//   allowed values are enforced by the API (see src/lib/constants.ts).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────── Organization & access ─────────────────────────
+
+model Organization {
+  id               String    @id @default("org")
+  name             String
+  legalName        String?
+  address          String?
+  phone            String?
+  email            String?
+  taxId            String?
+  currency         String    @default("BDT")
+  fiscalYearStart  Int       @default(7) // month number; Bangladesh FY starts in July
+  lockDate         DateTime? // no posting on or before this date (period close)
+  invoiceFooter    String?
+  updatedAt        DateTime  @updatedAt
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  key         String   @unique // owner, manager, accountant, operator, viewer
+  name        String
+  description String?
+  permissions String   // JSON array of permission keys
+  system      Boolean  @default(false)
+  users       User[]
+  createdAt   DateTime @default(now())
+}
+
+model User {
+  id                 String     @id @default(cuid())
+  name               String
+  email              String     @unique
+  phone              String?
+  passwordHash       String
+  roleId             String
+  role               Role       @relation(fields: [roleId], references: [id])
+  active             Boolean    @default(true)
+  mustChangePassword Boolean    @default(false)
+  locale             String     @default("en")
+  failedLogins       Int        @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  sessions           Session[]
+  auditLogs          AuditLog[]
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+}
+
+model Session {
+  id         String   @id // SHA-256 hash of the session token; the raw token only lives in the cookie
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String   // create, update, void, login, ...
+  entity    String
+  entityId  String?
+  summary   String
+  data      String?  // JSON snapshot
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model Sequence {
+  key  String @id // e.g. INV, BILL, RCPT
+  next Int    @default(1)
+}
+
+// ───────────────────────── Accounting core ─────────────────────────
+
+model Account {
+  id          String        @id @default(cuid())
+  code        String        @unique
+  name        String
+  nameBn      String?
+  type        String        // ASSET | LIABILITY | EQUITY | INCOME | EXPENSE
+  subtype     String        // CASH | BANK | RECEIVABLE | INVENTORY | CURRENT_ASSET | FIXED_ASSET | PAYABLE | CURRENT_LIABILITY | LONG_TERM_LIABILITY | EQUITY | SALES | OTHER_INCOME | COGS | OPERATING_EXPENSE | OTHER_EXPENSE
+  cashFlow    String        @default("OPERATING") // OPERATING | INVESTING | FINANCING
+  parentId    String?
+  parent      Account?      @relation("AccountTree", fields: [parentId], references: [id])
+  children    Account[]     @relation("AccountTree")
+  description String?
+  system      Boolean       @default(false) // used by automatic postings; cannot be deleted
+  active      Boolean       @default(true)
+  lines       JournalLine[]
+  createdAt   DateTime      @default(now())
+}
+
+model JournalEntry {
+  id          String         @id @default(cuid())
+  number      String         @unique
+  date        DateTime
+  memo        String
+  sourceType  String         // MANUAL | OPENING | INVOICE | BILL | PAYMENT | TRANSFER | PRODUCTION | ADJUSTMENT | REVERSAL
+  sourceId    String?
+  status      String         @default("POSTED") // POSTED | VOID
+  reversalOf  String?
+  createdById String?
+  lines       JournalLine[]
+  createdAt   DateTime       @default(now())
+
+  @@index([date])
+  @@index([sourceType, sourceId])
+}
+
+model JournalLine {
+  id        String       @id @default(cuid())
+  entryId   String
+  entry     JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  accountId String
+  account   Account      @relation(fields: [accountId], references: [id])
+  debit     Decimal      @default(0)
+  credit    Decimal      @default(0)
+  partyId   String?
+  party     Party?       @relation(fields: [partyId], references: [id])
+  memo      String?
+
+  @@index([accountId])
+  @@index([partyId])
+}
+
+// ───────────────────────── Master data ─────────────────────────
+
+model Party {
+  id           String         @id @default(cuid())
+  kind         String         // CUSTOMER | SUPPLIER | BOTH | EMPLOYEE
+  name         String
+  phone        String?
+  email        String?
+  address      String?
+  taxId        String?
+  creditLimit  Decimal?
+  paymentTerms Int            @default(0) // days
+  notes        String?
+  active       Boolean        @default(true)
+  invoices     SalesInvoice[]
+  bills        Bill[]
+  payments     Payment[]
+  lines        JournalLine[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([kind, name])
+}
+
+model Item {
+  id                 String       @id @default(cuid())
+  sku                String       @unique
+  name               String
+  nameBn             String?
+  category           String       // PRODUCE | FEED | MEDICINE | LIVESTOCK | SUPPLY | SERVICE
+  unit               String       // pcs, kg, bag, litre, head ...
+  salePrice          Decimal      @default(0)
+  purchasePrice      Decimal      @default(0)
+  trackInventory     Boolean      @default(true)
+  // Produced items (eggs) carry quantity only; their cost is already expensed as feed etc.
+  valued             Boolean      @default(true)
+  qtyOnHand          Decimal      @default(0)
+  avgCost            Decimal      @default(0)
+  reorderLevel       Decimal      @default(0)
+  incomeAccountId    String?
+  expenseAccountId   String?      // COGS for resale goods, consumption expense for feed/medicine
+  inventoryAccountId String?
+  active             Boolean      @default(true)
+  moves              StockMove[]
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+}
+
+model Site {
+  id     String  @id @default(cuid())
+  name   String
+  kind   String  @default("SHED") // FARM | SHED | POND | STORE
+  notes  String?
+  active Boolean @default(true)
+  flocks Flock[]
+}
+
+// ───────────────────────── Sales (order-to-cash) ─────────────────────────
+
+model SalesInvoice {
+  id             String              @id @default(cuid())
+  number         String              @unique
+  date           DateTime
+  dueDate        DateTime
+  customerId     String
+  customer       Party               @relation(fields: [customerId], references: [id])
+  status         String              @default("POSTED") // POSTED | PARTIAL | PAID | VOID
+  subtotal       Decimal
+  discount       Decimal             @default(0)
+  total          Decimal
+  amountPaid     Decimal             @default(0)
+  reference      String?
+  notes          String?
+  journalEntryId String?
+  createdById    String?
+  lines          SalesInvoiceLine[]
+  allocations    PaymentAllocation[]
+  createdAt      DateTime            @default(now())
+
+  @@index([date])
+  @@index([customerId])
+}
+
+model SalesInvoiceLine {
+  id          String       @id @default(cuid())
+  invoiceId   String
+  invoice     SalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  itemId      String?
+  description String
+  quantity    Decimal
+  unitPrice   Decimal
+  amount      Decimal
+  accountId   String // income account credited
+}
+
+// ───────────────────────── Purchases & expenses (procure-to-pay) ─────────────────────────
+
+model Bill {
+  id             String              @id @default(cuid())
+  number         String              @unique
+  date           DateTime
+  dueDate        DateTime
+  supplierId     String?
+  supplier       Party?              @relation(fields: [supplierId], references: [id])
+  status         String              @default("POSTED") // POSTED | PARTIAL | PAID | VOID
+  total          Decimal
+  amountPaid     Decimal             @default(0)
+  reference      String?             // supplier invoice no.
+  notes          String?
+  journalEntryId String?
+  createdById    String?
+  lines          BillLine[]
+  allocations    PaymentAllocation[]
+  createdAt      DateTime            @default(now())
+
+  @@index([date])
+  @@index([supplierId])
+}
+
+model BillLine {
+  id          String  @id @default(cuid())
+  billId      String
+  bill        Bill    @relation(fields: [billId], references: [id], onDelete: Cascade)
+  itemId      String?
+  accountId   String // debited: inventory account for stocked items, else expense/asset account
+  description String
+  quantity    Decimal
+  unitPrice   Decimal
+  amount      Decimal
+}
+
+// ───────────────────────── Cash & bank ─────────────────────────
+
+model Payment {
+  id               String              @id @default(cuid())
+  number           String              @unique
+  date             DateTime
+  direction        String              // IN | OUT
+  partyId          String?
+  party            Party?              @relation(fields: [partyId], references: [id])
+  cashAccountId    String              // cash/bank account
+  counterAccountId String              // AR/AP for allocations, or e.g. owner capital, loan, other income
+  amount           Decimal
+  method           String              @default("CASH") // CASH | BANK | MOBILE | CHEQUE
+  reference        String?
+  notes            String?
+  status           String              @default("POSTED") // POSTED | VOID
+  journalEntryId   String?
+  createdById      String?
+  allocations      PaymentAllocation[]
+  createdAt        DateTime            @default(now())
+
+  @@index([date])
+}
+
+model PaymentAllocation {
+  id        String        @id @default(cuid())
+  paymentId String
+  payment   Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoiceId String?
+  invoice   SalesInvoice? @relation(fields: [invoiceId], references: [id])
+  billId    String?
+  bill      Bill?         @relation(fields: [billId], references: [id])
+  amount    Decimal
+}
+
+model CashCount {
+  id          String   @id @default(cuid())
+  date        DateTime
+  accountId   String
+  bookBalance Decimal
+  counted     Decimal
+  variance    Decimal
+  notes       String?
+  createdById String?
+  createdAt   DateTime @default(now())
+}
+
+// ───────────────────────── Inventory ─────────────────────────
+
+model StockMove {
+  id             String   @id @default(cuid())
+  date           DateTime
+  itemId         String
+  item           Item     @relation(fields: [itemId], references: [id])
+  type           String   // OPENING | PURCHASE | SALE | PRODUCTION | CONSUMPTION | ADJUSTMENT | GIFT | WASTE | MORTALITY
+  quantity       Decimal  // signed: + in, − out
+  unitCost       Decimal  @default(0)
+  value          Decimal  @default(0) // signed
+  sourceType     String?
+  sourceId       String?
+  journalEntryId String?
+  notes          String?
+  voided         Boolean  @default(false)
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  @@index([itemId, date])
+  @@index([sourceType, sourceId])
+}
+
+// ───────────────────────── Farm production ─────────────────────────
+
+model Flock {
+  id           String          @id @default(cuid())
+  code         String          @unique
+  name         String
+  species      String          @default("DUCK")
+  breed        String?
+  siteId       String?
+  site         Site?           @relation(fields: [siteId], references: [id])
+  startDate    DateTime
+  openingCount Int
+  currentCount Int
+  status       String          @default("ACTIVE") // ACTIVE | CLOSED
+  notes        String?
+  logs         ProductionLog[]
+  createdAt    DateTime        @default(now())
+}
+
+model ProductionLog {
+  id             String   @id @default(cuid())
+  date           DateTime
+  flockId        String
+  flock          Flock    @relation(fields: [flockId], references: [id])
+  eggsCollected  Int      @default(0)
+  eggsBroken     Int      @default(0)
+  mortality      Int      @default(0)
+  culled         Int      @default(0)
+  feedItemId     String?
+  feedQty        Decimal  @default(0)
+  feedCost       Decimal  @default(0)
+  waterLitres    Decimal?
+  notes          String?
+  status         String   @default("POSTED") // POSTED | VOID
+  journalEntryId String?
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  @@index([date])
+  @@index([flockId, date])
+}
