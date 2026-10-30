@@ -1,5 +1,7 @@
 # FarmLedger ERP
 
+[![CI](https://github.com/mdalaulnahid-debug/Farm_Management_App/actions/workflows/ci.yml/badge.svg)](https://github.com/mdalaulnahid-debug/Farm_Management_App/actions/workflows/ci.yml)
+
 Business management and accounting software for a farm (built first for a duck & egg farm in Bangladesh). It covers the whole business — sales, purchases and expenses, cash and bank, inventory, daily production, and full double-entry accounting with real financial statements — in English and বাংলা.
 
 ## What it does
