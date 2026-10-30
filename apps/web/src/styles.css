@@ -293,6 +293,29 @@ table.table { width: 100%; border-collapse: collapse; }
 .desc-list dt { color: var(--text-3); }
 .desc-list dd { margin: 0; font-weight: 550; }
 
+/* Read-only document detail (invoice / bill): line table and payments applied */
+.lines.doc td { padding: 10px; }
+.doc-section h3 { margin-bottom: 8px; }
+
+/* Small utilities — use these instead of inline style props in .tsx */
+.row.end { justify-content: flex-end; }
+.align-start { align-items: flex-start; }
+.gap-4 { gap: 4px; }
+.gap-6 { gap: 6px; }
+.gap-8 { gap: 8px; }
+.mt-6 { margin-top: 6px; }
+.text-center { text-align: center; }
+.w-auto { width: auto; }
+.card.soft { background: var(--surface-2); }
+.amount-lg { font-size: 1.5em; font-weight: 600; }
+.input.date-range { width: 150px; }
+.input.discount { width: 120px; height: 30px; }
+.textarea.notes { width: min(300px, 100%); }
+.badge.match { height: 36px; border-radius: 8px; font-size: .95em; }
+.lines td.due { padding-top: 12px; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ───────── Responsive ───────── */
 @media (max-width: 1180px) { .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 920px) {

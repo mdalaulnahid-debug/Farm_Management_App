@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, Calculator, Download, HandCoins, Landmark, Receipt, Smartphone, Wallet } from 'lucide-react';
-import { usePrefs } from '../lib/i18n';
+import { nameOf, usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useAccounts, useApi, useCashAccounts, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtMoney, round2, ymd } from '../lib/format';
 import { Alert, Badge, Card, DataTable, Empty, Field, Input, Kpi, Loading, PageHeader, RangePicker, SearchBox, Segmented, Select, StatusBadge, Tabs, thisMonth, VoidDialog, type Column } from '../components/ui';
-import { accountOptions, CashAccountSelect, Money, PaymentDrawer } from '../components/forms';
+import { accountOptions, CashAccountSelect, methodLabel, methodOptions, Money, PaymentDrawer } from '../components/forms';
 import { GrantsTab, ProjectsTab } from './BankingProjects';
 
 type Tab = 'accounts' | 'register' | 'transfer' | 'grants' | 'projects' | 'other' | 'count';
@@ -19,19 +19,11 @@ const COUNTER_SUBTYPES = ['EQUITY', 'OTHER_INCOME', 'CURRENT_LIABILITY', 'LONG_T
 // Grants (4510) and side-project funds (1400) have dedicated tabs.
 const DEDICATED = ['4510', '1400'];
 
-function useMethodLabel() {
-  const { t } = usePrefs();
-  return (m: string) => ({ CASH: t('Cash', 'নগদ'), BANK: t('Bank transfer', 'ব্যাংক ট্রান্সফার'), MOBILE: t('bKash / Nagad / Rocket', 'বিকাশ / নগদ / রকেট'), CARD: t('Card', 'কার্ড'), CHEQUE: t('Cheque', 'চেক') } as Record<string, string>)[m] ?? m;
-}
-function useMethodOptions() {
-  const label = useMethodLabel();
-  return ['CASH', 'MOBILE', 'CARD', 'BANK', 'CHEQUE'].map(v => ({ value: v, label: label(v) }));
-}
 /** Map of cash/bank account id → display name. */
 function useCashNames() {
   const { lang } = usePrefs();
   const cash = useCashAccounts();
-  return useMemo(() => new Map((cash.data?.data ?? []).map(a => [a.id, lang === 'bn' && a.nameBn ? a.nameBn : a.name])), [cash.data, lang]);
+  return useMemo(() => new Map((cash.data?.data ?? []).map(a => [a.id, nameOf(a, lang)])), [cash.data, lang]);
 }
 
 export default function Banking() {
@@ -108,12 +100,12 @@ function AccountsTab({ onGo }: { onGo: (t: Tab) => void }) {
               {rows.map(a => {
                 const Icon = icon(a);
                 return (
-                  <div key={a.id} className="card card-pad stack" style={{ gap: 6 }}>
+                  <div key={a.id} className="card card-pad stack gap-6">
                     <div className="row between">
-                      <div className="row" style={{ gap: 8 }}><span className="kpi-icon"><Icon size={16} /></span><b>{lang === 'bn' && a.nameBn ? a.nameBn : a.name}</b></div>
+                      <div className="row gap-8"><span className="kpi-icon"><Icon size={16} /></span><b>{nameOf(a, lang)}</b></div>
                       <Badge tone={a.subtype === 'BANK' ? 'blue' : undefined}>{a.subtype === 'BANK' ? t('Bank', 'ব্যাংক') : t('Cash', 'নগদ')}</Badge>
                     </div>
-                    <div style={{ fontSize: '1.5em', fontWeight: 600 }}><Money v={a.balance} /></div>
+                    <div className="amount-lg"><Money v={a.balance} /></div>
                     <div className="muted small mono">{a.code}</div>
                     {Number(a.balance) < 0 && <small className="neg">{t('Negative balance — check for missing receipts.', 'ঋণাত্মক স্থিতি — বাদ পড়া আদায় যাচাই করুন।')}</small>}
                   </div>
@@ -131,7 +123,6 @@ function AccountsTab({ onGo }: { onGo: (t: Tab) => void }) {
 function RegisterTab() {
   const { t, lang } = usePrefs();
   const { can } = useAuth();
-  const methodLabel = useMethodLabel();
   const names = useCashNames();
   const [range, setRange] = useState(thisMonth());
   const [search, setSearch] = useState('');
@@ -150,7 +141,7 @@ function RegisterTab() {
     { key: 'dir', label: t('Type', 'ধরন'), render: r => (r.direction === 'IN' ? <Badge tone="green">{t('Money in', 'প্রাপ্তি')}</Badge> : <Badge tone="amber">{t('Money out', 'প্রদান')}</Badge>) },
     { key: 'party', label: t('From / to', 'কার কাছ থেকে / কাকে'), render: r => r.party?.name ?? <span className="muted">{r.notes || t('Other money', 'অন্যান্য টাকা')}</span> },
     { key: 'acct', label: t('Account', 'হিসাব'), hideSm: true, render: r => names.get(r.cashAccountId) ?? '—' },
-    { key: 'method', label: t('Method', 'মাধ্যম'), hideSm: true, render: r => <>{methodLabel(r.method)}{r.reference && <div className="muted small">{r.reference}</div>}</> },
+    { key: 'method', label: t('Method', 'মাধ্যম'), hideSm: true, render: r => <>{methodLabel(t, r.method)}{r.reference && <div className="muted small">{r.reference}</div>}</> },
     { key: 'status', label: t('Status', 'অবস্থা'), render: r => (r.status === 'VOID' ? <StatusBadge status="VOID" /> : <Badge tone="green">{t('Posted', 'পোস্ট হয়েছে')}</Badge>) },
     { key: 'amount', label: t('Amount', 'টাকা'), num: true, render: r => <Money v={r.direction === 'OUT' ? -r.amount : r.amount} /> },
     ...(can('banking.manage') ? [{
@@ -196,7 +187,7 @@ function TransferTab() {
   const amount = Number(f.amount);
   const same = f.fromAccountId && f.fromAccountId === f.toAccountId;
   const valid = !!f.date && !!f.fromAccountId && !!f.toAccountId && !same && amount > 0;
-  const opts = accounts.map(a => ({ value: a.id, label: `${lang === 'bn' && a.nameBn ? a.nameBn : a.name} — ${fmtMoney(a.balance, lang)}` }));
+  const opts = accounts.map(a => ({ value: a.id, label: `${nameOf(a, lang)} — ${fmtMoney(a.balance, lang)}` }));
   const submit = () => save.mutate({ date: f.date, fromAccountId: f.fromAccountId, toAccountId: f.toAccountId, amount: round2(amount), memo: f.memo.trim() || undefined }, { onSuccess: () => setF(x => ({ ...x, amount: '', memo: '' })) });
 
   if (!can('banking.manage')) return <Alert tone="warn">{t('You do not have permission to move money between accounts.', 'হিসাবের মধ্যে টাকা স্থানান্তরের অনুমতি আপনার নেই।')}</Alert>;
@@ -213,7 +204,7 @@ function TransferTab() {
               <Field label={t('Amount', 'টাকা')} hint={from && amount > Number(from.balance) ? t('More than the current balance', 'বর্তমান স্থিতির চেয়ে বেশি') : undefined}><Input type="number" min="0" value={f.amount} onChange={e => setF({ ...f, amount: e.target.value })} /></Field>
               <Field label={t('Memo', 'বিবরণ')} className="full"><Input value={f.memo} maxLength={200} onChange={e => setF({ ...f, memo: e.target.value })} placeholder={t('Deposit slip / transaction ID', 'জমা স্লিপ / লেনদেন আইডি')} /></Field>
             </div>
-            <div className="row" style={{ justifyContent: 'flex-end' }}>
+            <div className="row end">
               <button className="btn primary" disabled={!valid || save.isPending} onClick={submit}><ArrowLeftRight size={16} />{t('Record transfer', 'স্থানান্তর লিখুন')}</button>
             </div>
           </div>
@@ -222,7 +213,7 @@ function TransferTab() {
       <Card title={t('Current balances', 'বর্তমান স্থিতি')}>
         <div className="table-wrap">
           <table className="table">
-            <tbody>{accounts.map(a => <tr key={a.id}><td>{lang === 'bn' && a.nameBn ? a.nameBn : a.name}<div className="muted small mono">{a.code}</div></td><td className="num"><Money v={a.balance} /></td></tr>)}</tbody>
+            <tbody>{accounts.map(a => <tr key={a.id}><td>{nameOf(a, lang)}<div className="muted small mono">{a.code}</div></td><td className="num"><Money v={a.balance} /></td></tr>)}</tbody>
           </table>
         </div>
       </Card>
@@ -234,7 +225,6 @@ function TransferTab() {
 function OtherMoneyTab() {
   const { t, lang } = usePrefs();
   const { can } = useAuth();
-  const methodOptions = useMethodOptions();
   const accounts = useAccounts();
   const names = useCashNames();
   const all = accounts.data?.data ?? [];
@@ -244,7 +234,7 @@ function OtherMoneyTab() {
   const save = useSave('post', '/payments', t('Recorded.', 'লেখা হয়েছে।'));
   const recent = useApi<{ data: Payment[] }>('/payments', { pageSize: 200 });
   const others = (recent.data?.data ?? []).filter(p => !p.partyId && !p.party).slice(0, 20);
-  const acctName = (id?: string) => { const a = all.find(x => x.id === id); return a ? (lang === 'bn' && a.nameBn ? a.nameBn : a.name) : '—'; };
+  const acctName = (id?: string) => { const a = all.find(x => x.id === id); return a ? nameOf(a, lang) : '—'; };
   const valid = !!f.date && !!f.cashAccountId && !!f.counterAccountId && Number(f.amount) > 0;
   const submit = () => save.mutate({
     direction: f.direction, date: f.date, cashAccountId: f.cashAccountId, counterAccountId: f.counterAccountId,
@@ -269,14 +259,14 @@ function OtherMoneyTab() {
             <Field label={t('Date', 'তারিখ')}><Input type="date" value={f.date} onChange={e => setF({ ...f, date: e.target.value })} /></Field>
             <Field label={t('Amount', 'টাকা')}><Input type="number" min="0" value={f.amount} onChange={e => setF({ ...f, amount: e.target.value })} /></Field>
             <Field label={f.direction === 'IN' ? t('Received into', 'যে হিসাবে জমা') : t('Paid from', 'যে হিসাব থেকে')}><CashAccountSelect value={f.cashAccountId} onChange={v => setF(x => ({ ...x, cashAccountId: v }))} /></Field>
-            <Field label={t('Method', 'মাধ্যম')}><Select value={f.method} onChange={e => setF({ ...f, method: e.target.value })} options={methodOptions} /></Field>
+            <Field label={t('Method', 'মাধ্যম')}><Select value={f.method} onChange={e => setF({ ...f, method: e.target.value })} options={methodOptions(t)} /></Field>
             <Field label={f.direction === 'IN' ? t('Source (what is this money?)', 'উৎস (এই টাকা কিসের?)') : t('Purpose (what is it for?)', 'উদ্দেশ্য (কিসের জন্য?)')} className="full"
               hint={t('Equity, loan, other income or fixed asset account', 'মূলধন, ঋণ, অন্যান্য আয় বা স্থায়ী সম্পদের হিসাব')}>
               <Select value={f.counterAccountId} onChange={e => setF({ ...f, counterAccountId: e.target.value })} placeholder={t('Choose account…', 'হিসাব বাছাই করুন…')} options={counterOpts} />
             </Field>
             <Field label={t('Notes', 'নোট')} className="full"><textarea className="textarea" maxLength={500} value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} /></Field>
           </div>
-          <div className="row" style={{ justifyContent: 'flex-end' }}>
+          <div className="row end">
             <button className="btn primary" disabled={!valid || save.isPending} onClick={submit}>{f.direction === 'IN' ? t('Record money in', 'প্রাপ্তি লিখুন') : t('Record money out', 'প্রদান লিখুন')}</button>
           </div>
         </div>
@@ -327,7 +317,7 @@ function CashCountTab() {
   ];
 
   return (
-    <div className="grid g2" style={{ alignItems: 'start' }}>
+    <div className="grid g2 align-start">
       {can('banking.manage') ? (
         <Card title={t('Count cash', 'নগদ গণনা করুন')} subtitle={t('Count the money in the box (or check the bank statement) and compare with the books.', 'বাক্সের টাকা গুনুন (বা ব্যাংক স্টেটমেন্ট দেখুন) এবং খাতার সাথে মিলান।')} pad>
           <div className="stack">
@@ -344,7 +334,7 @@ function CashCountTab() {
               ? <Alert>{t('Matches the books.', 'খাতার সাথে মিলেছে।')}</Alert>
               : <Alert tone="warn">{preview > 0 ? t(`Cash over by ${fmtMoney(preview, lang)}.`, `নগদ ${fmtMoney(preview, lang)} বেশি।`) : t(`Cash short by ${fmtMoney(-preview, lang)}.`, `নগদ ${fmtMoney(-preview, lang)} কম।`)}</Alert>)}
             <label className="check"><input type="checkbox" checked={f.postVariance} onChange={e => setF({ ...f, postVariance: e.target.checked })} />{t('Post any difference to Cash over / short so the books match the count', 'যেকোনো পার্থক্য নগদ বেশি / কম হিসাবে পোস্ট করুন যাতে খাতা গণনার সাথে মেলে')}</label>
-            <div className="row" style={{ justifyContent: 'flex-end' }}>
+            <div className="row end">
               <button className="btn primary" disabled={!valid || save.isPending} onClick={submit}><Calculator size={16} />{t('Save count', 'গণনা সংরক্ষণ')}</button>
             </div>
           </div>
