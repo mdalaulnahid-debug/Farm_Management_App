@@ -1,0 +1,7 @@
+node_modules
+**/node_modules
+apps/web/dist
+apps/api/dist
+apps/api/.env
+apps/api/prisma/*.db*
+.git

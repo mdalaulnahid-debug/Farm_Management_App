@@ -1,0 +1,12 @@
+services:
+  farmledger:
+    build: .
+    ports: ["4000:4000"]
+    environment:
+      ADMIN_EMAIL: owner@farm.local
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMe!2026}
+      SEED_HISTORY: "true"
+    volumes: ["farmledger-data:/data"]
+    restart: unless-stopped
+volumes:
+  farmledger-data:
