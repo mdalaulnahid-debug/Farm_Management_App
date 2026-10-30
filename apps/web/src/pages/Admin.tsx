@@ -3,7 +3,7 @@ import { Building2, CalendarCheck, Download, History, KeyRound, Lock, LockOpen, 
 import { usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi, useSave } from '../lib/hooks';
-import { downloadCsv, fmtDate, fmtDateTime, monthStart, ymd } from '../lib/format';
+import { downloadCsv, fmtDate, fmtDateTime, fmtNum, monthStart, ymd } from '../lib/format';
 import ImportData from './ImportData';
 import { Alert, Badge, Card, DataTable, Dialog, Drawer, Empty, Field, Input, Loading, PageHeader, SearchBox, Select, Tabs, type Column } from '../components/ui';
 
@@ -242,12 +242,60 @@ function OrgTab() {
   return <><OrgForm org={q.data} /><BackupCard /></>;
 }
 
+interface BackupFile { name: string; size: number; createdAt: string }
+interface BackupList { data: BackupFile[]; dir: string; keepDays: number; copyDir: string | null }
+
 function BackupCard() {
-  const { t } = usePrefs();
+  const { t, lang } = usePrefs();
+  const q = useApi<BackupList>('/admin/backups');
+  const save = useSave<void, BackupFile>('post', '/admin/backups', t('Backup saved.', 'ব্যাকআপ সংরক্ষিত হয়েছে।'));
+  const size = (bytes: number) => `${fmtNum(bytes / 1_048_576, lang, 1)} ${t('MB', 'এমবি')}`;
+  const newest = q.data?.data[0];
+  const stale = q.data && (!newest || Date.now() - new Date(newest.createdAt).getTime() > 2 * 86_400_000);
+  const columns: Column<BackupFile & { id: string }>[] = [
+    { key: 'createdAt', label: t('Taken', 'সময়'), render: b => fmtDateTime(b.createdAt, lang) },
+    { key: 'name', label: t('File', 'ফাইল'), render: b => <span className="mono">{b.name}</span>, hideSm: true },
+    { key: 'size', label: t('Size', 'আকার'), render: b => size(b.size), num: true },
+    { key: 'dl', label: t('Download', 'ডাউনলোড'), render: b => <a className="btn ghost sm" href={`/api/v1/admin/backups/${b.name}`} download aria-label={t('Download', 'ডাউনলোড')}><Download size={14} />{t('Download', 'ডাউনলোড')}</a> },
+  ];
   return (
-    <Card title={t('Backup', 'ব্যাকআপ')} subtitle={t('Download a complete copy of the database. Keep backups off this computer (USB drive or cloud storage).', 'সম্পূর্ণ ডাটাবেসের একটি কপি ডাউনলোড করুন। ব্যাকআপ এই কম্পিউটারের বাইরে (ইউএসবি বা ক্লাউডে) রাখুন।')}
-      actions={<a className="btn" href="/api/v1/admin/backup" download>{t('Download backup', 'ব্যাকআপ ডাউনলোড')}</a>}>
-      <div className="card-body muted small">{t('To restore, stop FarmLedger and replace apps/api/prisma/farmledger.db with the backup file.', 'পুনরুদ্ধার করতে FarmLedger বন্ধ করে apps/api/prisma/farmledger.db ফাইলটি ব্যাকআপ ফাইল দিয়ে বদলে দিন।')}</div>
+    <Card title={t('Backup', 'ব্যাকআপ')} subtitle={t('FarmLedger saves a copy of the database automatically once a day while it is running. Keep a copy off this computer too (USB drive or cloud storage).', 'FarmLedger চালু থাকলে প্রতিদিন একবার নিজে থেকেই ডাটাবেসের একটি কপি রাখে। একটি কপি এই কম্পিউটারের বাইরেও (ইউএসবি বা ক্লাউডে) রাখুন।')}
+      actions={<>
+        <button className="btn primary" disabled={save.isPending || !!q.error} onClick={() => save.mutate()}>{t('Back up now', 'এখনই ব্যাকআপ নিন')}</button>
+        <a className="btn" href="/api/v1/admin/backup" download><Download size={16} />{t('Download a fresh copy', 'নতুন কপি ডাউনলোড')}</a>
+      </>}>
+      <div className="card-body stack">
+        {q.error && <Alert tone="warn">{q.error.message}</Alert>}
+        {q.isLoading && <Loading />}
+        {q.data && <>
+          {stale && <Alert tone="warn">{newest
+            ? t('The last backup is more than 2 days old. Make sure FarmLedger is running, or click “Back up now”.', 'শেষ ব্যাকআপ ২ দিনের বেশি পুরোনো। FarmLedger চালু আছে কিনা দেখুন, অথবা “এখনই ব্যাকআপ নিন” চাপুন।')
+            : t('No backup has been taken yet. Click “Back up now”.', 'এখনো কোনো ব্যাকআপ নেওয়া হয়নি। “এখনই ব্যাকআপ নিন” চাপুন।')}</Alert>}
+          {newest && <div className="row">
+            <span className="muted">{t('Last backup', 'শেষ ব্যাকআপ')}</span>
+            <strong>{fmtDateTime(newest.createdAt, lang)}</strong>
+            <Badge tone={stale ? 'amber' : 'green'}>{size(newest.size)}</Badge>
+          </div>}
+          <div className="small">
+            <div className="muted">{t('Backup folder', 'ব্যাকআপ ফোল্ডার')}</div>
+            <div className="mono" style={{ overflowWrap: 'anywhere' }}>{q.data.dir}</div>
+            {q.data.copyDir && <>
+              <div className="muted">{t('Also copied to', 'কপি রাখা হয় এখানেও')}</div>
+              <div className="mono" style={{ overflowWrap: 'anywhere' }}>{q.data.copyDir}</div>
+            </>}
+            <div className="muted">{t(`Backups older than ${q.data.keepDays} days are removed; the newest 7 are always kept.`, `${fmtNum(q.data.keepDays, lang, 0)} দিনের পুরোনো ব্যাকআপ মুছে ফেলা হয়; সবচেয়ে নতুন ৭টি সবসময় থাকে।`)}</div>
+          </div>
+        </>}
+      </div>
+      {q.data && <DataTable rows={q.data.data.slice(0, 10).map(b => ({ ...b, id: b.name }))} columns={columns} empty={t('No backups yet.', 'এখনো কোনো ব্যাকআপ নেই।')} />}
+      <div className="card-body small">
+        <strong>{t('How to restore', 'কীভাবে পুনরুদ্ধার করবেন')}</strong>
+        <ol className="muted">
+          <li>{t('Close FarmLedger on the farm computer.', 'খামারের কম্পিউটারে FarmLedger বন্ধ করুন।')}</li>
+          <li>{t('In apps/api/prisma, move the current farmledger.db somewhere safe, then put the backup file there and rename it to farmledger.db.', 'apps/api/prisma ফোল্ডারে বর্তমান farmledger.db ফাইলটি নিরাপদ জায়গায় সরিয়ে রাখুন, তারপর ব্যাকআপ ফাইলটি সেখানে রেখে নাম farmledger.db দিন।')}</li>
+          <li>{t('Start FarmLedger again and check the latest records.', 'আবার FarmLedger চালু করুন এবং সর্বশেষ হিসাবগুলো দেখে নিন।')}</li>
+        </ol>
+      </div>
     </Card>
   );
 }

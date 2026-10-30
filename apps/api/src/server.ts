@@ -16,7 +16,9 @@ import transactionRoutes from './routes/transactions.js';
 import reportRoutes from './routes/reports.js';
 import importRoutes from './routes/import.js';
 import projectRoutes from './routes/projects.js';
+import backupRoutes from './routes/backup.js';
 import { ensureReferenceData } from './services/reference.js';
+import { startBackupScheduler } from './services/backup.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -54,6 +56,7 @@ export async function buildApp() {
     await api.register(reportRoutes);
     await api.register(importRoutes);
     await api.register(projectRoutes);
+    await api.register(backupRoutes);
   }, { prefix: '/api/v1' });
 
   // In production the API also serves the built web app.
@@ -82,4 +85,6 @@ if (isMain) {
   const app = await buildApp();
   const port = Number(process.env.PORT || 4000);
   await app.listen({ port, host: process.env.HOST || '0.0.0.0' });
+  // Daily automatic database copy (SQLite only). Never started by tests.
+  startBackupScheduler(app.log);
 }

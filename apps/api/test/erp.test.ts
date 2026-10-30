@@ -3,6 +3,10 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/server.js';
 import { seed } from '../src/seed.js';
 import { prisma } from '../src/db.js';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pruneBackups } from '../src/services/backup.js';
 
 let app: FastifyInstance;
 let cookie = '';
@@ -257,5 +261,78 @@ describe('workbook backlog import', () => {
     expect((await call('POST', `/import/batches/${live[0].id}/undo`, { reason: 'testing undo' })).status).toBe(200);
     expect(await octCash()).toBe(0);
     expect((await call('GET', '/reports/trial-balance?asOf=2026-12-31')).body.balanced).toBe(true);
+  });
+});
+
+describe('automatic backups', () => {
+  let dir = '';
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), 'farmledger-test-backups-'));
+    process.env.BACKUP_DIR = dir;
+  });
+  afterAll(() => {
+    delete process.env.BACKUP_DIR;
+    rmSync(dir, { recursive: true, force: true });
+  });
+  const download = async (name: string, c = cookie) => app.inject({ method: 'GET', url: `/api/v1/admin/backups/${name}`, headers: { cookie: c } });
+
+  it('takes a manual backup that is a real SQLite database and lists it', async () => {
+    const res = await call('POST', '/admin/backups');
+    expect(res.status).toBe(200);
+    expect(res.body.name).toMatch(/^farmledger-\d{4}-\d{2}-\d{2}-\d{4}\.db$/);
+    expect(res.body.size).toBeGreaterThan(0);
+    const bytes = readFileSync(join(dir, res.body.name));
+    expect(bytes.subarray(0, 16).toString('latin1')).toBe('SQLite format 3\u0000');
+    expect(readdirSync(dir).filter(n => n.startsWith('.tmp-'))).toEqual([]);
+    const list = await call('GET', '/admin/backups');
+    expect(list.status).toBe(200);
+    expect(list.body.dir).toBe(dir);
+    expect(list.body.keepDays).toBe(30);
+    expect(list.body.copyDir).toBeNull();
+    expect(list.body.data[0]).toMatchObject({ name: res.body.name, size: res.body.size });
+    const audit = await prisma.auditLog.findFirst({ where: { action: 'backup', entityId: res.body.name } });
+    expect(audit).not.toBeNull();
+  });
+
+  it('downloads a backup by name and refuses bad or unknown names', async () => {
+    const name = (await call('GET', '/admin/backups')).body.data[0].name;
+    const ok = await download(name);
+    expect(ok.statusCode).toBe(200);
+    expect(ok.rawPayload.length).toBe(readFileSync(join(dir, name)).length);
+    expect(ok.rawPayload.subarray(0, 15).toString('latin1')).toBe('SQLite format 3');
+    expect((await download('..%2Fx.db')).statusCode).toBe(400);
+    expect((await download('..%2F..%2Ffarmledger-2026-01-01-0000.db')).statusCode).toBe(400);
+    expect((await download('foo.db')).statusCode).toBe(400);
+    expect((await download('farmledger-1999-01-01-0000.db')).statusCode).toBe(404);
+    // The old one-click download still works.
+    expect((await app.inject({ method: 'GET', url: '/api/v1/admin/backup', headers: { cookie } })).statusCode).toBe(200);
+  });
+
+  it('is limited to users who manage settings', async () => {
+    const roles = (await call('GET', '/roles')).body.data;
+    const viewer = roles.find((r: any) => r.key === 'viewer');
+    expect((await call('POST', '/users', { name: 'Backup Viewer', email: 'backup-viewer@test.local', roleId: viewer.id, password: 'Viewer2026x' })).status).toBe(200);
+    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email: 'backup-viewer@test.local', password: 'Viewer2026x' } });
+    const viewerCookie = String(login.headers['set-cookie']).split(';')[0];
+    const name = (await call('GET', '/admin/backups')).body.data[0].name;
+    expect((await call('GET', '/admin/backups', undefined, viewerCookie)).status).toBe(403);
+    expect((await call('POST', '/admin/backups', undefined, viewerCookie)).status).toBe(403);
+    expect((await download(name, viewerCookie)).statusCode).toBe(403);
+    expect((await app.inject({ method: 'GET', url: '/api/v1/admin/backup', headers: { cookie: viewerCookie } })).statusCode).toBe(403);
+  });
+
+  it('prunes old backups but keeps the newest 7 and files it does not own', async () => {
+    const recent = (await call('GET', '/admin/backups')).body.data.map((b: any) => b.name);
+    for (let d = 1; d <= 10; d++) writeFileSync(join(dir, `farmledger-2020-01-${String(d).padStart(2, '0')}-0900.db`), 'old');
+    writeFileSync(join(dir, 'notes.txt'), 'keep me');
+    writeFileSync(join(dir, 'farmledger-old.db'), 'keep me too');
+    const deleted = pruneBackups();
+    expect(deleted).toContain('farmledger-2020-01-01-0900.db');
+    expect(existsSync(join(dir, 'farmledger-2020-01-01-0900.db'))).toBe(false);
+    expect(existsSync(join(dir, 'notes.txt'))).toBe(true);
+    expect(existsSync(join(dir, 'farmledger-old.db'))).toBe(true);
+    const left = (await call('GET', '/admin/backups')).body.data.map((b: any) => b.name);
+    expect(left.length).toBe(7);
+    for (const n of recent) expect(left).toContain(n);
   });
 });

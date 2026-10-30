@@ -66,6 +66,31 @@ All bookkeeping (journals, ledgers, receivables, payables, stock, profit) is pro
 
 **Back up regularly:** *Users & settings → Organization → Download backup* (or copy `apps/api/prisma/farmledger.db` while the app is stopped).
 
+## Backups and restore
+
+**Automatic backups (SQLite installs).** While FarmLedger is running it checks once an hour; if there is no backup for today yet, it saves a full, consistent copy of the database as `farmledger-YYYY-MM-DD-HHmm.db` (local date and time). It does this right after starting too, so a PC that is switched on every day gets one backup every day. Old backups are removed after `BACKUP_KEEP_DAYS` days, but the newest 7 are always kept, and files in the folder with any other name are never touched.
+
+*Users & settings → Organization → Backup* shows the last backup (with a warning if it is more than 2 days old or missing), a **Back up now** button, the recent backups with download links, and the backup folder. Only users with the *settings* permission (the owner) can see or download backups.
+
+Settings in `apps/api/.env` (all optional; restart FarmLedger after changing them):
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `BACKUP_DIR` | `apps/api/prisma/backups` (next to the database) | Folder where backups are saved. |
+| `BACKUP_COPY_DIR` | *(none)* | A second folder that also receives every backup, e.g. a USB drive `E:\FarmLedger` or a Google Drive / OneDrive folder on this PC. If it is unavailable (USB unplugged) the backup is still saved in `BACKUP_DIR` and the problem is written to the log. |
+| `BACKUP_KEEP_DAYS` | `30` | Days of backups to keep. |
+
+**Keep a copy off this PC.** A backup on the same disk does not survive a dead disk, theft or fire. Either set `BACKUP_COPY_DIR` to a cloud-synced folder (Google Drive for desktop, OneDrive) so every backup leaves the PC automatically, or copy the newest file from the backup folder to a USB drive every week. You can also download any backup from the Backup card on another device.
+
+PostgreSQL installs don't use these files; use `pg_dump` or the hosting provider's backups.
+
+**Restore a backup:**
+
+1. Stop FarmLedger (close its window).
+2. In `apps/api/prisma/`, move the current `farmledger.db` somewhere safe (don't delete it yet).
+3. Copy the backup file you want into `apps/api/prisma/` and rename it to `farmledger.db`.
+4. Start FarmLedger again (`start-farmledger.bat`) and check that the latest records are there.
+
 ## Develop
 
 ```bash

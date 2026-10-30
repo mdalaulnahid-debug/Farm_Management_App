@@ -8,4 +8,5 @@ dist/
 *.db-journal
 apps/api/prisma/*.db*
 coverage/
+backups/
 .DS_Store
