@@ -25,6 +25,7 @@ export default async function authRoutes(app: FastifyInstance) {
       throw unauthorized('Email or password is incorrect.');
     }
     await prisma.user.update({ where: { id: user.id }, data: { failedLogins: 0, lockedUntil: null, lastLoginAt: new Date() } });
+    await prisma.session.deleteMany({ where: { expiresAt: { lt: new Date() } } }); // housekeeping
     const { token, expiresAt } = await createSession(user.id, req.ip, req.headers['user-agent']);
     await audit(prisma, { id: user.id, ip: req.ip }, 'login', 'user', user.id, `${user.name} signed in`);
     reply.setCookie(SESSION_COOKIE, token, { ...cookieOpts, expires: expiresAt });

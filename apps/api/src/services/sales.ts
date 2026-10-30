@@ -74,7 +74,7 @@ export async function createInvoice(db: Db, actor: Actor | null, input: InvoiceI
 
   if (input.received && money(input.received.amount) > 0) {
     const amount = Math.min(money(input.received.amount), total);
-    await createPayment(db, actor, {
+    if (amount > 0) await createPayment(db, actor, {
       direction: 'IN', date: input.date, partyId: customer.id, cashAccountId: input.received.cashAccountId,
       amount, method: input.received.method, notes: `Received with ${number}`, allocations: [{ invoiceId: invoice.id, amount }],
     });

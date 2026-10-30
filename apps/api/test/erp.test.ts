@@ -113,6 +113,13 @@ describe('order-to-cash and procure-to-pay', () => {
 });
 
 describe('accounting controls', () => {
+  it('refuses an unpaid bill with no supplier', async () => {
+    const r = await call('POST', '/bills', { date: '2026-11-10', lines: [{ accountId: await id('6090'), quantity: 1, unitPrice: 500 }] });
+    expect(r.status).toBe(400);
+    const paid = await call('POST', '/bills', { date: '2026-11-10', lines: [{ accountId: await id('6090'), quantity: 1, unitPrice: 500 }], paid: { amount: 500, cashAccountId: await id('1010') } });
+    expect(paid.status).toBe(200);
+    expect((await call('GET', `/bills/${paid.body.id}`)).body.status).toBe('PAID');
+  });
   it('rejects an unbalanced manual journal', async () => {
     const r = await call('POST', '/journals', { date: '2026-11-10', memo: 'Bad entry', lines: [{ accountId: await id('1010'), debit: 100 }, { accountId: await id('3010'), credit: 90 }] });
     expect(r.status).toBe(400);

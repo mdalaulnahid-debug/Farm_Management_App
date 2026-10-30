@@ -42,6 +42,7 @@ export async function createBill(db: Db, actor: Actor | null, input: BillInput) 
   }
   const total = sum(lines.map(l => l.amount));
   if (total <= 0) throw badRequest('Bill total must be greater than zero.');
+  if (!supplier && money(input.paid?.amount) + 0.005 < total) throw badRequest('Choose a supplier for anything not paid now, so the payable can be tracked and paid later.');
 
   const number = await nextNumber(db, input.paid ? 'EXP' : 'BILL');
   const bill = await db.bill.create({

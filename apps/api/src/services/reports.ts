@@ -221,7 +221,9 @@ export async function dashboard(from: Date, to: Date) {
   const topCustomersRaw = await prisma.salesInvoice.groupBy({ by: ['customerId'], where: { status: { not: 'VOID' }, date: { gte: from, lte: to } }, _sum: { total: true }, orderBy: { _sum: { total: 'desc' } }, take: 5 });
   const customers = await prisma.party.findMany({ where: { id: { in: topCustomersRaw.map(t => t.customerId) } } });
   const topCustomers = topCustomersRaw.map(t => ({ name: customers.find(c => c.id === t.customerId)?.name ?? '—', total: num(t._sum.total) }));
-  const overdue = await prisma.salesInvoice.aggregate({ where: { status: { in: ['POSTED', 'PARTIAL'] }, dueDate: { lt: to } }, _count: true, _sum: { total: true, amountPaid: true } });
+  const now = new Date();
+  const overdueAsOf = to < now ? to : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const overdue = await prisma.salesInvoice.aggregate({ where: { status: { in: ['POSTED', 'PARTIAL'] }, dueDate: { lt: overdueAsOf } }, _count: true, _sum: { total: true, amountPaid: true } });
   const eggsSold = await prisma.stockMove.aggregate({ where: { type: 'SALE', voided: false, date: { gte: from, lte: to }, item: { category: 'PRODUCE' } }, _sum: { quantity: true } });
   const recent = await prisma.auditLog.findMany({ where: { action: { in: ['create', 'void'] } }, orderBy: { createdAt: 'desc' }, take: 8, include: { user: { select: { name: true } } } });
 
