@@ -5,7 +5,7 @@ import { usePrefs } from '../lib/i18n';
 import { fmtMoney, round2, ymd } from '../lib/format';
 import { useAccounts, useApi, useCashAccounts, useFlocks, useItems, useParties, useSave } from '../lib/hooks';
 import type { Account } from '../lib/api';
-import { Alert, Drawer, Field, Input, Select } from './ui';
+import { Alert, Drawer, Field, Input, Segmented, Select } from './ui';
 
 export function Money({ v, decimals }: { v: number | null | undefined; decimals?: number }) {
   const { lang } = usePrefs();
@@ -22,6 +22,15 @@ export function CashAccountSelect({ value, onChange }: { value: string; onChange
   return <Select value={value} onChange={e => onChange(e.target.value)} options={(cash.data?.data ?? []).map(a => ({ value: a.id, label: `${lang === 'bn' && a.nameBn ? a.nameBn : a.name} — ${fmtMoney(a.balance, lang as any)}` }))} />;
 }
 
+/** Payment methods. Digital ones are recorded with their transaction ID; online collection is a next-phase feature. */
+export const methodOptions = (t: (en: string, bn: string) => string) => [
+  { value: 'CASH', label: t('Cash', 'নগদ') },
+  { value: 'MOBILE', label: t('bKash / Nagad / Rocket', 'বিকাশ / নগদ / রকেট') },
+  { value: 'CARD', label: t('Card', 'কার্ড') },
+  { value: 'BANK', label: t('Bank transfer', 'ব্যাংক ট্রান্সফার') },
+  { value: 'CHEQUE', label: t('Cheque', 'চেক') },
+];
+
 interface Line { itemId: string; accountId: string; description: string; quantity: string; unitPrice: string }
 const blank = (): Line => ({ itemId: '', accountId: '', description: '', quantity: '1', unitPrice: '' });
 
@@ -33,13 +42,14 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
   const accounts = useAccounts('SALES,OTHER_INCOME');
   const [form, setForm] = useState({ date: ymd(), dueDate: '', customerId: '', discount: '0', reference: '', notes: '' });
   const [lines, setLines] = useState<Line[]>([blank()]);
-  const [receive, setReceive] = useState({ mode: 'full' as 'full' | 'partial' | 'none', amount: '', cashAccountId: '' });
+  const [receive, setReceive] = useState({ mode: 'full' as 'full' | 'partial' | 'none', amount: '', cashAccountId: '', method: 'CASH' });
   const save = useSave('post', '/invoices', t('Invoice saved and posted.', 'চালান সংরক্ষিত ও পোস্ট হয়েছে।'));
 
-  useEffect(() => {
-    const walkIn = customers.data?.data.find(c => c.name.startsWith('Walk-in'));
-    if (!form.customerId && walkIn) setForm(f => ({ ...f, customerId: walkIn.id }));
-  }, [customers.data, form.customerId]);
+  const [buyer, setBuyer] = useState({ mode: 'phone' as 'phone' | 'list', phone: '', name: '' });
+  const phoneDigits = buyer.phone.replace(/[০-৯]/g, d => String('০১২৩৪৫৬৭৮৯'.indexOf(d))).replace(/\D/g, '');
+  const lookup = useApi<{ match: { id: string; name: string; phone: string } | null }>(buyer.mode === 'phone' && phoneDigits.length >= 11 ? '/parties/lookup' : null, { phone: buyer.phone });
+  const match = phoneDigits.length >= 11 ? lookup.data?.match ?? null : null;
+  const buyerOk = buyer.mode === 'list' ? !!form.customerId : !buyer.phone.trim() || !!match || buyer.name.trim().length >= 2;
   useEffect(() => {
     const eggs = items.data?.data.find(i => i.category === 'PRODUCE');
     if (eggs && lines.length === 1 && !lines[0].itemId) setLines([{ ...blank(), itemId: eggs.id, unitPrice: String(eggs.salePrice || '') }]);
@@ -52,15 +62,36 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
 
   const submit = () => save.mutate({
     ...form, dueDate: form.dueDate || null, discount: Number(form.discount || 0),
+    customerId: buyer.mode === 'list' ? form.customerId : match?.id ?? null,
+    customer: buyer.mode === 'phone' && !match ? { name: buyer.name.trim() || null, phone: buyer.phone.trim() || null } : null,
     lines: lines.filter(l => Number(l.quantity) > 0).map(l => ({ itemId: l.itemId || null, accountId: l.accountId || null, description: l.description || undefined, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice || 0) })),
-    received: received > 0 ? { amount: received, cashAccountId: receive.cashAccountId } : null,
+    received: received > 0 ? { amount: received, cashAccountId: receive.cashAccountId, method: receive.method } : null,
   }, { onSuccess: onClose });
 
   return (
     <Drawer title={t('New sales invoice', 'নতুন বিক্রয় চালান')} subtitle={t('Posts revenue and receivable, reduces stock, and records cash received.', 'আয় ও পাওনা পোস্ট করে, মজুদ কমায় এবং প্রাপ্ত নগদ লেখে।')} onClose={onClose}
-      footer={<><div className="left">{t('Total', 'মোট')}: <b><Money v={total} /></b></div><button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button><button className="btn primary" disabled={save.isPending || !form.customerId || total < 0} onClick={submit}>{t('Save & post', 'সংরক্ষণ ও পোস্ট')}</button></>}>
+      footer={<><div className="left">{t('Total', 'মোট')}: <b><Money v={total} /></b></div><button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button><button className="btn primary" disabled={save.isPending || !buyerOk || total < 0} onClick={submit}>{t('Save & post', 'সংরক্ষণ ও পোস্ট')}</button></>}>
       <div className="form-grid three">
-        <Field label={t('Customer', 'ক্রেতা')} className="full"><Select value={form.customerId} onChange={e => setForm({ ...form, customerId: e.target.value })} placeholder={t('Choose…', 'বাছাই করুন…')} options={(customers.data?.data ?? []).filter(c => c.active).map(c => ({ value: c.id, label: c.name }))} /></Field>
+        <div className="full stack" style={{ gap: 8 }}>
+          <div className="row between">
+            <b>{t('Buyer', 'ক্রেতা')}</b>
+            <Segmented value={buyer.mode} onChange={m => setBuyer({ ...buyer, mode: m })} options={[{ value: 'phone', label: t('Name & phone', 'নাম ও ফোন') }, { value: 'list', label: t('From customer list', 'ক্রেতা তালিকা থেকে') }]} />
+          </div>
+          {buyer.mode === 'phone' ? (
+            <div className="form-grid">
+              <Field label={t('Mobile number', 'মোবাইল নম্বর')} hint={match ? undefined : t('Existing customers are recognised automatically.', 'পুরোনো ক্রেতা স্বয়ংক্রিয়ভাবে চেনা যাবে।')}>
+                <Input type="tel" inputMode="tel" autoFocus value={buyer.phone} onChange={e => setBuyer({ ...buyer, phone: e.target.value })} placeholder="01XXXXXXXXX" />
+              </Field>
+              {match
+                ? <Field label={t('Customer', 'ক্রেতা')}><div className="badge green" style={{ height: 36, borderRadius: 8, fontSize: '.95em' }}>✓ {match.name}</div></Field>
+                : <Field label={t('Buyer name', 'ক্রেতার নাম')} hint={buyer.phone.trim() ? t('New buyer — will be added to the customer list.', 'নতুন ক্রেতা — ক্রেতা তালিকায় যোগ হবে।') : t('Leave both blank for a walk-in sale.', 'খুচরা বিক্রিতে দুটোই খালি রাখুন।')}>
+                    <Input value={buyer.name} onChange={e => setBuyer({ ...buyer, name: e.target.value })} />
+                  </Field>}
+            </div>
+          ) : (
+            <Select value={form.customerId} onChange={e => setForm({ ...form, customerId: e.target.value })} placeholder={t('Choose…', 'বাছাই করুন…')} options={(customers.data?.data ?? []).filter(c => c.active).map(c => ({ value: c.id, label: c.phone ? `${c.name} · ${c.phone}` : c.name }))} />
+          )}
+        </div>
         <Field label={t('Invoice date', 'তারিখ')}><Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></Field>
         <Field label={t('Due date', 'পরিশোধের শেষ তারিখ')} hint={t('Blank = customer terms', 'খালি = ক্রেতার শর্ত')}><Input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} /></Field>
         <Field label={t('Reference', 'রেফারেন্স')}><Input value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })} placeholder={t('Memo / reference no.', 'মেমো / রেফারেন্স নং')} /></Field>
@@ -107,6 +138,7 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
         {receive.mode !== 'none' && (
           <div className="form-grid">
             {receive.mode === 'partial' && <Field label={t('Amount received', 'প্রাপ্ত টাকা')}><Input type="number" min="0" value={receive.amount} onChange={e => setReceive({ ...receive, amount: e.target.value })} /></Field>}
+            <Field label={t('Paid by', 'পরিশোধের মাধ্যম')}><Select value={receive.method} onChange={e => setReceive({ ...receive, method: e.target.value })} options={methodOptions(t)} /></Field>
             <Field label={t('Received into', 'যে হিসাবে জমা')}><CashAccountSelect value={receive.cashAccountId} onChange={v => setReceive(r => ({ ...r, cashAccountId: v }))} /></Field>
           </div>
         )}
@@ -218,7 +250,7 @@ export function PaymentDrawer({ direction, onClose, partyId: initialParty }: { d
         <Field label={t('Date', 'তারিখ')}><Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></Field>
         <Field label={t('Amount', 'টাকা')}><Input type="number" min="0" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} /></Field>
         <Field label={direction === 'IN' ? t('Deposit to', 'জমা হিসাব') : t('Pay from', 'যে হিসাব থেকে')}><CashAccountSelect value={form.cashAccountId} onChange={v => setForm(f => ({ ...f, cashAccountId: v }))} /></Field>
-        <Field label={t('Method', 'মাধ্যম')}><Select value={form.method} onChange={e => setForm({ ...form, method: e.target.value })} options={[{ value: 'CASH', label: t('Cash', 'নগদ') }, { value: 'BANK', label: t('Bank transfer', 'ব্যাংক ট্রান্সফার') }, { value: 'MOBILE', label: t('bKash / Nagad', 'বিকাশ / নগদ') }, { value: 'CHEQUE', label: t('Cheque', 'চেক') }]} /></Field>
+        <Field label={t('Method', 'মাধ্যম')}><Select value={form.method} onChange={e => setForm({ ...form, method: e.target.value })} options={methodOptions(t)} /></Field>
         <Field label={t('Reference', 'রেফারেন্স')} className="full"><Input value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })} placeholder={t('Transaction ID / cheque no.', 'লেনদেন আইডি / চেক নং')} /></Field>
       </div>
       {form.partyId && (

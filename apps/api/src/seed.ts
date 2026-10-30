@@ -6,6 +6,7 @@ import { hashPassword } from './auth/auth.js';
 import { toDate } from './lib/dates.js';
 import { accountId, clearAccountCache } from './services/ledger.js';
 import { importWorkbook, parseWorkbook } from './services/importer.js';
+import { ensureReferenceData } from './services/reference.js';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -85,6 +86,7 @@ export async function seed(opts: { history?: boolean; adminEmail?: string; admin
   await prisma.flock.create({ data: { code: 'FLK-01', name: 'Main laying flock', species: 'DUCK', siteId: site.id, startDate: toDate('2026-10-01'), openingCount: 0, currentCount: 0, notes: 'Set the actual number of birds in Production → Flocks so laying rate can be calculated.' } });
   await prisma.party.create({ data: { kind: 'CUSTOMER', name: 'Walk-in customers', notes: 'Counter / cash sales without a named customer.' } });
 
+  await ensureReferenceData();
   if (opts.history) await importOctober(admin.id);
   return { created: true, adminEmail: admin.email };
 }

@@ -35,15 +35,19 @@ Business management and accounting software for a farm (built first for a duck &
 | When | Who | What they do in FarmLedger |
 |---|---|---|
 | Every morning/evening | Farm worker / operator | **New → Daily production**: eggs collected, broken, deaths, feed used. |
-| Every sale | Whoever sells | **New → Sales invoice (চালান)**: customer, eggs/ducks, price. Choose *paid in full*, *part payment* or *on credit*. |
+| Every sale | Whoever sells | **New → Sales invoice (চালান)**: type the buyer's mobile number — a returning customer is recognised, a new one is added to the customer list with the name you type. Choose *paid in full*, *part payment* or *on credit*, and how they paid (cash, bKash/Nagad/Rocket, card, bank). |
 | Every expense | Whoever pays | **New → Expense**: what it was for and the amount (paid now). For things bought on credit or into stock (feed), use **New → Purchase bill**. |
 | When a buyer pays old dues | Manager | **New → Receive payment** and apply it to their open চালান. |
 | When paying a supplier | Manager | **New → Pay supplier**. |
+| When medicine, vaccine, trays etc. are used | Farm worker | **New → Use stock**: item and quantity; it leaves stock and is booked as that expense. |
 | End of day | Manager | **Cash & bank → Cash count**: count the cash box; the app shows any shortage/excess. |
 | Weekly | Owner | Dashboard, receivables (who owes us), low feed stock. |
+| Monthly | Manager | **Inventory → Use / count stock → Physical stock count**: enter what is actually there; only the difference is posted. |
 | Month end | Owner / accountant | Reports → P&L, balance sheet, cash flow; download a backup; **close the month** (period lock). |
 
 All bookkeeping (journals, ledgers, receivables, payables, stock, profit) is produced automatically from these entries.
+
+**Display settings** (any user, only affects their own screen): sidebar → *Display & language*, or the user menu → A− / A+. Language, light/dark theme, accent colour, text size and row density.
 
 ## Importing past months (backlog)
 

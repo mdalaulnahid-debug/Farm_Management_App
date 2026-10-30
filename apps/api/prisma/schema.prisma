@@ -178,6 +178,7 @@ model Party {
 model Item {
   id                 String       @id @default(cuid())
   sku                String       @unique
+  barcode            String?      // for scanner-based sales (next phase); uniqueness enforced by the API
   name               String
   nameBn             String?
   category           String       // PRODUCE | FEED | MEDICINE | LIVESTOCK | SUPPLY | SERVICE
@@ -197,6 +198,8 @@ model Item {
   moves              StockMove[]
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
+
+  @@index([barcode])
 }
 
 model Site {

@@ -5,8 +5,10 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 export type Lang = 'en' | 'bn';
 export type Theme = 'light' | 'dark';
 export type Density = 'comfortable' | 'compact';
+export type Accent = 'green' | 'blue' | 'purple' | 'amber';
 
-interface Prefs { lang: Lang; theme: Theme; density: Density; fontSize: number }
+/** Only display preferences live here — nothing that changes data or what a user may do. */
+interface Prefs { lang: Lang; theme: Theme; density: Density; fontSize: number; accent: Accent }
 interface Ctx extends Prefs {
   t: (en: string, bn: string) => string;
   set: (p: Partial<Prefs>) => void;
@@ -14,7 +16,7 @@ interface Ctx extends Prefs {
 
 const KEY = 'farmledger.prefs.v2';
 const read = (): Prefs => {
-  const fallback: Prefs = { lang: 'en', theme: window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', density: 'comfortable', fontSize: 14 };
+  const fallback: Prefs = { lang: 'en', theme: window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', density: 'comfortable', fontSize: 14, accent: 'green' };
   try { return { ...fallback, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return fallback; }
 };
 
@@ -26,6 +28,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     const root = document.documentElement;
     root.dataset.theme = prefs.theme;
     root.dataset.density = prefs.density;
+    root.dataset.accent = prefs.accent;
     root.lang = prefs.lang;
     root.style.setProperty('--fs', `${prefs.density === 'compact' ? prefs.fontSize - 1 : prefs.fontSize}px`);
     try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch { /* storage unavailable */ }

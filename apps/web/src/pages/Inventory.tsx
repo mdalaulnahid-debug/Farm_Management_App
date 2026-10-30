@@ -29,7 +29,7 @@ export default function Inventory() {
         subtitle={t('Stock is moved automatically by sales, purchases and production. Use adjustments only for counts, gifts, waste and opening balances.', 'বিক্রয়, ক্রয় ও উৎপাদনে মজুদ নিজে থেকেই হালনাগাদ হয়। শুধু গণনা, উপহার, নষ্ট ও প্রারম্ভিক মজুদের জন্য সমন্বয় ব্যবহার করুন।')}
         actions={<>
           {manage && <button className="btn" onClick={() => setEditing('new')}><Plus size={16} />{t('New item', 'নতুন পণ্য')}</button>}
-          {manage && <button className="btn primary" onClick={() => setAdjusting({})}><SlidersHorizontal size={16} />{t('Adjust stock', 'মজুদ সমন্বয়')}</button>}
+          {manage && <button className="btn primary" onClick={() => setAdjusting({})}><SlidersHorizontal size={16} />{t('Use / count stock', 'মজুদ ব্যবহার / গণনা')}</button>}
         </>} />
 
       <Tabs value={tab} onChange={setTab} options={[
@@ -162,7 +162,7 @@ function ItemDrawer({ item, onClose }: { item: Item | null; onClose: () => void 
   const { t, lang } = usePrefs();
   const accounts = useAccounts();
   const [f, setF] = useState({
-    sku: item?.sku ?? '', name: item?.name ?? '', nameBn: item?.nameBn ?? '', category: item?.category ?? 'FEED', unit: item?.unit ?? 'kg',
+    sku: item?.sku ?? '', barcode: item?.barcode ?? '', name: item?.name ?? '', nameBn: item?.nameBn ?? '', category: item?.category ?? 'FEED', unit: item?.unit ?? 'kg',
     salePrice: item ? String(item.salePrice || '') : '', purchasePrice: item ? String(item.purchasePrice || '') : '',
     trackInventory: item?.trackInventory ?? true, valued: item?.valued ?? true, reorderLevel: item ? String(item.reorderLevel || '') : '',
     incomeAccountId: item?.incomeAccountId ?? '', expenseAccountId: item?.expenseAccountId ?? '', inventoryAccountId: item?.inventoryAccountId ?? '', active: item?.active ?? true,
@@ -187,7 +187,7 @@ function ItemDrawer({ item, onClose }: { item: Item | null; onClose: () => void 
 
   const submit = () => {
     const body = {
-      sku: f.sku.trim(), name: f.name.trim(), nameBn: f.nameBn.trim() || null, category: f.category, unit: f.unit.trim(),
+      sku: f.sku.trim(), barcode: f.barcode.trim() || null, name: f.name.trim(), nameBn: f.nameBn.trim() || null, category: f.category, unit: f.unit.trim(),
       salePrice: Number(f.salePrice || 0), purchasePrice: Number(f.purchasePrice || 0), trackInventory: f.trackInventory, valued: f.trackInventory && f.valued,
       reorderLevel: f.trackInventory ? Number(f.reorderLevel || 0) : 0,
       incomeAccountId: f.incomeAccountId || null, expenseAccountId: f.expenseAccountId || null, inventoryAccountId: f.trackInventory && f.valued ? f.inventoryAccountId || null : null, active: f.active,
@@ -205,6 +205,7 @@ function ItemDrawer({ item, onClose }: { item: Item | null; onClose: () => void 
       </>}>
       <div className="form-grid three">
         <Field label={t('SKU', 'এসকেইউ')} hint={t('Unique short code', 'অনন্য ছোট কোড')}><Input value={f.sku} autoFocus={!item} maxLength={30} onChange={e => set({ sku: e.target.value.toUpperCase() })} placeholder="FEED-LAYER" /></Field>
+        <Field label={t('Barcode (optional)', 'বারকোড (ঐচ্ছিক)')} hint={t('For scanner sales in the next phase. Scan or type it.', 'পরবর্তী ধাপে স্ক্যানারে বিক্রির জন্য। স্ক্যান বা টাইপ করুন।')}><Input value={f.barcode} maxLength={64} onChange={e => set({ barcode: e.target.value })} /></Field>
         <Field label={t('Name (English)', 'নাম (ইংরেজি)')}><Input value={f.name} maxLength={100} onChange={e => set({ name: e.target.value })} /></Field>
         <Field label={t('Name (Bangla)', 'নাম (বাংলা)')}><Input value={f.nameBn} maxLength={100} onChange={e => set({ nameBn: e.target.value })} /></Field>
         <Field label={t('Category', 'শ্রেণি')}><Select value={f.category} onChange={e => onCategory(e.target.value)} options={CATEGORIES.map(c => ({ value: c, label: categoryLabel(t, c) }))} /></Field>
@@ -274,27 +275,33 @@ function Moves() {
 }
 
 // ───── Adjust stock ─────
-type AdjType = 'ADJUSTMENT' | 'GIFT' | 'WASTE' | 'OPENING';
+export type AdjType = 'USAGE' | 'COUNT' | 'ADJUSTMENT' | 'GIFT' | 'WASTE' | 'OPENING';
 
-function AdjustDrawer({ initialItemId, onClose }: { initialItemId?: string; onClose: () => void }) {
+export function AdjustDrawer({ initialItemId, initialType, onClose }: { initialItemId?: string; initialType?: AdjType; onClose: () => void }) {
   const { t, lang } = usePrefs();
+  const { can } = useAuth();
+  const allowedTypes = (can('inventory.manage') ? ['USAGE', 'COUNT', 'GIFT', 'WASTE', 'ADJUSTMENT', 'OPENING'] : ['USAGE']) as AdjType[];
   const items = useItems();
   const tracked = (items.data?.data ?? []).filter(i => i.trackInventory && i.active);
-  const [f, setF] = useState({ date: ymd(), itemId: initialItemId ?? '', type: 'ADJUSTMENT' as AdjType, direction: 'in' as 'in' | 'out', quantity: '', unitCost: '', notes: '' });
+  const [f, setF] = useState({ date: ymd(), itemId: initialItemId ?? '', type: (initialType ?? 'USAGE') as AdjType, direction: 'in' as 'in' | 'out', quantity: '', unitCost: '', notes: '' });
   const set = (p: Partial<typeof f>) => setF(x => ({ ...x, ...p }));
   const item = tracked.find(i => i.id === f.itemId);
   const save = useSave('post', '/stock-adjustments', t('Stock adjusted.', 'মজুদ সমন্বয় হয়েছে।'));
 
   const qty = Number(f.quantity || 0);
-  const outflow = f.type === 'GIFT' || f.type === 'WASTE' || (f.type === 'ADJUSTMENT' && f.direction === 'out');
-  const signed = outflow ? -qty : qty;
+  const isCount = f.type === 'COUNT';
+  const countDiff = isCount && item && f.quantity !== '' ? Math.round((qty - item.qtyOnHand) * 1000) / 1000 : 0;
+  const outflow = f.type === 'USAGE' || f.type === 'GIFT' || f.type === 'WASTE' || (f.type === 'ADJUSTMENT' && f.direction === 'out') || countDiff < 0;
+  const signed = isCount ? qty : outflow ? -qty : qty;
   const showCost = !!item?.valued && (f.type === 'OPENING' || (f.type === 'ADJUSTMENT' && f.direction === 'in'));
-  const after = item ? item.qtyOnHand + signed : null;
+  const after = item ? (isCount ? qty : item.qtyOnHand + signed) : null;
   const unitCost = showCost ? (f.unitCost === '' ? (f.type === 'ADJUSTMENT' ? item!.avgCost : 0) : Number(f.unitCost)) : item?.valued ? item.avgCost : 0;
-  const value = Math.abs(qty) * unitCost;
-  const valid = !!item && qty > 0 && !!f.date && (f.unitCost === '' || Number(f.unitCost) >= 0) && (f.type !== 'OPENING' || !item.valued || Number(f.unitCost) > 0);
+  const value = Math.abs(isCount ? countDiff : qty) * unitCost;
+  const valid = !!item && (isCount ? f.quantity !== '' && qty >= 0 && countDiff !== 0 : qty > 0) && !!f.date && (f.unitCost === '' || Number(f.unitCost) >= 0) && (f.type !== 'OPENING' || !item.valued || Number(f.unitCost) > 0);
 
   const typeHelp: Record<AdjType, string> = {
+    USAGE: t('Used on the farm: medicine or vaccine given, disinfectant, trays, feed outside the daily log. Removes stock and books the cost to its expense.', 'খামারে ব্যবহার: ওষুধ বা টিকা দেওয়া, জীবাণুনাশক, ট্রে, দৈনিক খাতার বাইরে খাদ্য। মজুদ কমে ও খরচ হিসেবে লেখা হয়।'),
+    COUNT: t('Enter what you physically counted. The app compares it with the system and posts only the difference.', 'বাস্তবে যা গুনেছেন তা লিখুন। অ্যাপ সিস্টেমের সাথে মিলিয়ে শুধু পার্থক্যটি পোস্ট করবে।'),
     ADJUSTMENT: t('Physical count differs from the system. Add found stock or remove shrinkage; the difference posts to inventory gain/loss.', 'বাস্তব গণনা সিস্টেমের সাথে মেলেনি। পাওয়া মজুদ যোগ বা ঘাটতি বাদ দিন; পার্থক্য মজুদ লাভ/ক্ষতিতে পোস্ট হবে।'),
     GIFT: t('Given away or used personally (e.g. eggs gifted). Removes stock at average cost.', 'উপহার বা নিজের ব্যবহারে দেওয়া (যেমন ডিম উপহার)। গড় মূল্যে মজুদ কমে।'),
     WASTE: t('Spoiled, broken or lost stock. Removes stock and books the loss.', 'নষ্ট, ভাঙা বা হারানো মজুদ। মজুদ কমে ও ক্ষতি লেখা হয়।'),
@@ -308,14 +315,14 @@ function AdjustDrawer({ initialItemId, onClose }: { initialItemId?: string; onCl
   }, { onSuccess: onClose });
 
   return (
-    <Drawer narrow title={t('Adjust stock', 'মজুদ সমন্বয়')} subtitle={t('For counts, gifts, waste and opening stock. Purchases, sales and production update stock on their own.', 'গণনা, উপহার, নষ্ট ও প্রারম্ভিক মজুদের জন্য। ক্রয়, বিক্রয় ও উৎপাদন নিজে থেকেই মজুদ হালনাগাদ করে।')} onClose={onClose}
+    <Drawer narrow title={t('Stock use, count & adjustment', 'মজুদ ব্যবহার, গণনা ও সমন্বয়')} subtitle={t('Purchases, sales and the daily production log update stock on their own. Use this for everything else.', 'ক্রয়, বিক্রয় ও দৈনিক উৎপাদন নিজে থেকেই মজুদ হালনাগাদ করে। বাকি সবকিছুর জন্য এটি ব্যবহার করুন।')} onClose={onClose}
       footer={<>
         {item?.valued && qty > 0 && <div className="left small">{t('Value', 'মূল্য')}: <b><Money v={outflow ? -value : value} /></b></div>}
         <button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button>
         <button className="btn primary" disabled={!valid || save.isPending} onClick={submit}><PackagePlus size={16} />{t('Post adjustment', 'সমন্বয় পোস্ট')}</button>
       </>}>
       <Field label={t('Type', 'ধরন')} hint={typeHelp[f.type]}>
-        <Select value={f.type} onChange={e => set({ type: e.target.value as AdjType, unitCost: '' })} options={(['ADJUSTMENT', 'GIFT', 'WASTE', 'OPENING'] as const).map(x => ({ value: x, label: moveLabel(t, x) }))} />
+        <Select value={f.type} onChange={e => set({ type: e.target.value as AdjType, unitCost: '' })} options={allowedTypes.map(x => ({ value: x, label: x === 'USAGE' ? t('Used on farm', 'খামারে ব্যবহার') : x === 'COUNT' ? t('Physical stock count', 'বাস্তব মজুদ গণনা') : moveLabel(t, x) }))} />
       </Field>
       <div className="form-grid">
         <Field label={t('Item', 'পণ্য')} className="full" hint={item ? t(`On hand: ${fmtNum(item.qtyOnHand, lang, 3)} ${item.unit}${item.valued ? ` · avg ${fmtMoney(item.avgCost, lang, { decimals: 2 })}` : ' · quantity only'}`, `হাতে: ${fmtNum(item.qtyOnHand, lang, 3)} ${item.unit}${item.valued ? ` · গড় ${fmtMoney(item.avgCost, lang, { decimals: 2 })}` : ' · শুধু পরিমাণ'}`) : undefined}>
@@ -328,8 +335,8 @@ function AdjustDrawer({ initialItemId, onClose }: { initialItemId?: string; onCl
             <Segmented value={f.direction} onChange={v => set({ direction: v, unitCost: '' })} options={[{ value: 'in', label: t('+ Found', '+ পাওয়া') }, { value: 'out', label: t('− Shrinkage', '− ঘাটতি') }]} />
           </Field>
         ) : <div />}
-        <Field label={t(`Quantity${item ? ` (${item.unit})` : ''}`, `পরিমাণ${item ? ` (${item.unit})` : ''}`)}
-          hint={after !== null && qty > 0 ? t(`After: ${fmtNum(after, lang, 3)} ${item!.unit}`, `পরে: ${fmtNum(after, lang, 3)} ${item!.unit}`) : undefined}>
+        <Field label={isCount ? t(`Counted quantity${item ? ` (${item.unit})` : ''}`, `গণনাকৃত পরিমাণ${item ? ` (${item.unit})` : ''}`) : t(`Quantity${item ? ` (${item.unit})` : ''}`, `পরিমাণ${item ? ` (${item.unit})` : ''}`)}
+          hint={isCount && item && f.quantity !== '' ? (countDiff === 0 ? t('Matches the system — nothing to post.', 'সিস্টেমের সাথে মিলেছে — পোস্ট করার কিছু নেই।') : t(`Difference: ${countDiff > 0 ? '+' : ''}${fmtNum(countDiff, lang, 3)} ${item.unit}`, `পার্থক্য: ${countDiff > 0 ? '+' : ''}${fmtNum(countDiff, lang, 3)} ${item.unit}`)) : after !== null && qty > 0 ? t(`After: ${fmtNum(after, lang, 3)} ${item!.unit}`, `পরে: ${fmtNum(after, lang, 3)} ${item!.unit}`) : undefined}>
           <Input type="number" min="0" step="any" value={f.quantity} onChange={e => set({ quantity: e.target.value })} />
         </Field>
         {showCost && (

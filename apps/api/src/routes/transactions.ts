@@ -3,7 +3,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma, tx } from '../db.js';
-import { conflict, notFound } from '../lib/errors.js';
+import { conflict, forbidden, notFound } from '../lib/errors.js';
 import { parse, zDate, zId, zMoney, zOptDate, zOptText, zQty, zRange, zReason } from '../lib/validate.js';
 import { ADJUSTMENT_TYPES, PAYMENT_METHODS } from '../lib/constants.js';
 import { endOf } from '../lib/dates.js';
@@ -45,7 +45,7 @@ export default async function transactionRoutes(app: FastifyInstance) {
   });
   app.post('/invoices', { preHandler: can('sales.create') }, async req => {
     const body = parse(z.object({
-      date: zDate, dueDate: zOptDate, customerId: zId, discount: zMoney.default(0), reference: zOptText(60), notes: zOptText(500),
+      date: zDate, dueDate: zOptDate, customerId: zOptText(40), customer: z.object({ name: zOptText(120), phone: zOptText(40) }).nullish(), discount: zMoney.default(0), reference: zOptText(60), notes: zOptText(500),
       lines: z.array(z.object({ itemId: zOptText(40), description: z.string().max(200).optional(), quantity: zQty, unitPrice: zMoney, accountId: zOptText(40) })).min(1).max(100),
       received: cashReceipt,
     }), req.body);
@@ -171,8 +171,11 @@ export default async function transactionRoutes(app: FastifyInstance) {
   });
 
   // ───── Inventory adjustments ─────
-  app.post('/stock-adjustments', { preHandler: can('inventory.manage') }, async req => {
+  app.post('/stock-adjustments', { preHandler: can() }, async req => {
     const body = parse(z.object({ date: zDate, itemId: zId, type: z.enum(ADJUSTMENT_TYPES), quantity: zQty, unitCost: zMoney.optional(), notes: zOptText(300) }), req.body);
+    // Farm staff who record production may also record stock used on the farm; everything else needs stock rights.
+    const perms = req.user!.permissions;
+    if (!perms.includes('inventory.manage') && !(body.type === 'USAGE' && perms.includes('production.manage'))) throw forbidden();
     return tx(db => adjustStock(db, actorOf(req), body));
   });
   app.get('/stock-moves', { preHandler: can('inventory.view') }, async req => {

@@ -92,8 +92,9 @@ export async function voidProduction(db: Db, actor: Actor | null, id: string, re
 export interface AdjustmentInput {
   date: Date;
   itemId: string;
-  type: 'ADJUSTMENT' | 'GIFT' | 'WASTE' | 'OPENING';
-  quantity: number; // signed for ADJUSTMENT; positive for others
+  /** USAGE = used on the farm; COUNT = physical count, `quantity` is the counted amount. */
+  type: 'ADJUSTMENT' | 'GIFT' | 'WASTE' | 'OPENING' | 'USAGE' | 'COUNT';
+  quantity: number; // signed for ADJUSTMENT; positive for the others
   unitCost?: number;
   notes?: string | null;
 }
@@ -101,29 +102,46 @@ export interface AdjustmentInput {
 export async function adjustStock(db: Db, actor: Actor | null, input: AdjustmentInput) {
   const item = await db.item.findUnique({ where: { id: input.itemId } });
   if (!item || !item.trackInventory) throw badRequest('Choose a stock-tracked item.');
-  const quantity = q3(input.quantity);
+  let type = input.type;
+  let quantity = q3(input.quantity);
+  let notes = input.notes ?? null;
+  if (type === 'COUNT') {
+    if (quantity < 0) throw badRequest('Counted quantity cannot be negative.');
+    const onHand = num(item.qtyOnHand);
+    const diff = q3(quantity - onHand);
+    if (diff === 0) return { sourceId: null, value: 0, difference: 0 };
+    notes = [`Stock count: counted ${quantity} ${item.unit}, system had ${onHand}.`, notes].filter(Boolean).join(' ');
+    type = 'ADJUSTMENT';
+    quantity = diff;
+  }
   if (quantity === 0) throw badRequest('Quantity cannot be zero.');
-  const incoming = input.type === 'OPENING' || (input.type === 'ADJUSTMENT' && quantity > 0);
-  if ((input.type === 'GIFT' || input.type === 'WASTE' || input.type === 'OPENING') && quantity < 0) throw badRequest('Enter a positive quantity.');
-  const sourceId = `${input.type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const incoming = type === 'OPENING' || (type === 'ADJUSTMENT' && quantity > 0);
+  if (type !== 'ADJUSTMENT' && quantity < 0) throw badRequest('Enter a positive quantity.');
+  const sourceId = `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const inventoryAcc = item.inventoryAccountId || (await accountId(db, SYS.INV_SUPPLIES));
   const lossAcc = await accountId(db, SYS.INVENTORY_LOSS);
   let value = 0;
   if (incoming) {
-    const unitCost = money(input.unitCost ?? (input.type === 'ADJUSTMENT' ? num(item.avgCost) : 0));
-    value = (await receiveStock(db, { itemId: item.id, date: input.date, type: input.type, quantity: Math.abs(quantity), unitCost, sourceType: 'ADJUSTMENT', sourceId, notes: input.notes, createdById: actor?.id })).value;
+    const unitCost = money(input.unitCost ?? (type === 'ADJUSTMENT' ? num(item.avgCost) : 0));
+    value = (await receiveStock(db, { itemId: item.id, date: input.date, type, quantity: Math.abs(quantity), unitCost, sourceType: 'ADJUSTMENT', sourceId, notes, createdById: actor?.id })).value;
     if (value > 0) {
-      const credit = input.type === 'OPENING' ? await accountId(db, SYS.OPENING_EQUITY) : lossAcc;
-      await postEntry(db, actor, { date: input.date, memo: `${input.type === 'OPENING' ? 'Opening stock' : 'Stock gain'}: ${item.name}`, sourceType: 'ADJUSTMENT', sourceId, lines: [{ accountId: inventoryAcc, debit: value }, { accountId: credit, credit: value }] });
+      const credit = type === 'OPENING' ? await accountId(db, SYS.OPENING_EQUITY) : lossAcc;
+      await postEntry(db, actor, { date: input.date, memo: `${type === 'OPENING' ? 'Opening stock' : 'Stock gain'}: ${item.name}`, sourceType: 'ADJUSTMENT', sourceId, lines: [{ accountId: inventoryAcc, debit: value }, { accountId: credit, credit: value }] });
     }
   } else {
-    value = (await issueStock(db, { itemId: item.id, date: input.date, type: input.type, quantity: Math.abs(quantity), sourceType: 'ADJUSTMENT', sourceId, notes: input.notes, createdById: actor?.id })).value;
+    const moveType = type === 'USAGE' ? 'CONSUMPTION' : type;
+    value = (await issueStock(db, { itemId: item.id, date: input.date, type: moveType, quantity: Math.abs(quantity), sourceType: 'ADJUSTMENT', sourceId, notes, createdById: actor?.id })).value;
     if (value > 0) {
-      await postEntry(db, actor, { date: input.date, memo: `${input.type === 'GIFT' ? 'Gifted' : input.type === 'WASTE' ? 'Waste/loss' : 'Stock shrinkage'}: ${item.name}`, sourceType: 'ADJUSTMENT', sourceId, lines: [{ accountId: lossAcc, debit: value }, { accountId: inventoryAcc, credit: value }] });
+      // Farm use is an operating cost of that kind (medicine, feed...); gifts, waste and shrinkage are losses.
+      const debit = type === 'USAGE'
+        ? item.expenseAccountId || (await accountId(db, item.category === 'MEDICINE' ? SYS.MEDICINE_EXPENSE : item.category === 'FEED' ? SYS.FEED_EXPENSE : '6090'))
+        : lossAcc;
+      const label = { USAGE: 'Used on farm', GIFT: 'Gifted', WASTE: 'Waste/loss' }[type as string] ?? 'Stock shrinkage';
+      await postEntry(db, actor, { date: input.date, memo: `${label}: ${item.name}`, sourceType: 'ADJUSTMENT', sourceId, lines: [{ accountId: debit, debit: value }, { accountId: inventoryAcc, credit: value }] });
     }
   }
   await audit(db, actor, 'create', 'stock_adjustment', sourceId, `${input.type} ${quantity} ${item.unit} ${item.name}`);
-  return { sourceId, value };
+  return { sourceId, value, difference: quantity };
 }
 
 // ───────────── Cash & bank ─────────────
