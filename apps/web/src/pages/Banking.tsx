@@ -6,8 +6,9 @@ import { useAccounts, useApi, useCashAccounts, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtMoney, round2, ymd } from '../lib/format';
 import { Alert, Badge, Card, DataTable, Empty, Field, Input, Kpi, Loading, PageHeader, RangePicker, SearchBox, Segmented, Select, StatusBadge, Tabs, thisMonth, VoidDialog, type Column } from '../components/ui';
 import { accountOptions, CashAccountSelect, Money, PaymentDrawer } from '../components/forms';
+import { GrantsTab, ProjectsTab } from './BankingProjects';
 
-type Tab = 'accounts' | 'register' | 'transfer' | 'other' | 'count';
+type Tab = 'accounts' | 'register' | 'transfer' | 'grants' | 'projects' | 'other' | 'count';
 interface Payment {
   id: string; number: string; date: string; direction: 'IN' | 'OUT'; party: { id: string; name: string } | null; partyId?: string | null;
   amount: number; method: string; reference?: string | null; notes?: string | null; status: string; cashAccountId: string; counterAccountId?: string;
@@ -15,14 +16,16 @@ interface Payment {
 interface CashCount { id: string; date: string; accountId: string; bookBalance: number; counted: number; variance: number; notes?: string | null }
 
 const COUNTER_SUBTYPES = ['EQUITY', 'OTHER_INCOME', 'CURRENT_LIABILITY', 'LONG_TERM_LIABILITY', 'FIXED_ASSET'];
+// Grants (4510) and side-project funds (1400) have dedicated tabs.
+const DEDICATED = ['4510', '1400'];
 
 function useMethodLabel() {
   const { t } = usePrefs();
-  return (m: string) => ({ CASH: t('Cash', 'নগদ'), BANK: t('Bank transfer', 'ব্যাংক ট্রান্সফার'), MOBILE: t('bKash / Nagad', 'বিকাশ / নগদ'), CHEQUE: t('Cheque', 'চেক') } as Record<string, string>)[m] ?? m;
+  return (m: string) => ({ CASH: t('Cash', 'নগদ'), BANK: t('Bank transfer', 'ব্যাংক ট্রান্সফার'), MOBILE: t('bKash / Nagad / Rocket', 'বিকাশ / নগদ / রকেট'), CARD: t('Card', 'কার্ড'), CHEQUE: t('Cheque', 'চেক') } as Record<string, string>)[m] ?? m;
 }
 function useMethodOptions() {
   const label = useMethodLabel();
-  return ['CASH', 'BANK', 'MOBILE', 'CHEQUE'].map(v => ({ value: v, label: label(v) }));
+  return ['CASH', 'MOBILE', 'CARD', 'BANK', 'CHEQUE'].map(v => ({ value: v, label: label(v) }));
 }
 /** Map of cash/bank account id → display name. */
 function useCashNames() {
@@ -52,6 +55,8 @@ export default function Banking() {
         { value: 'accounts', label: t('Accounts', 'হিসাবসমূহ') },
         { value: 'register', label: t('Receipts & payments', 'আদায় ও পরিশোধ') },
         { value: 'transfer', label: t('Transfers', 'স্থানান্তর') },
+        { value: 'grants', label: t('Grants received', 'অনুদান প্রাপ্তি') },
+        { value: 'projects', label: t('Side projects', 'সাইড প্রকল্প') },
         { value: 'other', label: t('Owner & other money', 'মালিক ও অন্যান্য টাকা') },
         { value: 'count', label: t('Cash count', 'নগদ গণনা') },
       ]} />
@@ -59,6 +64,8 @@ export default function Banking() {
       {tab === 'accounts' && <AccountsTab onGo={setTab} />}
       {tab === 'register' && <RegisterTab />}
       {tab === 'transfer' && <TransferTab />}
+      {tab === 'grants' && <GrantsTab />}
+      {tab === 'projects' && <ProjectsTab />}
       {tab === 'other' && <OtherMoneyTab />}
       {tab === 'count' && <CashCountTab />}
 
@@ -231,7 +238,7 @@ function OtherMoneyTab() {
   const accounts = useAccounts();
   const names = useCashNames();
   const all = accounts.data?.data ?? [];
-  const counterOpts = accountOptions(all, lang, a => COUNTER_SUBTYPES.includes(a.subtype));
+  const counterOpts = accountOptions(all, lang, a => COUNTER_SUBTYPES.includes(a.subtype) && !DEDICATED.includes(a.code));
   const byCode = (code: string) => all.find(a => a.code === code && a.active)?.id ?? '';
   const [f, setF] = useState({ direction: 'IN' as 'IN' | 'OUT', date: ymd(), cashAccountId: '', counterAccountId: '', amount: '', method: 'CASH', notes: '' });
   const save = useSave('post', '/payments', t('Recorded.', 'লেখা হয়েছে।'));

@@ -160,7 +160,7 @@ export default async function transactionRoutes(app: FastifyInstance) {
     const id = (req.params as any).id;
     const je = await prisma.journalEntry.findUnique({ where: { id } });
     if (!je) throw notFound('Journal');
-    if (!['MANUAL', 'OPENING', 'TRANSFER'].includes(je.sourceType)) {
+    if (!['MANUAL', 'OPENING', 'TRANSFER', 'PROJECT_TRANSFER'].includes(je.sourceType)) {
       throw conflict('Void the source document (invoice, bill, payment or production record) instead.');
     }
     await tx(async db => {

@@ -11,6 +11,8 @@ export interface LineInput {
   debit?: number;
   credit?: number;
   partyId?: string | null;
+  /** Business line; defaults to the main (duck) project. */
+  projectId?: string | null;
   memo?: string | null;
 }
 
@@ -23,6 +25,16 @@ export interface EntryInput {
 }
 
 const accountCache = new Map<string, string>();
+let mainProject: string | null = null;
+
+/** The main business line (the duck farm). Lines without a project are booked here. */
+export async function mainProjectId(db: Db) {
+  if (mainProject) return mainProject;
+  const p = await db.project.findFirst({ where: { isMain: true } });
+  if (!p) throw new Error('Main project is missing. Restart the server to create it.');
+  mainProject = p.id;
+  return mainProject;
+}
 
 /** Resolve a system account id by its code (e.g. SYS.CASH). */
 export async function accountId(db: Db, code: string) {
@@ -33,7 +45,7 @@ export async function accountId(db: Db, code: string) {
   accountCache.set(code, acc.id);
   return acc.id;
 }
-export const clearAccountCache = () => accountCache.clear();
+export const clearAccountCache = () => { accountCache.clear(); mainProject = null; };
 
 export async function assertOpenPeriod(db: Db, date: Date) {
   const org = await db.organization.findUnique({ where: { id: 'org' }, select: { lockDate: true } });
@@ -58,12 +70,13 @@ export async function postEntry(db: Db, actor: Actor | null, input: EntryInput) 
   const cr = round2(lines.reduce((a, l) => a + l.credit, 0));
   if (!isZero(dr - cr)) throw badRequest(`Journal entry is not balanced (debits ${dr} ≠ credits ${cr}).`);
 
+  const main = await mainProjectId(db);
   const number = await nextNumber(db, 'JE');
   return db.journalEntry.create({
     data: {
       number, date: input.date, memo: input.memo, sourceType: input.sourceType, sourceId: input.sourceId ?? null,
       createdById: actor?.id ?? null,
-      lines: { create: lines.map(l => ({ accountId: l.accountId, debit: l.debit, credit: l.credit, partyId: l.partyId ?? null, memo: l.memo ?? null })) },
+      lines: { create: lines.map(l => ({ accountId: l.accountId, debit: l.debit, credit: l.credit, partyId: l.partyId ?? null, projectId: l.projectId ?? main, memo: l.memo ?? null })) },
     },
   });
 }
@@ -78,7 +91,7 @@ export async function reverseEntry(db: Db, actor: Actor | null, entryId: string,
     memo: `Reversal of ${entry.number}: ${reason}`,
     sourceType: 'REVERSAL',
     sourceId: entry.id,
-    lines: entry.lines.map(l => ({ accountId: l.accountId, debit: Number(l.credit), credit: Number(l.debit), partyId: l.partyId, memo: l.memo })),
+    lines: entry.lines.map(l => ({ accountId: l.accountId, debit: Number(l.credit), credit: Number(l.debit), partyId: l.partyId, projectId: l.projectId, memo: l.memo })),
   });
   await db.journalEntry.update({ where: { id: entry.id }, data: { status: 'VOID' } });
   await db.journalEntry.update({ where: { id: reversal.id }, data: { reversalOf: entry.id, status: 'VOID' } });

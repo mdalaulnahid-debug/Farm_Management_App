@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  BarChart3, BookOpen, Bird, ChevronDown, ClipboardList, Contact, Egg, FileText, LayoutDashboard, Leaf, LogOut, Menu,
+  BarChart3, BookOpen, Bird, Gift, ChevronDown, ClipboardList, Contact, Egg, FileText, LayoutDashboard, Leaf, LogOut, Menu,
   Moon, Package, Plus, Receipt, Settings, ShieldCheck, ShoppingCart, Sun, Truck, Wallet,
 } from 'lucide-react';
 import { usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { BillDrawer, InvoiceDrawer, PaymentDrawer, ProductionDrawer } from '../components/forms';
 import { AdjustDrawer } from '../pages/Inventory';
+import { GrantDrawer } from '../pages/BankingProjects';
 
-type Quick = 'invoice' | 'receipt' | 'bill' | 'expense' | 'payment' | 'production' | 'usage' | null;
+type Quick = 'invoice' | 'receipt' | 'bill' | 'expense' | 'payment' | 'production' | 'usage' | 'grant' | null;
 
 export default function Shell({ children }: { children: ReactNode }) {
   const { t, lang, theme, fontSize, set } = usePrefs();
@@ -52,6 +53,7 @@ export default function Shell({ children }: { children: ReactNode }) {
     { key: 'bill', label: t('Purchase bill', 'ক্রয় বিল'), icon: ShoppingCart, perm: 'purchases.create' },
     { key: 'payment', label: t('Pay supplier', 'সরবরাহকারীকে পরিশোধ'), icon: Wallet, perm: 'purchases.create' },
     { key: 'production', label: t('Daily production', 'দৈনিক উৎপাদন'), icon: Bird, perm: 'production.manage' },
+    { key: 'grant', label: t('Grant received', 'অনুদান প্রাপ্তি'), icon: Gift, perm: 'banking.manage' },
     { key: 'usage', label: t('Use stock (medicine, trays…)', 'মজুদ ব্যবহার (ওষুধ, ট্রে…)'), icon: Package, perm: 'inventory.manage|production.manage' },
   ];
   const allowedQuick = quickItems.filter(q => q.perm.split('|').some(can));
@@ -125,6 +127,7 @@ export default function Shell({ children }: { children: ReactNode }) {
       {quick === 'payment' && <PaymentDrawer direction="OUT" onClose={() => setQuick(null)} />}
       {quick === 'production' && <ProductionDrawer onClose={() => setQuick(null)} />}
       {quick === 'usage' && <AdjustDrawer initialType="USAGE" onClose={() => setQuick(null)} />}
+      {quick === 'grant' && <GrantDrawer onClose={() => setQuick(null)} />}
     </div>
   );
 }

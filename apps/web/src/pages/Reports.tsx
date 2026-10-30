@@ -6,6 +6,7 @@ import { useApi } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtMoney, fmtNum, fmtPct, ymd } from '../lib/format';
 import { Alert, Card, Field, Input, Loading, PageHeader, RangePicker, thisMonth, type Range } from '../components/ui';
 import { Money } from '../components/forms';
+import { projectName, useProjects } from './BankingProjects';
 
 type Key = 'pl' | 'bs' | 'cf' | 'tb' | 'ar' | 'ap' | 'inv' | 'prod';
 interface Line { id?: string; code?: string; name: string; nameBn?: string | null; amount: number }
@@ -31,6 +32,9 @@ export default function Reports() {
   const [key, setKey] = useState<Key>('pl');
   const [range, setRange] = useState<Range>(thisMonth());
   const [asOf, setAsOf] = useState(ymd());
+  const [projectId, setProjectId] = useState('');
+  const projects = useProjects();
+  const { lang } = usePrefs();
   const reports: { key: Key; icon: any; title: string; desc: string; perm: string; kind: 'range' | 'asof' | 'none' }[] = [
     { key: 'pl', icon: BarChart3, title: t('Profit & loss', 'লাভ-ক্ষতি বিবরণী'), desc: t('Income statement with prior-period comparison', 'পূর্ববর্তী সময়ের সাথে তুলনাসহ আয় বিবরণী'), perm: 'reports.view', kind: 'range' },
     { key: 'bs', icon: Scale, title: t('Balance sheet', 'ব্যালান্স শিট'), desc: t('Assets, liabilities and equity', 'সম্পদ, দায় ও মূলধন'), perm: 'reports.view', kind: 'asof' },
@@ -48,6 +52,10 @@ export default function Reports() {
     <>
       <PageHeader crumb={t('Finance', 'অর্থ')} title={t('Reports', 'রিপোর্ট')} subtitle={t('All statements are calculated live from the posted general ledger.', 'সব বিবরণী পোস্ট করা সাধারণ খাতা থেকে সরাসরি হিসাব করা হয়।')}
         actions={<>
+          {current?.key === 'pl' && <select className="select" style={{ width: 'auto' }} value={projectId} onChange={e => setProjectId(e.target.value)} aria-label={t('Project', 'প্রকল্প')}>
+            <option value="">{t('Whole farm (all projects)', 'পুরো খামার (সব প্রকল্প)')}</option>
+            {(projects.data?.data ?? []).map(p => <option key={p.id} value={p.id}>{projectName(lang, p)}</option>)}
+          </select>}
           {current?.kind === 'range' && <RangePicker value={range} onChange={setRange} />}
           {current?.kind === 'asof' && <Field label={t('As of', 'তারিখ পর্যন্ত')}><Input type="date" value={asOf} onChange={e => setAsOf(e.target.value)} /></Field>}
           <button className="btn" onClick={() => window.print()}><Printer size={16} />{t('Print / PDF', 'প্রিন্ট / পিডিএফ')}</button>
@@ -60,7 +68,7 @@ export default function Reports() {
           </button>
         ))}
       </div>
-      {current?.key === 'pl' && <ProfitLoss range={range} />}
+      {current?.key === 'pl' && <ProfitLoss range={range} projectId={projectId} projectLabel={projectId ? projectName(lang, projects.data?.data.find(p => p.id === projectId)) : ''} />}
       {current?.key === 'bs' && <BalanceSheet asOf={asOf} />}
       {current?.key === 'cf' && <CashFlow range={range} />}
       {current?.key === 'tb' && <TrialBalance asOf={asOf} />}
@@ -85,11 +93,11 @@ function Statement({ title, period, children, onCsv }: { title: string; period: 
 
 const nm = (l: Line, lang: string) => (lang === 'bn' && l.nameBn ? l.nameBn : l.name);
 
-function ProfitLoss({ range }: { range: Range }) {
+function ProfitLoss({ range, projectId, projectLabel }: { range: Range; projectId: string; projectLabel: string }) {
   const { t, lang } = usePrefs();
   const prev = previous(range);
-  const cur = useApi<any>('/reports/profit-loss', range);
-  const old = useApi<any>('/reports/profit-loss', prev);
+  const cur = useApi<any>('/reports/profit-loss', { ...range, projectId: projectId || undefined });
+  const old = useApi<any>('/reports/profit-loss', { ...prev, projectId: projectId || undefined });
   if (!cur.data || !old.data) return <Loading />;
   const c = cur.data, p = old.data;
   const prevOf = (sec: string, id?: string) => (p[sec] as Section).lines.find(l => l.id === id)?.amount ?? 0;
@@ -131,7 +139,7 @@ function ProfitLoss({ range }: { range: Range }) {
           <div key={l as string} className="card kpi"><div className="kpi-label">{l}</div><div className={`kpi-value ${Number(v) < 0 ? 'neg' : ''}`}>{pct ? fmtPct(v as number, lang) : fmtMoney(v as number, lang)}</div></div>
         ))}
       </div>
-      <Statement title={t('Profit & loss statement', 'লাভ-ক্ষতি বিবরণী')} period={`${fmtDate(c.from, lang)} – ${fmtDate(c.to, lang)}`} onCsv={() => downloadCsv(`profit-loss_${c.from}_${c.to}.csv`, ['Section', 'Account', 'Current', 'Previous', ''], rows)}>{body}</Statement>
+      <Statement title={t('Profit & loss statement', 'লাভ-ক্ষতি বিবরণী')} period={`${projectLabel ? `${projectLabel} · ` : ''}${fmtDate(c.from, lang)} – ${fmtDate(c.to, lang)}`} onCsv={() => downloadCsv(`profit-loss_${c.from}_${c.to}.csv`, ['Section', 'Account', 'Current', 'Previous', ''], rows)}>{body}</Statement>
     </>
   );
 }

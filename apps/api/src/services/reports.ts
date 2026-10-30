@@ -4,7 +4,7 @@ import { DEBIT_NORMAL, type AccountType } from '../lib/constants.js';
 import { round2, num } from '../lib/money.js';
 import { addDays, daysBetween, monthKey, ymd } from '../lib/dates.js';
 
-type Range = { from?: Date; to?: Date };
+type Range = { from?: Date; to?: Date; projectId?: string | null };
 
 const posted = (r: Range) => ({
   status: 'POSTED',
@@ -13,7 +13,7 @@ const posted = (r: Range) => ({
 
 /** Net debit−credit per account for the range. */
 async function balances(r: Range) {
-  const rows = await prisma.journalLine.groupBy({ by: ['accountId'], where: { entry: posted(r) }, _sum: { debit: true, credit: true } });
+  const rows = await prisma.journalLine.groupBy({ by: ['accountId'], where: { entry: posted(r), ...(r.projectId ? { projectId: r.projectId } : {}) }, _sum: { debit: true, credit: true } });
   const accounts = await prisma.account.findMany({ orderBy: { code: 'asc' } });
   const byId = new Map(rows.map(x => [x.accountId, { debit: num(x._sum.debit), credit: num(x._sum.credit) }]));
   return accounts.map(a => {
@@ -37,8 +37,8 @@ const section = (rows: Awaited<ReturnType<typeof balances>>, pred: (r: (typeof r
   return { lines, total: round2(lines.reduce((a, l) => a + l.amount, 0)) };
 };
 
-export async function profitAndLoss(from: Date, to: Date) {
-  const rows = await balances({ from, to });
+export async function profitAndLoss(from: Date, to: Date, projectId?: string | null) {
+  const rows = await balances({ from, to, projectId });
   const sales = section(rows, r => r.subtype === 'SALES');
   const otherIncome = section(rows, r => r.type === 'INCOME' && r.subtype !== 'SALES');
   const cogs = section(rows, r => r.subtype === 'COGS');

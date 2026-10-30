@@ -51,6 +51,30 @@ Rules enforced in `src/services/ledger.ts`:
 - *Cash flow (direct)*: every movement on cash/bank accounts is classified by its counter accounts' `cashFlow` category (operating / investing / financing). Opening-balance entries count as opening cash.
 - *Aging*: open invoices/bills by days past due (current, 1–30, 31–60, 61–90, 90+).
 
+## Projects (business lines)
+
+The farm runs several business lines from one set of books. Every journal line carries a `projectId`:
+
+| Project | Status |
+|---|---|
+| **DUCK** — Duck & egg farm | Main business; every document defaults to it. |
+| **COW** — Cattle (dairy & fattening) | Side project; next module to build. |
+| **CHICKEN** — Chicken | Side project. |
+
+- **Profit & loss by project:** Reports → Profit & loss → choose a project. The balance sheet stays whole-farm.
+- **Money to side projects:** `PROJECT_TRANSFER` entries. *Out*: Dr 1400 Funds with side projects (tagged with that project) / Cr Cash (main). *In* reverses it. The duck farm's P&L never sees it as an expense; the balance shows what is still with each side project.
+- **Grants** from people or organisations: Dr Cash / Cr 4510 Grants & donations received (Other income), with the donor recorded as a contact (kind `DONOR`). Operating profit from farming stays separate from grants.
+
+### Planned: cow module (dairy + fattening)
+
+| Area | Design |
+|---|---|
+| Animals | `Animal` register (tag no., breed, birth/purchase date, cost, status: milking, dry, heifer, fattening, sold, dead), grouped into herds tagged with project COW. |
+| Dairy (daily) | Milk log per cow or herd, morning/evening litres → milk stock (quantity-only, like eggs) → daily milk sales চালান; feed/fodder usage expensed at average cost. KPIs: litres per cow per day, feed cost per litre. |
+| Fattening (batches) | Purchase of a batch capitalised to 1500 Livestock (per animal). Feed, medicine and labour for the batch are tracked per batch; on sale, the batch's cost moves to cost of goods sold, giving profit per animal and per batch. Weight records for daily gain. |
+| Health | Vaccination/deworming schedule per animal with reminders; medicine issued from stock. |
+| Reports | Project P&L for COW; dairy and fattening sub-reports; inter-project balance cleared as cow costs are recorded here. |
+
 ## Data model (main tables)
 
 `Organization` (settings, fiscal year start, lock date) · `User`, `Role` (JSON permission list), `Session`, `AuditLog` · `Account` (chart of accounts, bilingual), `JournalEntry`, `JournalLine` · `Party` (customer / supplier / employee) · `Item`, `StockMove` · `SalesInvoice` + lines · `Bill` + lines · `Payment` + `PaymentAllocation` · `CashCount` · `Site`, `Flock`, `ProductionLog` · `Sequence` (gap-free document numbers INV-000001, BILL-…, EXP-…, RCPT-…, PAY-…, JE-…).
