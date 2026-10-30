@@ -81,7 +81,7 @@ export function Empty({ children, icon: Icon = Inbox }: { children: ReactNode; i
 
 export function Loading() {
   const t = useT();
-  return <div className="empty"><Loader2 size={22} className="spin" style={{ animation: 'spin 1s linear infinite' }} />{t('Loading…', 'লোড হচ্ছে…')}<style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style></div>;
+  return <div className="empty"><Loader2 size={22} className="spin" />{t('Loading…', 'লোড হচ্ছে…')}</div>;
 }
 
 // ───── Form controls ─────
@@ -130,13 +130,13 @@ export function RangePicker({ value, onChange }: { value: Range; onChange: (r: R
   const current = presets.find(p => { const r = p.r(); return r.from === value.from && r.to === value.to; })?.key ?? 'custom';
   return (
     <div className="row">
-      <select className="select" style={{ width: 'auto' }} value={current} onChange={e => { const p = presets.find(x => x.key === e.target.value); if (p) onChange(p.r()); }}>
+      <select className="select w-auto" value={current} onChange={e => { const p = presets.find(x => x.key === e.target.value); if (p) onChange(p.r()); }}>
         {presets.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
         <option value="custom">{t('Custom', 'নির্দিষ্ট')}</option>
       </select>
-      <input className="input" style={{ width: 150 }} type="date" value={value.from} onChange={e => onChange({ ...value, from: e.target.value })} aria-label={t('From', 'থেকে')} />
+      <input className="input date-range" type="date" value={value.from} onChange={e => onChange({ ...value, from: e.target.value })} aria-label={t('From', 'থেকে')} />
       <span className="muted">–</span>
-      <input className="input" style={{ width: 150 }} type="date" value={value.to} onChange={e => onChange({ ...value, to: e.target.value })} aria-label={t('To', 'পর্যন্ত')} />
+      <input className="input date-range" type="date" value={value.to} onChange={e => onChange({ ...value, to: e.target.value })} aria-label={t('To', 'পর্যন্ত')} />
     </div>
   );
 }

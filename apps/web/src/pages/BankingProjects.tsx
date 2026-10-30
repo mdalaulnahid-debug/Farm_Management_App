@@ -1,7 +1,7 @@
 // Cash & bank → Grants received, Side projects. Also the "Grant received" quick form used by the + New menu.
 import { useEffect, useState } from 'react';
 import { ArrowDownLeft, ArrowUpRight, Gift, Pencil, Plus, Tractor } from 'lucide-react';
-import { usePrefs } from '../lib/i18n';
+import { nameOf, usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi, useSave } from '../lib/hooks';
 import { fmtDate, fmtMoney, ymd } from '../lib/format';
@@ -13,7 +13,7 @@ interface ProjectSum extends Project { sent: number; returned: number; held: num
 interface Grant { id: string; number: string; date: string; amount: number; method: string; reference?: string | null; notes?: string | null; status: string; party?: { id: string; name: string; phone?: string | null } | null }
 interface Transfer { id: string; number: string; date: string; memo: string; status: string; direction: 'IN' | 'OUT'; amount: number; project: Project }
 
-export const projectName = (lang: string, p?: Pick<Project, 'name' | 'nameBn'> | null) => (!p ? '—' : lang === 'bn' && p.nameBn ? p.nameBn : p.name);
+export const projectName = (lang: string, p?: Pick<Project, 'name' | 'nameBn'> | null) => (!p ? '—' : nameOf(p, lang));
 export const useProjects = () => useApi<{ data: Project[] }>('/projects');
 
 // ───── Grant received ─────
@@ -118,7 +118,7 @@ function ProjectDrawer({ project, onClose }: { project: Project | null; onClose:
     <Drawer narrow title={project ? t('Edit project', 'প্রকল্প সম্পাদনা') : t('New project', 'নতুন প্রকল্প')} onClose={onClose}
       footer={<><button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button><button className="btn primary" disabled={!valid || save.isPending} onClick={() => save.mutate({ ...f, code: f.code.trim().toUpperCase(), nameBn: f.nameBn || null, notes: f.notes || null }, { onSuccess: onClose })}>{t('Save', 'সংরক্ষণ')}</button></>}>
       <div className="form-grid">
-        <Field label={t('Code', 'কোড')}><Input value={f.code} disabled={!!project?.isMain} onChange={e => setF({ ...f, code: e.target.value.toUpperCase() })} placeholder="GOAT" /></Field>
+        <Field label={t('Code', 'কোড')}><Input value={f.code} disabled={!!project?.isMain} onChange={e => setF({ ...f, code: e.target.value.toUpperCase() })} placeholder={t('e.g. GOAT', 'যেমন: GOAT')} /></Field>
         <Field label={t('Type', 'ধরন')}><Select value={f.kind} onChange={e => setF({ ...f, kind: e.target.value })} options={KINDS(t)} /></Field>
         <Field label={t('Name', 'নাম')}><Input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></Field>
         <Field label={t('Name (Bangla)', 'নাম (বাংলা)')}><Input value={f.nameBn} onChange={e => setF({ ...f, nameBn: e.target.value })} /></Field>
@@ -153,10 +153,10 @@ export function ProjectsTab() {
       <Alert>{t('The duck farm is the main business. Cow and chicken are side projects: money sent to them is tracked here and never counted as a duck-farm expense. Each project already has its own Profit & loss (Reports → filter by project); full cow modules (milk, fattening) come next.', 'হাঁসের খামার মূল ব্যবসা। গরু ও মুরগি সাইড প্রকল্প: এদের পাঠানো টাকা এখানে ট্র্যাক হয় এবং কখনো হাঁসের খামারের খরচ ধরা হয় না। প্রতিটি প্রকল্পের আলাদা লাভ-ক্ষতি আছে (রিপোর্ট → প্রকল্প বাছাই); গরুর পূর্ণ মডিউল (দুধ, মোটাতাজাকরণ) পরের ধাপে আসছে।')}</Alert>
       <div className="grid g3">
         {projects.map(p => (
-          <div key={p.id} className="card card-pad stack" style={{ gap: 8 }}>
+          <div key={p.id} className="card card-pad stack gap-8">
             <div className="row between">
-              <div className="row" style={{ gap: 8 }}><span className="kpi-icon">{p.isMain ? '🦆' : p.kind === 'POULTRY_MEAT' ? '🐔' : p.kind === 'DAIRY' || p.kind === 'FATTENING' ? '🐄' : <Tractor size={15} />}</span><b>{projectName(lang, p)}</b></div>
-              <div className="row" style={{ gap: 4 }}>{p.isMain ? <Badge tone="blue">{t('Main', 'মূল')}</Badge> : !p.active && <Badge>{t('Inactive', 'নিষ্ক্রিয়')}</Badge>}
+              <div className="row gap-8"><span className="kpi-icon">{p.isMain ? '🦆' : p.kind === 'POULTRY_MEAT' ? '🐔' : p.kind === 'DAIRY' || p.kind === 'FATTENING' ? '🐄' : <Tractor size={15} />}</span><b>{projectName(lang, p)}</b></div>
+              <div className="row gap-4">{p.isMain ? <Badge tone="blue">{t('Main', 'মূল')}</Badge> : !p.active && <Badge>{t('Inactive', 'নিষ্ক্রিয়')}</Badge>}
                 {can('settings.manage') && <button className="btn ghost sm icon" aria-label={t('Edit', 'সম্পাদনা')} onClick={() => setEditing(p)}><Pencil size={14} /></button>}</div>
             </div>
             <dl className="desc-list small">

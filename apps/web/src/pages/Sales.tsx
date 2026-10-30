@@ -3,9 +3,9 @@ import { AlertCircle, Download, FileText, Plus, Printer, Receipt, Wallet } from 
 import { usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi, useSave } from '../lib/hooks';
-import { downloadCsv, fmtDate, fmtNum } from '../lib/format';
+import { downloadCsv, fmtDate } from '../lib/format';
 import { Card, DataTable, Drawer, Kpi, PageHeader, RangePicker, SearchBox, Segmented, StatusBadge, thisMonth, VoidDialog, type Column } from '../components/ui';
-import { InvoiceDrawer, Money, PaymentDrawer } from '../components/forms';
+import { AllocationsTable, DocLinesTable, InvoiceDrawer, Money, PaymentDrawer } from '../components/forms';
 
 
 interface Invoice { id: string; number: string; date: string; dueDate: string; status: string; subtotal: number; discount: number; total: number; amountPaid: number; reference?: string; notes?: string; customer: { id: string; name: string } }
@@ -87,7 +87,7 @@ function InvoiceDetail({ id, onClose }: { id: string; onClose: () => void }) {
         {can('sales.create') && balance > 0.005 && d.status !== 'VOID' && <button className="btn primary" onClick={() => setReceiving(true)}>{t('Receive payment', 'টাকা আদায়')}</button>}
       </>}>
       {!d ? null : <>
-        <div className="row between" style={{ alignItems: 'flex-start' }}>
+        <div className="row between align-start">
           <div><h2>{me?.organization.name}</h2><div className="muted small">{[me?.organization.address, me?.organization.phone].filter(Boolean).join(' · ')}</div></div>
           <dl className="desc-list">
             <dt>{t('Date', 'তারিখ')}</dt><dd>{fmtDate(d.date, lang)}</dd>
@@ -96,12 +96,7 @@ function InvoiceDetail({ id, onClose }: { id: string; onClose: () => void }) {
           </dl>
         </div>
         <div><div className="muted small">{t('Bill to', 'ক্রেতা')}</div><b>{d.customer.name}</b>{d.customer.phone && <div className="small">{d.customer.phone}</div>}</div>
-        <div className="lines">
-          <table>
-            <thead><tr><th>{t('Description', 'বিবরণ')}</th><th className="num">{t('Qty', 'পরিমাণ')}</th><th className="num">{t('Rate', 'দর')}</th><th className="num">{t('Amount', 'টাকা')}</th></tr></thead>
-            <tbody>{d.lines.map((l: any) => <tr key={l.id}><td style={{ padding: '10px' }}>{l.description}</td><td className="num" style={{ padding: 10 }}>{fmtNum(l.quantity, lang)}</td><td className="num" style={{ padding: 10 }}><Money v={l.unitPrice} decimals={2} /></td><td className="num" style={{ padding: 10 }}><Money v={l.amount} /></td></tr>)}</tbody>
-          </table>
-        </div>
+        <DocLinesTable lines={d.lines} />
         <div className="totals">
           <span className="muted">{t('Subtotal', 'উপমোট')}</span><Money v={d.subtotal} />
           {d.discount > 0 && <><span className="muted">{t('Discount', 'ছাড়')}</span><Money v={-d.discount} /></>}
@@ -109,14 +104,9 @@ function InvoiceDetail({ id, onClose }: { id: string; onClose: () => void }) {
           <span className="muted">{t('Paid', 'পরিশোধিত')}</span><Money v={d.amountPaid} />
           <span><b>{t('Balance due', 'বাকি')}</b></span><b className="num"><Money v={balance} /></b>
         </div>
-        {d.allocations.length > 0 && (
-          <div>
-            <h3 style={{ marginBottom: 8 }}>{t('Payments applied', 'প্রয়োগকৃত পরিশোধ')}</h3>
-            <div className="lines"><table><tbody>{d.allocations.map((a: any) => <tr key={a.id} className={a.payment.status === 'VOID' ? 'void' : ''}><td style={{ padding: 10 }} className="mono">{a.payment.number}</td><td style={{ padding: 10 }}>{fmtDate(a.payment.date, lang)}</td><td style={{ padding: 10 }}>{a.payment.status === 'VOID' ? <StatusBadge status="VOID" /> : a.payment.method}</td><td className="num" style={{ padding: 10 }}><Money v={a.amount} /></td></tr>)}</tbody></table></div>
-          </div>
-        )}
+        <AllocationsTable allocations={d.allocations} />
         {d.notes && <div className="muted small">{d.notes}</div>}
-        {me?.organization.invoiceFooter && <div className="muted small" style={{ textAlign: 'center' }}>{me.organization.invoiceFooter}</div>}
+        {me?.organization.invoiceFooter && <div className="muted small text-center">{me.organization.invoiceFooter}</div>}
       </>}
       {voiding && <VoidDialog what={t('invoice', 'চালান')} busy={voidIt.isPending} onClose={() => setVoiding(false)} onConfirm={reason => voidIt.mutate({ reason }, { onSuccess: () => { setVoiding(false); onClose(); } })} />}
       {receiving && d && <PaymentDrawer direction="IN" partyId={d.customerId} onClose={() => setReceiving(false)} />}

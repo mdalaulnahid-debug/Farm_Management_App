@@ -48,6 +48,10 @@ export const usePrefs = () => {
 };
 export const useT = () => usePrefs().t;
 
+/** Display name of a record that has an optional Bangla name (accounts, items, projects). */
+export const nameOf = (record: { name: string; nameBn?: string | null }, lang: string) =>
+  (lang === 'bn' && record.nameBn ? record.nameBn : record.name);
+
 /** Translated labels for server enums. */
 export const statusLabel = (t: Ctx['t'], s: string) => ({
   POSTED: t('Unpaid', 'অপরিশোধিত'), PARTIAL: t('Partly paid', 'আংশিক পরিশোধ'), PAID: t('Paid', 'পরিশোধিত'), VOID: t('Void', 'বাতিল'),

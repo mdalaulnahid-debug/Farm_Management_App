@@ -3,9 +3,9 @@ import { AlertCircle, Download, HandCoins, Plus, Printer, Receipt, ShoppingCart,
 import { usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi, useSave } from '../lib/hooks';
-import { downloadCsv, fmtDate, fmtMoney, fmtNum } from '../lib/format';
+import { downloadCsv, fmtDate, fmtMoney } from '../lib/format';
 import { Card, DataTable, Drawer, Kpi, Loading, PageHeader, RangePicker, SearchBox, Segmented, StatusBadge, thisMonth, VoidDialog, type Column } from '../components/ui';
-import { BillDrawer, Money, PaymentDrawer } from '../components/forms';
+import { AllocationsTable, BillDrawer, DocLinesTable, Money, PaymentDrawer } from '../components/forms';
 
 interface Bill {
   id: string; number: string; date: string; dueDate: string | null; status: string; total: number; amountPaid: number;
@@ -98,7 +98,7 @@ function BillDetail({ id, onClose }: { id: string; onClose: () => void }) {
         {can('purchases.create') && balance > 0.005 && d.status !== 'VOID' && d.supplierId && <button className="btn primary" onClick={() => setPaying(true)}><HandCoins size={16} />{t('Pay', 'পরিশোধ')}</button>}
       </>}>
       {bill.isLoading ? <Loading /> : !d ? null : <>
-        <div className="row between" style={{ alignItems: 'flex-start' }}>
+        <div className="row between align-start">
           <div><h2>{me?.organization.name}</h2><div className="muted small">{t('Purchase bill', 'ক্রয় বিল')}</div></div>
           <dl className="desc-list">
             <dt>{t('Date', 'তারিখ')}</dt><dd>{fmtDate(d.date, lang)}</dd>
@@ -110,23 +110,13 @@ function BillDetail({ id, onClose }: { id: string; onClose: () => void }) {
           <div className="muted small">{t('Supplier', 'সরবরাহকারী')}</div>
           {d.supplier ? <><b>{d.supplier.name}</b>{d.supplier.phone && <div className="small">{d.supplier.phone}</div>}</> : <span className="muted">{t('No supplier (paid in cash)', 'সরবরাহকারী নেই (নগদে পরিশোধ)')}</span>}
         </div>
-        <div className="lines">
-          <table>
-            <thead><tr><th>{t('Description', 'বিবরণ')}</th><th className="num">{t('Qty', 'পরিমাণ')}</th><th className="num">{t('Rate', 'দর')}</th><th className="num">{t('Amount', 'টাকা')}</th></tr></thead>
-            <tbody>{d.lines.map((l: any) => <tr key={l.id}><td style={{ padding: 10 }}>{l.description || '—'}</td><td className="num" style={{ padding: 10 }}>{fmtNum(l.quantity, lang)}</td><td className="num" style={{ padding: 10 }}><Money v={l.unitPrice} decimals={2} /></td><td className="num" style={{ padding: 10 }}><Money v={l.amount} /></td></tr>)}</tbody>
-          </table>
-        </div>
+        <DocLinesTable lines={d.lines} />
         <div className="totals">
           <span className="grand">{t('Total', 'মোট')}</span><span className="grand num"><Money v={d.total} /></span>
           <span className="muted">{t('Paid', 'পরিশোধিত')}</span><Money v={d.amountPaid} />
           <span><b>{t('Balance due', 'বাকি')}</b></span><b className="num"><Money v={d.status === 'VOID' ? 0 : balance} /></b>
         </div>
-        {d.allocations.length > 0 && (
-          <div>
-            <h3 style={{ marginBottom: 8 }}>{t('Payments applied', 'প্রয়োগকৃত পরিশোধ')}</h3>
-            <div className="lines"><table><tbody>{d.allocations.map((a: any) => <tr key={a.id} className={a.payment.status === 'VOID' ? 'void' : ''}><td style={{ padding: 10 }} className="mono">{a.payment.number}</td><td style={{ padding: 10 }}>{fmtDate(a.payment.date, lang)}</td><td style={{ padding: 10 }}>{a.payment.status === 'VOID' ? <StatusBadge status="VOID" /> : a.payment.method}</td><td className="num" style={{ padding: 10 }}><Money v={a.amount} /></td></tr>)}</tbody></table></div>
-          </div>
-        )}
+        <AllocationsTable allocations={d.allocations} />
         {d.notes && <div className="muted small">{d.notes}</div>}
       </>}
       {voiding && <VoidDialog what={t('bill', 'বিল')} busy={voidIt.isPending} onClose={() => setVoiding(false)} onConfirm={reason => voidIt.mutate({ reason }, { onSuccess: () => { setVoiding(false); onClose(); } })} />}

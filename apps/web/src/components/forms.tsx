@@ -1,11 +1,11 @@
 // Business forms shared across screens: invoice, bill/expense, receipt/payment, production.
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import { usePrefs } from '../lib/i18n';
-import { fmtMoney, round2, ymd } from '../lib/format';
+import { nameOf, usePrefs } from '../lib/i18n';
+import { fmtDate, fmtMoney, fmtNum, round2, ymd } from '../lib/format';
 import { useAccounts, useApi, useCashAccounts, useFlocks, useItems, useParties, useSave } from '../lib/hooks';
 import type { Account } from '../lib/api';
-import { Alert, Drawer, Field, Input, Segmented, Select } from './ui';
+import { Alert, Drawer, Field, Input, Segmented, Select, StatusBadge } from './ui';
 
 export function Money({ v, decimals }: { v: number | null | undefined; decimals?: number }) {
   const { lang } = usePrefs();
@@ -13,23 +13,62 @@ export function Money({ v, decimals }: { v: number | null | undefined; decimals?
 }
 
 export const accountOptions = (accounts: Account[] | undefined, lang: string, filter: (a: Account) => boolean = () => true) =>
-  (accounts ?? []).filter(a => a.active && filter(a)).map(a => ({ value: a.id, label: `${a.code} · ${lang === 'bn' && a.nameBn ? a.nameBn : a.name}` }));
+  (accounts ?? []).filter(a => a.active && filter(a)).map(a => ({ value: a.id, label: `${a.code} · ${nameOf(a, lang)}` }));
 
 export function CashAccountSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const { lang } = usePrefs();
   const cash = useCashAccounts();
   useEffect(() => { if (!value && cash.data?.data[0]) onChange(cash.data.data[0].id); }, [cash.data, value, onChange]);
-  return <Select value={value} onChange={e => onChange(e.target.value)} options={(cash.data?.data ?? []).map(a => ({ value: a.id, label: `${lang === 'bn' && a.nameBn ? a.nameBn : a.name} — ${fmtMoney(a.balance, lang as any)}` }))} />;
+  return <Select value={value} onChange={e => onChange(e.target.value)} options={(cash.data?.data ?? []).map(a => ({ value: a.id, label: `${nameOf(a, lang)} — ${fmtMoney(a.balance, lang as any)}` }))} />;
 }
 
-/** Payment methods. Digital ones are recorded with their transaction ID; online collection is a next-phase feature. */
-export const methodOptions = (t: (en: string, bn: string) => string) => [
-  { value: 'CASH', label: t('Cash', 'নগদ') },
-  { value: 'MOBILE', label: t('bKash / Nagad / Rocket', 'বিকাশ / নগদ / রকেট') },
-  { value: 'CARD', label: t('Card', 'কার্ড') },
-  { value: 'BANK', label: t('Bank transfer', 'ব্যাংক ট্রান্সফার') },
-  { value: 'CHEQUE', label: t('Cheque', 'চেক') },
+type T = (en: string, bn: string) => string;
+/** Payment methods, in the order users see them. Digital ones are recorded with their transaction ID; online collection is a next-phase feature. */
+const METHODS: [value: string, en: string, bn: string][] = [
+  ['CASH', 'Cash', 'নগদ'],
+  ['MOBILE', 'bKash / Nagad / Rocket', 'বিকাশ / নগদ / রকেট'],
+  ['CARD', 'Card', 'কার্ড'],
+  ['BANK', 'Bank transfer', 'ব্যাংক ট্রান্সফার'],
+  ['CHEQUE', 'Cheque', 'চেক'],
 ];
+export const methodOptions = (t: T) => METHODS.map(([value, en, bn]) => ({ value, label: t(en, bn) }));
+/** Translated label for a stored payment method (e.g. MOBILE → "bKash / Nagad / Rocket"); unknown values are shown as stored. */
+export const methodLabel = (t: T, method: string) => { const m = METHODS.find(x => x[0] === method); return m ? t(m[1], m[2]) : method; };
+
+// ───── Read-only document detail (invoice / bill) ─────
+interface DocLine { id: string; description?: string | null; quantity: number; unitPrice: number; amount: number }
+/** Line table of a posted invoice or bill. */
+export function DocLinesTable({ lines }: { lines: DocLine[] }) {
+  const { t, lang } = usePrefs();
+  return (
+    <div className="lines doc">
+      <table>
+        <thead><tr><th>{t('Description', 'বিবরণ')}</th><th className="num">{t('Qty', 'পরিমাণ')}</th><th className="num">{t('Rate', 'দর')}</th><th className="num">{t('Amount', 'টাকা')}</th></tr></thead>
+        <tbody>{lines.map(l => <tr key={l.id}><td>{l.description || '—'}</td><td className="num">{fmtNum(l.quantity, lang)}</td><td className="num"><Money v={l.unitPrice} decimals={2} /></td><td className="num"><Money v={l.amount} /></td></tr>)}</tbody>
+      </table>
+    </div>
+  );
+}
+
+interface Allocation { id: string; amount: number; payment: { number: string; date: string; method: string; status: string } }
+/** "Payments applied" block of an invoice or bill: receipt/payment no., date, method (or Void) and amount. Renders nothing when empty. */
+export function AllocationsTable({ allocations }: { allocations: Allocation[] }) {
+  const { t, lang } = usePrefs();
+  if (!allocations.length) return null;
+  return (
+    <div className="doc-section">
+      <h3>{t('Payments applied', 'প্রয়োগকৃত পরিশোধ')}</h3>
+      <div className="lines doc"><table><tbody>{allocations.map(a => (
+        <tr key={a.id} className={a.payment.status === 'VOID' ? 'void' : ''}>
+          <td className="mono">{a.payment.number}</td>
+          <td>{fmtDate(a.payment.date, lang)}</td>
+          <td>{a.payment.status === 'VOID' ? <StatusBadge status="VOID" /> : methodLabel(t, a.payment.method)}</td>
+          <td className="num"><Money v={a.amount} /></td>
+        </tr>
+      ))}</tbody></table></div>
+    </div>
+  );
+}
 
 interface Line { itemId: string; accountId: string; description: string; quantity: string; unitPrice: string }
 const blank = (): Line => ({ itemId: '', accountId: '', description: '', quantity: '1', unitPrice: '' });
@@ -72,7 +111,7 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
     <Drawer title={t('New sales invoice', 'নতুন বিক্রয় চালান')} subtitle={t('Posts revenue and receivable, reduces stock, and records cash received.', 'আয় ও পাওনা পোস্ট করে, মজুদ কমায় এবং প্রাপ্ত নগদ লেখে।')} onClose={onClose}
       footer={<><div className="left">{t('Total', 'মোট')}: <b><Money v={total} /></b></div><button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button><button className="btn primary" disabled={save.isPending || !buyerOk || total < 0} onClick={submit}>{t('Save & post', 'সংরক্ষণ ও পোস্ট')}</button></>}>
       <div className="form-grid three">
-        <div className="full stack" style={{ gap: 8 }}>
+        <div className="full stack gap-8">
           <div className="row between">
             <b>{t('Buyer', 'ক্রেতা')}</b>
             <Segmented value={buyer.mode} onChange={m => setBuyer({ ...buyer, mode: m })} options={[{ value: 'phone', label: t('Name & phone', 'নাম ও ফোন') }, { value: 'list', label: t('From customer list', 'ক্রেতা তালিকা থেকে') }]} />
@@ -83,7 +122,7 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
                 <Input type="tel" inputMode="tel" autoFocus value={buyer.phone} onChange={e => setBuyer({ ...buyer, phone: e.target.value })} placeholder="01XXXXXXXXX" />
               </Field>
               {match
-                ? <Field label={t('Customer', 'ক্রেতা')}><div className="badge green" style={{ height: 36, borderRadius: 8, fontSize: '.95em' }}>✓ {match.name}</div></Field>
+                ? <Field label={t('Customer', 'ক্রেতা')}><div className="badge green match">✓ {match.name}</div></Field>
                 : <Field label={t('Buyer name', 'ক্রেতার নাম')} hint={buyer.phone.trim() ? t('New buyer — will be added to the customer list.', 'নতুন ক্রেতা — ক্রেতা তালিকায় যোগ হবে।') : t('Leave both blank for a walk-in sale.', 'খুচরা বিক্রিতে দুটোই খালি রাখুন।')}>
                     <Input value={buyer.name} onChange={e => setBuyer({ ...buyer, name: e.target.value })} />
                   </Field>}
@@ -106,9 +145,9 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
               return (
                 <tr key={i}>
                   <td>
-                    <Select value={l.itemId} placeholder={t('— Other income line —', '— অন্যান্য আয় —')} options={saleItems.map(x => ({ value: x.id, label: `${lang === 'bn' && x.nameBn ? x.nameBn : x.name}${x.trackInventory ? ` (${x.qtyOnHand} ${x.unit})` : ''}` }))}
+                    <Select value={l.itemId} placeholder={t('— Other income line —', '— অন্যান্য আয় —')} options={saleItems.map(x => ({ value: x.id, label: `${nameOf(x, lang)}${x.trackInventory ? ` (${x.qtyOnHand} ${x.unit})` : ''}` }))}
                       onChange={e => { const it = items.data?.data.find(x => x.id === e.target.value); set({ itemId: e.target.value, unitPrice: it ? String(it.salePrice || '') : l.unitPrice }); }} />
-                    {!l.itemId && <Select style={{ marginTop: 6 }} value={l.accountId} placeholder={t('Income account…', 'আয়ের হিসাব…')} options={accountOptions(accounts.data?.data, lang)} onChange={e => set({ accountId: e.target.value })} />}
+                    {!l.itemId && <Select className="mt-6" value={l.accountId} placeholder={t('Income account…', 'আয়ের হিসাব…')} options={accountOptions(accounts.data?.data, lang)} onChange={e => set({ accountId: e.target.value })} />}
                   </td>
                   <td data-label={t('Description', 'বিবরণ')}><Input value={l.description} onChange={e => set({ description: e.target.value })} placeholder={item?.name ?? ''} /></td>
                   <td data-label={t('Qty', 'পরিমাণ')}><Input type="number" min="0" step="any" value={l.quantity} onChange={e => set({ quantity: e.target.value })} /></td>
@@ -122,15 +161,15 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
           <tfoot><tr><td colSpan={6}><button className="btn sm" onClick={() => setLines(ls => [...ls, blank()])}><Plus size={14} />{t('Add line', 'লাইন যোগ')}</button></td></tr></tfoot>
         </table>
       </div>
-      <div className="row" style={{ alignItems: 'flex-start' }}>
-        <Field label={t('Notes', 'নোট')} className="" ><textarea className="textarea" style={{ width: 'min(300px, 100%)' }} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></Field>
+      <div className="row align-start">
+        <Field label={t('Notes', 'নোট')} className="" ><textarea className="textarea notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></Field>
         <div className="totals">
           <span className="muted">{t('Subtotal', 'উপমোট')}</span><Money v={subtotal} />
-          <span className="muted">{t('Discount', 'ছাড়')}</span><Input type="number" min="0" style={{ width: 120, height: 30 }} value={form.discount} onChange={e => setForm({ ...form, discount: e.target.value })} />
+          <span className="muted">{t('Discount', 'ছাড়')}</span><Input type="number" min="0" className="discount" value={form.discount} onChange={e => setForm({ ...form, discount: e.target.value })} />
           <span className="grand">{t('Total', 'মোট')}</span><span className="grand num"><Money v={total} /></span>
         </div>
       </div>
-      <div className="card card-pad stack" style={{ background: 'var(--surface-2)' }}>
+      <div className="card card-pad stack soft">
         <h3>{t('Payment received now', 'এখন প্রাপ্ত টাকা')}</h3>
         <div className="row">
           {(['full', 'partial', 'none'] as const).map(m => <label key={m} className="check"><input type="radio" checked={receive.mode === m} onChange={() => setReceive({ ...receive, mode: m })} />{m === 'full' ? t('Paid in full', 'সম্পূর্ণ পরিশোধ') : m === 'partial' ? t('Part payment', 'আংশিক') : t('On credit (unpaid)', 'বাকিতে')}</label>)}
@@ -189,9 +228,9 @@ export function BillDrawer({ onClose, expense }: { onClose: () => void; expense?
               return (
                 <tr key={i}>
                   <td>
-                    <Select value={l.itemId} placeholder={t('— Expense (no item) —', '— খরচ (পণ্য নয়) —')} options={(items.data?.data ?? []).filter(x => x.active && x.category !== 'PRODUCE').map(x => ({ value: x.id, label: `${lang === 'bn' && x.nameBn ? x.nameBn : x.name} (${x.unit})` }))}
+                    <Select value={l.itemId} placeholder={t('— Expense (no item) —', '— খরচ (পণ্য নয়) —')} options={(items.data?.data ?? []).filter(x => x.active && x.category !== 'PRODUCE').map(x => ({ value: x.id, label: `${nameOf(x, lang)} (${x.unit})` }))}
                       onChange={e => { const it = items.data?.data.find(x => x.id === e.target.value); set({ itemId: e.target.value, unitPrice: it?.purchasePrice ? String(it.purchasePrice) : l.unitPrice }); }} />
-                    {(!l.itemId || (item && !(item.trackInventory && item.valued) && !item.expenseAccountId)) && <Select style={{ marginTop: 6 }} value={l.accountId} placeholder={t('Expense account…', 'খরচের হিসাব…')} options={expenseAccounts} onChange={e => set({ accountId: e.target.value })} />}
+                    {(!l.itemId || (item && !(item.trackInventory && item.valued) && !item.expenseAccountId)) && <Select className="mt-6" value={l.accountId} placeholder={t('Expense account…', 'খরচের হিসাব…')} options={expenseAccounts} onChange={e => set({ accountId: e.target.value })} />}
                     {item?.trackInventory && item.valued && <small className="muted">{t('Adds to stock', 'মজুদে যোগ হবে')} · {item.qtyOnHand} {item.unit}</small>}
                   </td>
                   <td data-label={t('Description', 'বিবরণ')}><Input value={l.description} onChange={e => set({ description: e.target.value })} /></td>
@@ -207,7 +246,7 @@ export function BillDrawer({ onClose, expense }: { onClose: () => void; expense?
         </table>
       </div>
       <Field label={t('Notes', 'নোট')}><textarea className="textarea" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></Field>
-      <div className="card card-pad stack" style={{ background: 'var(--surface-2)' }}>
+      <div className="card card-pad stack soft">
         <h3>{t('Paid now', 'এখন পরিশোধ')}</h3>
         <div className="row">{(['full', 'partial', 'none'] as const).map(m => <label key={m} className="check"><input type="radio" checked={pay.mode === m} onChange={() => setPay({ ...pay, mode: m })} />{m === 'full' ? t('Paid in full', 'সম্পূর্ণ পরিশোধ') : m === 'partial' ? t('Part payment', 'আংশিক') : t('Pay later', 'পরে পরিশোধ')}</label>)}</div>
         {pay.mode !== 'none' && <div className="form-grid">
@@ -261,7 +300,7 @@ export function PaymentDrawer({ direction, onClose, partyId: initialParty }: { d
               {docs.length ? docs.map(d => (
                 <tr key={d.id}>
                   <td><b>{d.number}</b><br /><small className="muted">{d.date.slice(0, 10)}</small></td>
-                  <td className="num" style={{ paddingTop: 12 }}><Money v={d.total - d.amountPaid} /></td>
+                  <td className="num due"><Money v={d.total - d.amountPaid} /></td>
                   <td><Input type="number" min="0" value={alloc[d.id] ?? ''} onChange={e => setAlloc({ ...alloc, [d.id]: e.target.value })} /></td>
                 </tr>
               )) : <tr><td colSpan={3} className="muted">{t('No open documents. The amount will be kept as an advance.', 'কোনো খোলা ডকুমেন্ট নেই। টাকাটি অগ্রিম হিসেবে থাকবে।')}</td></tr>}
@@ -301,7 +340,7 @@ export function ProductionDrawer({ onClose }: { onClose: () => void }) {
         <Field label={t('Broken / rejected', 'ভাঙা / বাতিল')}><Input type="number" min="0" value={f.eggsBroken} onChange={e => setF({ ...f, eggsBroken: e.target.value })} /></Field>
         <Field label={t('Mortality', 'মৃত্যু')}><Input type="number" min="0" value={f.mortality} onChange={e => setF({ ...f, mortality: e.target.value })} /></Field>
         <Field label={t('Culled / sold birds', 'বাছাই / বিক্রি পাখি')}><Input type="number" min="0" value={f.culled} onChange={e => setF({ ...f, culled: e.target.value })} /></Field>
-        <Field label={t('Feed item', 'খাদ্য')} hint={feed ? t(`In stock: ${feed.qtyOnHand} ${feed.unit}`, `মজুদ: ${feed.qtyOnHand} ${feed.unit}`) : undefined}><Select value={f.feedItemId} onChange={e => setF({ ...f, feedItemId: e.target.value })} options={feeds.map(x => ({ value: x.id, label: lang === 'bn' && x.nameBn ? x.nameBn : x.name }))} placeholder={t('— none —', '— নেই —')} /></Field>
+        <Field label={t('Feed item', 'খাদ্য')} hint={feed ? t(`In stock: ${feed.qtyOnHand} ${feed.unit}`, `মজুদ: ${feed.qtyOnHand} ${feed.unit}`) : undefined}><Select value={f.feedItemId} onChange={e => setF({ ...f, feedItemId: e.target.value })} options={feeds.map(x => ({ value: x.id, label: nameOf(x, lang) }))} placeholder={t('— none —', '— নেই —')} /></Field>
         <Field label={t(`Feed used${feed ? ` (${feed.unit})` : ''}`, `ব্যবহৃত খাদ্য${feed ? ` (${feed.unit})` : ''}`)} hint={feed && Number(f.feedQty) > 0 ? t(`≈ ${fmtMoney(Number(f.feedQty) * feed.avgCost, lang)} cost`, `≈ ${fmtMoney(Number(f.feedQty) * feed.avgCost, lang)} খরচ`) : undefined}><Input type="number" min="0" step="any" value={f.feedQty} onChange={e => setF({ ...f, feedQty: e.target.value })} /></Field>
         <Field label={t('Notes', 'নোট')} className="full"><textarea className="textarea" value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} /></Field>
       </div>
