@@ -393,3 +393,19 @@ model ProductionLog {
   @@index([date])
   @@index([flockId, date])
 }
+
+// ───────────────────────── Data import ─────────────────────────
+
+model ImportBatch {
+  id          String   @id @default(cuid())
+  number      String   @unique
+  kind        String   // WORKBOOK
+  fileName    String?
+  periodFrom  DateTime
+  periodTo    DateTime
+  status      String   @default("POSTED") // POSTED | VOID
+  summary     String   // JSON: totals and reconciliation shown to the user
+  documents   String   // JSON: ids of everything this import created, so it can be undone
+  createdById String?
+  createdAt   DateTime @default(now())
+}

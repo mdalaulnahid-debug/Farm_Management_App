@@ -14,6 +14,7 @@ import authRoutes from './routes/auth.js';
 import masterRoutes from './routes/master.js';
 import transactionRoutes from './routes/transactions.js';
 import reportRoutes from './routes/reports.js';
+import importRoutes from './routes/import.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -49,6 +50,7 @@ export async function buildApp() {
     await api.register(masterRoutes);
     await api.register(transactionRoutes);
     await api.register(reportRoutes);
+    await api.register(importRoutes);
   }, { prefix: '/api/v1' });
 
   // In production the API also serves the built web app.

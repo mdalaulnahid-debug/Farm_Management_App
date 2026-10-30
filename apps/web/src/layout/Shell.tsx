@@ -22,7 +22,7 @@ export default function Shell({ children }: { children: ReactNode }) {
   const groups: { label: string; links: { to: string; label: string; icon: any; perm: string }[] }[] = [
     { label: '', links: [{ to: '/', label: t('Dashboard', 'ড্যাশবোর্ড'), icon: LayoutDashboard, perm: 'dashboard.view' }] },
     { label: t('Sales', 'বিক্রয়'), links: [
-      { to: '/sales', label: t('Invoices', 'ইনভয়েস'), icon: FileText, perm: 'sales.view' },
+      { to: '/sales', label: t('Invoices', 'চালান'), icon: FileText, perm: 'sales.view' },
       { to: '/customers', label: t('Customers', 'ক্রেতা'), icon: Contact, perm: 'sales.view' },
     ] },
     { label: t('Purchases', 'ক্রয়'), links: [
@@ -45,7 +45,7 @@ export default function Shell({ children }: { children: ReactNode }) {
   const visible = groups.map(g => ({ ...g, links: g.links.filter(l => can(l.perm) || (l.to === '/admin' && (can('users.manage') || can('audit.view')))) })).filter(g => g.links.length);
 
   const quickItems: { key: Exclude<Quick, null>; label: string; icon: any; perm: string }[] = [
-    { key: 'invoice', label: t('Sales invoice', 'বিক্রয় ইনভয়েস'), icon: FileText, perm: 'sales.create' },
+    { key: 'invoice', label: t('Sales invoice', 'বিক্রয় চালান'), icon: FileText, perm: 'sales.create' },
     { key: 'receipt', label: t('Receive payment', 'টাকা আদায়'), icon: Receipt, perm: 'sales.create' },
     { key: 'expense', label: t('Expense', 'খরচ'), icon: ClipboardList, perm: 'purchases.create' },
     { key: 'bill', label: t('Purchase bill', 'ক্রয় বিল'), icon: ShoppingCart, perm: 'purchases.create' },

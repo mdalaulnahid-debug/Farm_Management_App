@@ -101,7 +101,7 @@ function StockOnHand({ onAdjust }: { onAdjust?: (itemId: string) => void }) {
         <Segmented value={lowOnly ? 'low' : 'all'} onChange={v => setLowOnly(v === 'low')} options={[{ value: 'all', label: t('All', 'সব') }, { value: 'low', label: t(`Low (${lowCount})`, `কম (${lowCount})`) }]} />
         <Select style={{ width: 'auto' }} value={category} onChange={e => setCategory(e.target.value)} placeholder={t('All categories', 'সব শ্রেণি')} options={CATEGORIES.map(c => ({ value: c, label: categoryLabel(t, c) }))} />
         <SearchBox value={search} onChange={setSearch} placeholder={t('Search item or SKU…', 'পণ্য বা এসকেইউ খুঁজুন…')} />
-        <button className="btn" onClick={exportCsv} disabled={!rows?.length}><Download size={16} />{t('Export', 'রপ্তানি')}</button>
+        <button className="btn" onClick={exportCsv} disabled={!rows?.length}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>
       </>}>
         <DataTable rows={rows} columns={columns}
           empty={all?.length ? t('No items match these filters.', 'এই ফিল্টারে কোনো পণ্য নেই।') : t('No stock-tracked items yet. Add items in the Items tab.', 'এখনো কোনো মজুদযোগ্য পণ্য নেই। পণ্য তালিকা ট্যাবে যোগ করুন।')}
@@ -151,7 +151,7 @@ function Items({ onEdit }: { onEdit?: (i: Item) => void }) {
         <Segmented value={active} onChange={setActive} options={[{ value: 'active', label: t('Active', 'সক্রিয়') }, { value: 'inactive', label: t('Inactive', 'নিষ্ক্রিয়') }, { value: 'all', label: t('All', 'সব') }]} />
         <Select style={{ width: 'auto' }} value={category} onChange={e => setCategory(e.target.value)} placeholder={t('All categories', 'সব শ্রেণি')} options={CATEGORIES.map(c => ({ value: c, label: categoryLabel(t, c) }))} />
         <SearchBox value={search} onChange={setSearch} placeholder={t('Search item or SKU…', 'পণ্য বা এসকেইউ খুঁজুন…')} />
-        <button className="btn" onClick={exportCsv} disabled={!rows?.length}><Download size={16} />{t('Export', 'রপ্তানি')}</button>
+        <button className="btn" onClick={exportCsv} disabled={!rows?.length}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>
       </>}>
       <DataTable rows={rows} columns={columns} onRow={onEdit} empty={t('No items match these filters.', 'এই ফিল্টারে কোনো পণ্য নেই।')} />
     </Card>
@@ -266,7 +266,7 @@ function Moves() {
         options={(items.data?.data ?? []).filter(i => i.trackInventory).map(i => ({ value: i.id, label: `${i.sku} · ${itemName(lang, i)}` }))} />
       <Select style={{ width: 'auto' }} value={type} onChange={e => { setType(e.target.value); setPage(1); }} placeholder={t('All movements', 'সব চলাচল')} options={MOVE_TYPES.map(m => ({ value: m, label: moveLabel(t, m) }))} />
       <RangePicker value={range} onChange={r => { setRange(r); setPage(1); }} />
-      <button className="btn" onClick={exportCsv} disabled={!list.data?.data.length}><Download size={16} />{t('Export', 'রপ্তানি')}</button>
+      <button className="btn" onClick={exportCsv} disabled={!list.data?.data.length}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>
     </>}>
       <DataTable rows={rows} columns={columns} page={page} pageSize={50} total={list.data?.total} onPage={setPage} empty={t('No stock movements in this period.', 'এই সময়ে কোনো মজুদ চলাচল নেই।')} />
     </Card>

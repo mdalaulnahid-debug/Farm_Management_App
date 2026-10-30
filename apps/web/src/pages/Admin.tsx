@@ -4,10 +4,11 @@ import { usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtDateTime, monthStart, ymd } from '../lib/format';
+import ImportData from './ImportData';
 import { Alert, Badge, Card, DataTable, Dialog, Drawer, Empty, Field, Input, Loading, PageHeader, SearchBox, Select, Tabs, type Column } from '../components/ui';
 
 type T = (en: string, bn: string) => string;
-type TabKey = 'users' | 'roles' | 'org' | 'close' | 'audit';
+type TabKey = 'users' | 'roles' | 'org' | 'close' | 'import' | 'audit';
 
 interface Role { id: string; key: string; name: string; description: string | null; permissions: string[]; system: boolean; _count: { users: number } }
 interface User { id: string; name: string; email: string; phone: string | null; active: boolean; mustChangePassword: boolean; lastLoginAt: string | null; role: { id: string; key: string; name: string } }
@@ -27,6 +28,7 @@ export default function Admin() {
     can('users.manage') && { value: 'roles', label: t('Roles & permissions', 'ভূমিকা ও অনুমতি') },
     can('settings.manage') && { value: 'org', label: t('Organization', 'প্রতিষ্ঠান') },
     can('settings.manage') && { value: 'close', label: t('Period close', 'হিসাবকাল বন্ধ') },
+    can('settings.manage') && { value: 'import', label: t('Import past data', 'পুরোনো হিসাব ইমপোর্ট') },
     can('audit.view') && { value: 'audit', label: t('Audit trail', 'অডিট ট্রেইল') },
   ].filter(Boolean)) as { value: TabKey; label: string }[];
   const [tab, setTab] = useState<TabKey>(tabs[0]?.value ?? 'audit');
@@ -41,6 +43,7 @@ export default function Admin() {
         {tab === 'roles' && <RolesTab />}
         {tab === 'org' && <OrgTab />}
         {tab === 'close' && <PeriodCloseTab />}
+        {tab === 'import' && <ImportData />}
         {tab === 'audit' && <AuditTab />}
       </>}
     </>
@@ -136,7 +139,7 @@ const groupLabel = (t: T, g: string) => ({
 } as Record<string, string>)[g] ?? g;
 
 const PERM_BN: Record<string, string> = {
-  'dashboard.view': 'ড্যাশবোর্ড দেখা', 'sales.view': 'বিক্রয় ও ক্রেতা দেখা', 'sales.create': 'ইনভয়েস ও আদায় তৈরি', 'sales.void': 'ইনভয়েস ও আদায় বাতিল',
+  'dashboard.view': 'ড্যাশবোর্ড দেখা', 'sales.view': 'বিক্রয় ও ক্রেতা দেখা', 'sales.create': 'চালান ও আদায় তৈরি', 'sales.void': 'চালান ও আদায় বাতিল',
   'purchases.view': 'ক্রয়, খরচ ও সরবরাহকারী দেখা', 'purchases.create': 'বিল, খরচ ও পরিশোধ তৈরি', 'purchases.void': 'বিল ও পরিশোধ বাতিল',
   'banking.view': 'নগদ ও ব্যাংক দেখা', 'banking.manage': 'স্থানান্তর, নগদ গণনা, মালিকের লেনদেন', 'inventory.view': 'মজুদ দেখা', 'inventory.manage': 'পণ্য ও মজুদ সমন্বয় পরিচালনা',
   'production.view': 'ঝাঁক ও উৎপাদন দেখা', 'production.manage': 'উৎপাদন লেখা ও ঝাঁক পরিচালনা', 'accounting.view': 'হিসাবের তালিকা ও জার্নাল দেখা',
@@ -261,7 +264,7 @@ function OrgForm({ org }: { org: Org }) {
   const submit = () => save.mutate({ ...f, fiscalYearStart: Number(f.fiscalYearStart) }, { onSuccess: () => refresh() });
 
   return (
-    <Card title={<span className="row" style={{ gap: 8 }}><Building2 size={18} />{t('Organization profile', 'প্রতিষ্ঠানের প্রোফাইল')}</span>} subtitle={t('Printed on invoices and financial statements.', 'ইনভয়েস ও আর্থিক বিবরণীতে ছাপা হয়।')}
+    <Card title={<span className="row" style={{ gap: 8 }}><Building2 size={18} />{t('Organization profile', 'প্রতিষ্ঠানের প্রোফাইল')}</span>} subtitle={t('Printed on invoices and financial statements.', 'চালান ও আর্থিক বিবরণীতে ছাপা হয়।')}
       actions={<>
         {changed && <button className="btn" onClick={() => setF(init)}>{t('Discard', 'বাদ দিন')}</button>}
         <button className="btn primary" disabled={!changed || !valid || save.isPending} onClick={submit}>{t('Save changes', 'পরিবর্তন সংরক্ষণ')}</button>
@@ -277,7 +280,7 @@ function OrgForm({ org }: { org: Org }) {
           <Field label={t('Fiscal year starts in', 'অর্থবছর শুরু')} hint={t('Bangladesh’s fiscal year starts in July.', 'বাংলাদেশের অর্থবছর জুলাইয়ে শুরু হয়।')}>
             <Select value={String(f.fiscalYearStart)} onChange={e => setF({ ...f, fiscalYearStart: Number(e.target.value) })} options={MONTHS.map(([en, bn], i) => ({ value: String(i + 1), label: t(en, bn) }))} />
           </Field>
-          <Field label={t('Invoice footer', 'ইনভয়েসের পাদটীকা')} className="full" hint={t('e.g. payment instructions or a thank-you note. Printed at the bottom of every invoice.', 'যেমন: পরিশোধের নির্দেশনা বা ধন্যবাদ বার্তা। প্রতিটি ইনভয়েসের নিচে ছাপা হবে।')}>
+          <Field label={t('Invoice footer', 'চালানের পাদটীকা')} className="full" hint={t('e.g. payment instructions or a thank-you note. Printed at the bottom of every invoice.', 'যেমন: পরিশোধের নির্দেশনা বা ধন্যবাদ বার্তা। প্রতিটি চালানের নিচে ছাপা হবে।')}>
             <textarea className="textarea" maxLength={500} value={f.invoiceFooter} onChange={e => setF({ ...f, invoiceFooter: e.target.value })} />
           </Field>
         </div>
@@ -344,7 +347,7 @@ function PeriodCloseTab() {
 // ───────────── Audit trail ─────────────
 const ENTITIES = ['invoice', 'bill', 'payment', 'journal', 'production', 'stock_adjustment', 'user', 'role', 'settings', 'party', 'item', 'account', 'flock', 'transfer', 'cash_count'];
 const entityLabel = (t: T, e: string) => ({
-  invoice: t('Invoice', 'ইনভয়েস'), bill: t('Bill', 'বিল'), payment: t('Payment', 'পরিশোধ'), journal: t('Journal', 'জার্নাল'), production: t('Production', 'উৎপাদন'),
+  invoice: t('Invoice', 'চালান'), bill: t('Bill', 'বিল'), payment: t('Payment', 'পরিশোধ'), journal: t('Journal', 'জার্নাল'), production: t('Production', 'উৎপাদন'),
   stock_adjustment: t('Stock adjustment', 'মজুদ সমন্বয়'), user: t('User', 'ব্যবহারকারী'), role: t('Role', 'ভূমিকা'), settings: t('Settings', 'সেটিংস'), party: t('Contact', 'যোগাযোগ'),
   item: t('Item', 'পণ্য'), account: t('Account', 'হিসাব'), flock: t('Flock', 'ঝাঁক'), transfer: t('Transfer', 'স্থানান্তর'), cash_count: t('Cash count', 'নগদ গণনা'),
 } as Record<string, string>)[e] ?? e;
@@ -375,7 +378,7 @@ function AuditTab() {
       actions={<>
         <Select style={{ width: 'auto' }} value={entity} onChange={e => { setEntity(e.target.value); setPage(1); }} placeholder={t('All records', 'সব রেকর্ড')} options={ENTITIES.map(e => ({ value: e, label: entityLabel(t, e) }))} aria-label={t('Record type', 'রেকর্ডের ধরন')} />
         <SearchBox value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder={t('Search details…', 'বিবরণে খুঁজুন…')} />
-        <button className="btn" onClick={exportCsv} disabled={!q.data?.data.length}><Download size={16} />{t('Export page', 'পৃষ্ঠা রপ্তানি')}</button>
+        <button className="btn" onClick={exportCsv} disabled={!q.data?.data.length}><Download size={16} />{t('Export page', 'পৃষ্ঠা ডাউনলোড')}</button>
       </>}>
       <DataTable rows={q.data?.data} columns={columns} page={page} pageSize={100} total={q.data?.total} onPage={setPage} empty={t('No activity matches these filters.', 'এই ফিল্টারে কোনো কার্যক্রম নেই।')} />
     </Card>

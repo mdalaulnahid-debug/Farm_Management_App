@@ -51,7 +51,7 @@ export default function Purchases() {
       <PageHeader crumb={t('Purchases', 'ক্রয়')} title={t('Bills & expenses', 'বিল ও খরচ')}
         subtitle={t('Supplier bills and day-to-day expenses. Stocked items go to inventory; everything else is expensed and payables are tracked.', 'সরবরাহকারীর বিল ও দৈনন্দিন খরচ। মজুদযোগ্য পণ্য মজুদে যায়; বাকি সব খরচ হিসেবে লেখা হয় এবং দেনা ট্র্যাক হয়।')}
         actions={<>
-          <button className="btn" onClick={exportCsv} disabled={!list.data?.data.length}><Download size={16} />{t('Export', 'রপ্তানি')}</button>
+          <button className="btn" onClick={exportCsv} disabled={!list.data?.data.length}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>
           {can('purchases.create') && <button className="btn" onClick={() => setPaying(true)}><HandCoins size={16} />{t('Pay supplier', 'সরবরাহকারীকে পরিশোধ')}</button>}
           {can('purchases.create') && <button className="btn" onClick={() => setCreating('expense')}><Receipt size={16} />{t('Record expense', 'খরচ লিখুন')}</button>}
           {can('purchases.create') && <button className="btn primary" onClick={() => setCreating('bill')}><Plus size={16} />{t('New bill', 'নতুন বিল')}</button>}

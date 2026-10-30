@@ -33,7 +33,7 @@ const subtypeLabel = (t: T, s: string) => ({
 const cashFlowLabel = (t: T, s: string) => ({ OPERATING: t('Operating', 'পরিচালন'), INVESTING: t('Investing', 'বিনিয়োগ'), FINANCING: t('Financing', 'অর্থায়ন') } as Record<string, string>)[s] ?? s;
 
 const sourceLabel = (t: T, s: string) => ({
-  MANUAL: t('Manual', 'ম্যানুয়াল'), OPENING: t('Opening balance', 'প্রারম্ভিক স্থিতি'), INVOICE: t('Sales invoice', 'বিক্রয় ইনভয়েস'), BILL: t('Purchase bill', 'ক্রয় বিল'),
+  MANUAL: t('Manual', 'ম্যানুয়াল'), OPENING: t('Opening balance', 'প্রারম্ভিক স্থিতি'), INVOICE: t('Sales invoice', 'বিক্রয় চালান'), BILL: t('Purchase bill', 'ক্রয় বিল'),
   PAYMENT: t('Payment', 'পরিশোধ'), TRANSFER: t('Transfer', 'স্থানান্তর'), PRODUCTION: t('Production', 'উৎপাদন'), ADJUSTMENT: t('Stock adjustment', 'মজুদ সমন্বয়'), REVERSAL: t('Reversal', 'বিপরীত এন্ট্রি'),
 } as Record<string, string>)[s] ?? s;
 
@@ -88,7 +88,7 @@ function ChartOfAccounts({ onEdit }: { onEdit: (a: AccountRow) => void }) {
       actions={<>
         <Segmented value={show} onChange={setShow} options={[{ value: 'active', label: t('Active', 'সক্রিয়') }, { value: 'all', label: t('All', 'সব') }]} />
         <SearchBox value={search} onChange={setSearch} placeholder={t('Code or name…', 'কোড বা নাম…')} />
-        <button className="btn" onClick={exportCsv} disabled={!rows.length}><Download size={16} />{t('Export', 'রপ্তানি')}</button>
+        <button className="btn" onClick={exportCsv} disabled={!rows.length}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>
       </>}>
       {!list.data ? <Loading /> : !rows.length ? <Empty>{t('No accounts match your search.', 'আপনার খোঁজের সাথে কোনো হিসাব মেলেনি।')}</Empty> : (
         <div className="table-wrap">
@@ -209,7 +209,7 @@ function LedgerDrawer({ account, onClose }: { account: AccountRow; onClose: () =
   const cell = { padding: '8px 10px' };
   return (
     <Drawer title={`${account.code} · ${name}`} subtitle={`${accountTypeLabel(t, account.type)} · ${subtypeLabel(t, account.subtype)} — ${t('General ledger', 'সাধারণ খতিয়ান')}`} onClose={onClose}
-      footer={<><div className="left">{t('Closing balance', 'সমাপনী স্থিতি')}: <b><Money v={d?.closing} /></b></div><button className="btn" disabled={!d} onClick={exportCsv}><Download size={16} />{t('Export CSV', 'CSV রপ্তানি')}</button></>}>
+      footer={<><div className="left">{t('Closing balance', 'সমাপনী স্থিতি')}: <b><Money v={d?.closing} /></b></div><button className="btn" disabled={!d} onClick={exportCsv}><Download size={16} />{t('Export CSV', 'CSV ডাউনলোড')}</button></>}>
       <RangePicker value={range} onChange={setRange} />
       {!d ? <Loading /> : (
         <div className="lines">
@@ -261,12 +261,12 @@ function Journals() {
     (rows ?? []).flatMap(j => j.lines.map(l => [j.number, j.date.slice(0, 10), j.sourceType, j.status, j.memo, l.account.code, l.account.name, l.party?.name ?? '', l.memo ?? '', l.debit || '', l.credit || ''])));
 
   return (
-    <Card title={t('Journal entries', 'জার্নাল এন্ট্রি')} subtitle={t('Every posting, including those created automatically by invoices, bills and payments.', 'সব পোস্টিং, ইনভয়েস, বিল ও পরিশোধ থেকে স্বয়ংক্রিয়ভাবে তৈরি এন্ট্রিসহ।')}
+    <Card title={t('Journal entries', 'জার্নাল এন্ট্রি')} subtitle={t('Every posting, including those created automatically by invoices, bills and payments.', 'সব পোস্টিং, চালান, বিল ও পরিশোধ থেকে স্বয়ংক্রিয়ভাবে তৈরি এন্ট্রিসহ।')}
       actions={<>
         <Select style={{ width: 'auto' }} value={sourceType} onChange={e => { setSourceType(e.target.value); setPage(1); }} placeholder={t('All sources', 'সব উৎস')} options={SOURCE_TYPES.map(s => ({ value: s, label: sourceLabel(t, s) }))} aria-label={t('Source', 'উৎস')} />
         <SearchBox value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder={t('Entry no. or memo…', 'এন্ট্রি নং বা মেমো…')} />
         <RangePicker value={range} onChange={r => { setRange(r); setPage(1); }} />
-        <button className="btn" onClick={exportCsv} disabled={!rows?.length}><Download size={16} />{t('Export', 'রপ্তানি')}</button>
+        <button className="btn" onClick={exportCsv} disabled={!rows?.length}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>
       </>}>
       {!rows ? <Loading /> : !rows.length ? <Empty icon={BookOpen}>{t('No journal entries match these filters.', 'এই ফিল্টারে কোনো জার্নাল এন্ট্রি নেই।')}</Empty> : (
         <>

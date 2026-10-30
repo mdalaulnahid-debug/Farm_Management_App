@@ -25,7 +25,7 @@ export default function Sales() {
   const aging = useApi<any>('/reports/ar-aging');
 
   const columns: Column<Invoice>[] = [
-    { key: 'number', label: t('Invoice', 'ইনভয়েস'), render: r => <b className="mono">{r.number}</b> },
+    { key: 'number', label: t('Invoice', 'চালান'), render: r => <b className="mono">{r.number}</b> },
     { key: 'date', label: t('Date', 'তারিখ'), render: r => fmtDate(r.date, lang) },
     { key: 'customer', label: t('Customer', 'ক্রেতা'), render: r => r.customer.name },
     { key: 'due', label: t('Due', 'শেষ তারিখ'), render: r => fmtDate(r.dueDate, lang), hideSm: true },
@@ -40,21 +40,21 @@ export default function Sales() {
 
   return (
     <>
-      <PageHeader crumb={t('Sales', 'বিক্রয়')} title={t('Sales invoices', 'বিক্রয় ইনভয়েস')} subtitle={t('Every sale posts revenue, updates receivables and reduces stock automatically.', 'প্রতিটি বিক্রয় স্বয়ংক্রিয়ভাবে আয় পোস্ট করে, পাওনা হালনাগাদ করে এবং মজুদ কমায়।')}
+      <PageHeader crumb={t('Sales', 'বিক্রয়')} title={t('Sales invoices', 'বিক্রয় চালান')} subtitle={t('Every sale posts revenue, updates receivables and reduces stock automatically.', 'প্রতিটি বিক্রয় স্বয়ংক্রিয়ভাবে আয় পোস্ট করে, পাওনা হালনাগাদ করে এবং মজুদ কমায়।')}
         actions={<>
-          <button className="btn" onClick={exportCsv}><Download size={16} />{t('Export', 'রপ্তানি')}</button>
+          <button className="btn" onClick={exportCsv}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>
           {can('sales.create') && <button className="btn" onClick={() => setReceiving(true)}><Receipt size={16} />{t('Receive payment', 'টাকা আদায়')}</button>}
-          {can('sales.create') && <button className="btn primary" onClick={() => setCreating(true)}><Plus size={16} />{t('New invoice', 'নতুন ইনভয়েস')}</button>}
+          {can('sales.create') && <button className="btn primary" onClick={() => setCreating(true)}><Plus size={16} />{t('New invoice', 'নতুন চালান')}</button>}
         </>} />
 
       <div className="grid g4">
-        <Kpi icon={FileText} label={t('Invoiced (period)', 'ইনভয়েস (সময়কাল)')} value={<Money v={list.data?.totals.total} />} sub={t(`${list.data?.total ?? 0} invoices`, `${list.data?.total ?? 0}টি ইনভয়েস`)} />
+        <Kpi icon={FileText} label={t('Invoiced (period)', 'চালান (সময়কাল)')} value={<Money v={list.data?.totals.total} />} sub={t(`${list.data?.total ?? 0} invoices`, `${list.data?.total ?? 0}টি চালান`)} />
         <Kpi icon={Wallet} label={t('Collected on these', 'এগুলোর আদায়')} value={<Money v={list.data?.totals.paid} />} />
         <Kpi icon={Receipt} tone="amber" label={t('Total receivable', 'মোট পাওনা')} value={<Money v={aging.data?.totals.total} />} sub={t(`${aging.data?.rows.length ?? 0} customers owe`, `${aging.data?.rows.length ?? 0} জন ক্রেতার কাছে বাকি`)} />
         <Kpi icon={AlertCircle} tone="red" label={t('Overdue', 'মেয়াদোত্তীর্ণ')} value={<Money v={(aging.data?.totals.total ?? 0) - (aging.data?.totals.current ?? 0)} />} sub={t('Past due date', 'শেষ তারিখ পার')} />
       </div>
 
-      <Card title={t('Invoices', 'ইনভয়েস')} actions={<>
+      <Card title={t('Invoices', 'চালান')} actions={<>
         <Segmented value={status} onChange={v => { setStatus(v); setPage(1); }} options={[{ value: 'all', label: t('All', 'সব') }, { value: 'open', label: t('Unpaid', 'বাকি') }, { value: 'PAID', label: t('Paid', 'পরিশোধিত') }, { value: 'VOID', label: t('Void', 'বাতিল') }]} />
         <SearchBox value={search} onChange={v => { setSearch(v); setPage(1); }} />
         <RangePicker value={range} onChange={r => { setRange(r); setPage(1); }} />
@@ -75,11 +75,11 @@ function InvoiceDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const inv = useApi<any>(`/invoices/${id}`);
   const [voiding, setVoiding] = useState(false);
   const [receiving, setReceiving] = useState(false);
-  const voidIt = useSave<{ reason: string }>('post', `/invoices/${id}/void`, t('Invoice voided.', 'ইনভয়েস বাতিল হয়েছে।'));
+  const voidIt = useSave<{ reason: string }>('post', `/invoices/${id}/void`, t('Invoice voided.', 'চালান বাতিল হয়েছে।'));
   const d = inv.data;
   const balance = d ? d.total - d.amountPaid : 0;
   return (
-    <Drawer title={d ? `${t('Invoice', 'ইনভয়েস')} ${d.number}` : t('Invoice', 'ইনভয়েস')} subtitle={d?.customer.name} onClose={onClose}
+    <Drawer title={d ? `${t('Invoice', 'চালান')} ${d.number}` : t('Invoice', 'চালান')} subtitle={d?.customer.name} onClose={onClose}
       footer={d && <>
         <div className="left"><StatusBadge status={d.status} /></div>
         <button className="btn" onClick={() => window.print()}><Printer size={16} />{t('Print', 'প্রিন্ট')}</button>
@@ -118,7 +118,7 @@ function InvoiceDetail({ id, onClose }: { id: string; onClose: () => void }) {
         {d.notes && <div className="muted small">{d.notes}</div>}
         {me?.organization.invoiceFooter && <div className="muted small" style={{ textAlign: 'center' }}>{me.organization.invoiceFooter}</div>}
       </>}
-      {voiding && <VoidDialog what={t('invoice', 'ইনভয়েস')} busy={voidIt.isPending} onClose={() => setVoiding(false)} onConfirm={reason => voidIt.mutate({ reason }, { onSuccess: () => { setVoiding(false); onClose(); } })} />}
+      {voiding && <VoidDialog what={t('invoice', 'চালান')} busy={voidIt.isPending} onClose={() => setVoiding(false)} onConfirm={reason => voidIt.mutate({ reason }, { onSuccess: () => { setVoiding(false); onClose(); } })} />}
       {receiving && d && <PaymentDrawer direction="IN" partyId={d.customerId} onClose={() => setReceiving(false)} />}
     </Drawer>
   );
