@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Throwaway SQLite file for CI only; the tests use their own prisma/test.db (see apps/api/vitest.config.ts).
+      DATABASE_URL: file:./ci.db
+      PRISMA_HIDE_UPDATE_MESSAGE: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate --schema apps/api/prisma/schema.prisma
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: API tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
