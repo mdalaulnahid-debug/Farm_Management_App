@@ -84,6 +84,7 @@ Design notes are in `docs/ARCHITECTURE.md → Projects → Planned: cow module`.
 | P4-5 | **Budgets & feed planning**: monthly budget per account/project vs actual; feed usage rate → days of stock left and reorder suggestion. | M | — | |
 | P4-6 | **Offline-first production entry**: installable web app (PWA) that saves daily egg/feed logs on the phone when there is no signal and syncs later, with duplicate protection. | L | P1-4 | Highest complexity per screen; do after the rest is stable. |
 | P4-7 | **Multi-farm / sites**: per-site stock locations and per-site P&L. | L | P1-2 | Only if the farm opens a second site. |
+| P4-8 | **Egg counting with the phone camera** (owner deferred 2026-11-01; manual entry on the phone for now): first a tray calculator on the চালান line (full trays × 30 + loose eggs → quantity); then an on-device counter (photo of one tray from above → eggs marked → user confirms or corrects → fills the line quantity). Never posts without a person confirming. Google Lens has no integration, so the model runs in the app. | M | P4-1 | Camera needs the https link (`tailscale serve`); plain `http://<lan-ip>:4000` cannot open it. Test accuracy on the owner's real duck-egg tray photos before building. |
 
 ---
 
@@ -121,4 +122,5 @@ Then **Phase 2 (cow)** starts with P2-1, one junior on the API + one on the scre
 - **Backups**: where the daily copy should also go (USB drive, Google Drive folder, or both).
 - **Digital payments**: whether to open an SSLCommerz (or bKash merchant) account — needed before P3-1 can go live.
 - **SMS**: willingness to pay a small fee per message to a local SMS gateway (we will get exact quotes first) before P3-3.
+- **Hosting (decided 2026-11-01)**: self-host on the office PC (i5-12500, 16 GB, Windows 11 Pro) in a Hyper-V Ubuntu VM, reached on the office network and through Tailscale; no public exposure for now (4–5 users). The office has a DIA line with a fixed IP, so public access via domain + Caddy is possible later, after P1-4 network security.
 - Still pending from earlier: flock bird count, feed unit (kg/bag), naming October credit customers, re-import of the October workbook with "Replace", opening stock.
