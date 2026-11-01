@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, Boxes, Download, PackagePlus, Pencil, Plus, SlidersHorizontal, Wallet } from 'lucide-react';
-import { usePrefs, categoryLabel, moveLabel } from '../lib/i18n';
+import { usePrefs, categoryLabel, moveLabel, nameOf, unitLabel } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useAccounts, useApi, useItems, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtMoney, fmtNum, iso10, ymd } from '../lib/format';
@@ -48,7 +48,6 @@ export default function Inventory() {
   );
 }
 
-const itemName = (lang: string, x: { name: string; nameBn?: string | null }) => (lang === 'bn' && x.nameBn ? x.nameBn : x.name);
 
 // ───── Stock on hand ─────
 function StockOnHand({ onAdjust }: { onAdjust?: (itemId: string) => void }) {
@@ -68,13 +67,13 @@ function StockOnHand({ onAdjust }: { onAdjust?: (itemId: string) => void }) {
 
   const columns: Column<StockRow>[] = [
     { key: 'sku', label: t('SKU', 'এসকেইউ'), render: r => <span className="mono">{r.sku}</span> },
-    { key: 'name', label: t('Item', 'পণ্য'), render: r => <><b>{itemName(lang, r)}</b>{lang !== 'bn' && r.nameBn && <div className="muted small">{r.nameBn}</div>}</> },
+    { key: 'name', label: t('Item', 'পণ্য'), render: r => <><b>{nameOf(r, lang)}</b>{lang !== 'bn' && r.nameBn && <div className="muted small">{r.nameBn}</div>}</> },
     { key: 'cat', label: t('Category', 'শ্রেণি'), hideSm: true, render: r => categoryLabel(t, r.category) },
     {
       key: 'qty', label: t('On hand', 'হাতে আছে'), num: true, render: r => (
         <span className="row" style={{ justifyContent: 'flex-end', gap: 8, flexWrap: 'nowrap' }}>
           {r.qtyOnHand <= 0 ? <Badge tone="red">{t('Out', 'শেষ')}</Badge> : r.low ? <Badge tone="amber">{t('Low', 'কম')}</Badge> : null}
-          <b className={r.qtyOnHand < 0 ? 'neg' : ''}>{fmtNum(r.qtyOnHand, lang, 3)}</b> <span className="muted small">{r.unit}</span>
+          <b className={r.qtyOnHand < 0 ? 'neg' : ''}>{fmtNum(r.qtyOnHand, lang, 3)}</b> <span className="muted small">{unitLabel(t, r.unit)}</span>
         </span>
       ),
     },
@@ -131,13 +130,13 @@ function Items({ onEdit }: { onEdit?: (i: Item) => void }) {
 
   const columns: Column<Item & { status?: string }>[] = [
     { key: 'sku', label: t('SKU', 'এসকেইউ'), render: i => <span className="mono">{i.sku}</span> },
-    { key: 'name', label: t('Name', 'নাম'), render: i => <><b>{itemName(lang, i)}</b>{lang !== 'bn' && i.nameBn && <div className="muted small">{i.nameBn}</div>}</> },
+    { key: 'name', label: t('Name', 'নাম'), render: i => <><b>{nameOf(i, lang)}</b>{lang !== 'bn' && i.nameBn && <div className="muted small">{i.nameBn}</div>}</> },
     { key: 'cat', label: t('Category', 'শ্রেণি'), render: i => categoryLabel(t, i.category) },
-    { key: 'unit', label: t('Unit', 'একক'), hideSm: true, render: i => i.unit },
+    { key: 'unit', label: t('Unit', 'একক'), hideSm: true, render: i => unitLabel(t, i.unit) },
     { key: 'sale', label: t('Sale price', 'বিক্রয় মূল্য'), num: true, render: i => (i.salePrice ? <Money v={i.salePrice} decimals={2} /> : <span className="muted">—</span>) },
     { key: 'buy', label: t('Purchase price', 'ক্রয় মূল্য'), num: true, hideSm: true, render: i => (i.purchasePrice ? <Money v={i.purchasePrice} decimals={2} /> : <span className="muted">—</span>) },
     { key: 'track', label: t('Stock', 'মজুদ'), render: i => trackingBadge(t, i) },
-    { key: 'qty', label: t('On hand', 'হাতে আছে'), num: true, hideSm: true, render: i => (i.trackInventory ? `${fmtNum(i.qtyOnHand, lang, 3)} ${i.unit}` : <span className="muted">—</span>) },
+    { key: 'qty', label: t('On hand', 'হাতে আছে'), num: true, hideSm: true, render: i => (i.trackInventory ? `${fmtNum(i.qtyOnHand, lang, 3)} ${unitLabel(t, i.unit)}` : <span className="muted">—</span>) },
     { key: 'active', label: t('Status', 'অবস্থা'), render: i => (i.active ? <Badge tone="green">{t('Active', 'সক্রিয়')}</Badge> : <Badge>{t('Inactive', 'নিষ্ক্রিয়')}</Badge>) },
     ...(onEdit ? [{ key: 'act', label: '', render: (i: Item) => <button className="btn ghost sm icon" aria-label={t('Edit', 'সম্পাদনা')} onClick={e => { e.stopPropagation(); onEdit(i); }}><Pencil size={14} /></button> }] : []),
   ];
@@ -252,7 +251,7 @@ function Moves() {
     { key: 'date', label: t('Date', 'তারিখ'), render: m => fmtDate(m.date, lang) },
     { key: 'item', label: t('Item', 'পণ্য'), render: m => <><b>{m.item.name}</b> <span className="mono muted small">{m.item.sku}</span></> },
     { key: 'type', label: t('Movement', 'চলাচল'), render: m => <>{moveLabel(t, m.type)}{m.voided && <> <Badge tone="red">{t('Void', 'বাতিল')}</Badge></>}</> },
-    { key: 'qty', label: t('Quantity', 'পরিমাণ'), num: true, render: m => <b className={m.quantity >= 0 ? 'pos' : 'neg'}>{m.quantity > 0 ? '+' : m.quantity < 0 ? '−' : ''}{fmtNum(Math.abs(m.quantity), lang, 3)} <span className="small">{m.item.unit}</span></b> },
+    { key: 'qty', label: t('Quantity', 'পরিমাণ'), num: true, render: m => <b className={m.quantity >= 0 ? 'pos' : 'neg'}>{m.quantity > 0 ? '+' : m.quantity < 0 ? '−' : ''}{fmtNum(Math.abs(m.quantity), lang, 3)} <span className="small">{unitLabel(t, m.item.unit)}</span></b> },
     { key: 'cost', label: t('Unit cost', 'একক মূল্য'), num: true, hideSm: true, render: m => (m.unitCost ? <Money v={m.unitCost} decimals={2} /> : <span className="muted">—</span>) },
     { key: 'value', label: t('Value', 'মূল্য'), num: true, render: m => (m.value ? <Money v={m.value} /> : <span className="muted">—</span>) },
     { key: 'notes', label: t('Notes', 'নোট'), hideSm: true, render: m => <span className="muted small">{m.notes || ''}</span> },
@@ -264,7 +263,7 @@ function Moves() {
   return (
     <Card title={t('Stock movements', 'মজুদ চলাচল')} subtitle={t('Every change to stock, with its source. Inflows are positive, outflows negative.', 'মজুদের প্রতিটি পরিবর্তন ও তার উৎস। প্রবেশ ধনাত্মক, বাহির ঋণাত্মক।')} actions={<>
       <Select style={{ width: 'auto' }} value={itemId} onChange={e => { setItemId(e.target.value); setPage(1); }} placeholder={t('All items', 'সব পণ্য')}
-        options={(items.data?.data ?? []).filter(i => i.trackInventory).map(i => ({ value: i.id, label: `${i.sku} · ${itemName(lang, i)}` }))} />
+        options={(items.data?.data ?? []).filter(i => i.trackInventory).map(i => ({ value: i.id, label: `${i.sku} · ${nameOf(i, lang)}` }))} />
       <Select style={{ width: 'auto' }} value={type} onChange={e => { setType(e.target.value); setPage(1); }} placeholder={t('All movements', 'সব চলাচল')} options={MOVE_TYPES.map(m => ({ value: m, label: moveLabel(t, m) }))} />
       <RangePicker value={range} onChange={r => { setRange(r); setPage(1); }} />
       <button className="btn" onClick={exportCsv} disabled={!list.data?.data.length}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>
@@ -325,9 +324,9 @@ export function AdjustDrawer({ initialItemId, initialType, onClose }: { initialI
         <Select value={f.type} onChange={e => set({ type: e.target.value as AdjType, unitCost: '' })} options={allowedTypes.map(x => ({ value: x, label: x === 'USAGE' ? t('Used on farm', 'খামারে ব্যবহার') : x === 'COUNT' ? t('Physical stock count', 'বাস্তব মজুদ গণনা') : moveLabel(t, x) }))} />
       </Field>
       <div className="form-grid">
-        <Field label={t('Item', 'পণ্য')} className="full" hint={item ? t(`On hand: ${fmtNum(item.qtyOnHand, lang, 3)} ${item.unit}${item.valued ? ` · avg ${fmtMoney(item.avgCost, lang, { decimals: 2 })}` : ' · quantity only'}`, `হাতে: ${fmtNum(item.qtyOnHand, lang, 3)} ${item.unit}${item.valued ? ` · গড় ${fmtMoney(item.avgCost, lang, { decimals: 2 })}` : ' · শুধু পরিমাণ'}`) : undefined}>
+        <Field label={t('Item', 'পণ্য')} className="full" hint={item ? t(`On hand: ${fmtNum(item.qtyOnHand, lang, 3)} ${unitLabel(t, item.unit)}${item.valued ? ` · avg ${fmtMoney(item.avgCost, lang, { decimals: 2 })}` : ' · quantity only'}`, `হাতে: ${fmtNum(item.qtyOnHand, lang, 3)} ${unitLabel(t, item.unit)}${item.valued ? ` · গড় ${fmtMoney(item.avgCost, lang, { decimals: 2 })}` : ' · শুধু পরিমাণ'}`) : undefined}>
           <Select value={f.itemId} onChange={e => set({ itemId: e.target.value, unitCost: '' })} placeholder={t('Choose a stock item…', 'মজুদ পণ্য বাছাই করুন…')}
-            options={tracked.map(i => ({ value: i.id, label: `${i.sku} · ${itemName(lang, i)} (${fmtNum(i.qtyOnHand, lang, 3)} ${i.unit})` }))} />
+            options={tracked.map(i => ({ value: i.id, label: `${i.sku} · ${nameOf(i, lang)} (${fmtNum(i.qtyOnHand, lang, 3)} ${unitLabel(t, i.unit)})` }))} />
         </Field>
         <Field label={t('Date', 'তারিখ')}><Input type="date" value={f.date} onChange={e => set({ date: e.target.value })} /></Field>
         {f.type === 'ADJUSTMENT' ? (
@@ -335,8 +334,8 @@ export function AdjustDrawer({ initialItemId, initialType, onClose }: { initialI
             <Segmented value={f.direction} onChange={v => set({ direction: v, unitCost: '' })} options={[{ value: 'in', label: t('+ Found', '+ পাওয়া') }, { value: 'out', label: t('− Shrinkage', '− ঘাটতি') }]} />
           </Field>
         ) : <div />}
-        <Field label={isCount ? t(`Counted quantity${item ? ` (${item.unit})` : ''}`, `গণনাকৃত পরিমাণ${item ? ` (${item.unit})` : ''}`) : t(`Quantity${item ? ` (${item.unit})` : ''}`, `পরিমাণ${item ? ` (${item.unit})` : ''}`)}
-          hint={isCount && item && f.quantity !== '' ? (countDiff === 0 ? t('Matches the system — nothing to post.', 'সিস্টেমের সাথে মিলেছে — পোস্ট করার কিছু নেই।') : t(`Difference: ${countDiff > 0 ? '+' : ''}${fmtNum(countDiff, lang, 3)} ${item.unit}`, `পার্থক্য: ${countDiff > 0 ? '+' : ''}${fmtNum(countDiff, lang, 3)} ${item.unit}`)) : after !== null && qty > 0 ? t(`After: ${fmtNum(after, lang, 3)} ${item!.unit}`, `পরে: ${fmtNum(after, lang, 3)} ${item!.unit}`) : undefined}>
+        <Field label={isCount ? t(`Counted quantity${item ? ` (${unitLabel(t, item.unit)})` : ''}`, `গণনাকৃত পরিমাণ${item ? ` (${unitLabel(t, item.unit)})` : ''}`) : t(`Quantity${item ? ` (${unitLabel(t, item.unit)})` : ''}`, `পরিমাণ${item ? ` (${unitLabel(t, item.unit)})` : ''}`)}
+          hint={isCount && item && f.quantity !== '' ? (countDiff === 0 ? t('Matches the system — nothing to post.', 'সিস্টেমের সাথে মিলেছে — পোস্ট করার কিছু নেই।') : t(`Difference: ${countDiff > 0 ? '+' : ''}${fmtNum(countDiff, lang, 3)} ${unitLabel(t, item.unit)}`, `পার্থক্য: ${countDiff > 0 ? '+' : ''}${fmtNum(countDiff, lang, 3)} ${unitLabel(t, item.unit)}`)) : after !== null && qty > 0 ? t(`After: ${fmtNum(after, lang, 3)} ${item!.unit}`, `পরে: ${fmtNum(after, lang, 3)} ${item!.unit}`) : undefined}>
           <Input type="number" min="0" step="any" value={f.quantity} onChange={e => set({ quantity: e.target.value })} />
         </Field>
         {showCost && (

@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { BarChart3, Egg, Leaf, ShieldCheck, Wallet } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { usePrefs } from '../lib/i18n';
+import { nameOf, usePrefs } from '../lib/i18n';
 import { Alert, Field, Input } from '../components/ui';
 
 export default function Login() {
@@ -14,7 +14,7 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [brand, setBrand] = useState<{ name: string; nameBn: string | null } | null>(null);
   useEffect(() => { api.get<{ name: string; nameBn: string | null }>('/auth/brand').then(setBrand).catch(() => {}); }, []);
-  const farm = brand ? (lang === 'bn' && brand.nameBn ? brand.nameBn : brand.name) : '';
+  const farm = brand ? nameOf(brand, lang) : '';
   const farmOther = brand?.nameBn ? (lang === 'bn' ? brand.name : brand.nameBn) : '';
   useEffect(() => { if (farm) document.title = `${farm} · FarmLedger`; }, [farm]);
   const submit = async (e: FormEvent) => {
