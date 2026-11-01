@@ -12,7 +12,8 @@ import { booksHealth } from '../src/services/health.js';
 let app: FastifyInstance;
 let cookie = '';
 const PASSWORD = 'TestOwner2026';
-const day = (offset = 0) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+// A quiet future month that no other test file reports on (only the owner may date entries ahead).
+const day = () => '2027-06-15';
 const call = async (method: string, url: string, payload?: unknown, c = cookie) => {
   const res = await app.inject({ method: method as any, url: `/api/v1${url}`, payload: payload as any, headers: c ? { cookie: c } : {} });
   if (res.statusCode !== 200) throw new Error(`${method} ${url}: ${res.statusCode} ${res.body}`);
@@ -20,6 +21,7 @@ const call = async (method: string, url: string, payload?: unknown, c = cookie) 
 };
 const acc = async (code: string) => (await prisma.account.findUniqueOrThrow({ where: { code } })).id;
 const failing = (r: Awaited<ReturnType<typeof booksHealth>>) => r.checks.filter(c => !c.ok).map(c => c.key);
+const ownAccounts = async () => ({ inventoryAccountId: await acc('1291'), incomeAccountId: await acc('4991'), expenseAccountId: await acc('5991') });
 
 /** Run `damage` and the health check in one transaction, then roll it all back. */
 async function withDamage(damage: (db: Prisma.TransactionClient) => Promise<unknown>) {
@@ -40,8 +42,12 @@ beforeAll(async () => {
   cookie = String(res.headers['set-cookie']).split(';')[0];
 
   // A normal day: stock in, a credit sale partly paid, an unapplied receipt, a paid bill, and a void.
-  const eggs = await prisma.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
-  const feed = await prisma.item.findUniqueOrThrow({ where: { sku: 'FEED-LAYER' } });
+  // Own products and accounts, so the farm's stock, costs and monthly totals that other tests check are untouched.
+  await call('POST', '/accounts', { code: '1291', name: 'Health check stock', type: 'ASSET', subtype: 'INVENTORY' });
+  await call('POST', '/accounts', { code: '4991', name: 'Health check sales', type: 'INCOME', subtype: 'SALES' });
+  await call('POST', '/accounts', { code: '5991', name: 'Health check cost of sales', type: 'EXPENSE', subtype: 'COGS' });
+  const eggs = await call('POST', '/items', { sku: 'HEALTH-EGG', name: 'Health check eggs', category: 'PRODUCE', unit: 'pcs', ...(await ownAccounts()) });
+  const feed = await call('POST', '/items', { sku: 'HEALTH-FEED', name: 'Health check feed A', category: 'FEED', unit: 'kg', ...(await ownAccounts()) });
   await call('POST', '/stock-adjustments', { date: day(), itemId: eggs.id, type: 'OPENING', quantity: 50, unitCost: 0 });
   const customer = await call('POST', '/parties', { kind: 'CUSTOMER', name: 'Health Check Store' });
   const supplier = await call('POST', '/parties', { kind: 'SUPPLIER', name: 'Health Check Feeds' });
@@ -123,16 +129,16 @@ describe('damage is caught', () => {
 
   it('stock changed without a movement', async () => {
     const r = await withDamage(async db => {
-      const eggs = await db.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
+      const eggs = await db.item.findUniqueOrThrow({ where: { sku: 'HEALTH-EGG' } });
       await db.item.update({ where: { id: eggs.id }, data: { qtyOnHand: num(eggs.qtyOnHand) - 30 } });
     });
     expect(failing(r)).toContain('stock_quantities');
-    expect(r.checks.find(c => c.key === 'stock_quantities')!.examples[0]).toMatch(/EGG-DUCK/);
+    expect(r.checks.find(c => c.key === 'stock_quantities')!.examples[0]).toMatch(/HEALTH-EGG/);
   });
 
   it('stock value changed behind the ledger', async () => {
     const r = await withDamage(async db => {
-      const feed = await db.item.findUniqueOrThrow({ where: { sku: 'FEED-LAYER' } });
+      const feed = await db.item.findUniqueOrThrow({ where: { sku: 'HEALTH-FEED' } });
       await db.item.update({ where: { id: feed.id }, data: { avgCost: num(feed.avgCost) + 25 } });
     });
     expect(failing(r)).toEqual(['inventory_value']);
@@ -146,7 +152,7 @@ describe('damage is caught', () => {
 describe('known drift (R2): voiding a sale after the average cost changed', () => {
   // Runs last and uses its own product, so other tests' stock and costs are untouched.
   it('shows as stock-value drift only, not as tampering', async () => {
-    const item = await call('POST', '/items', { sku: 'HEALTH-R2', name: 'Health check feed', category: 'FEED', unit: 'kg', inventoryAccountId: await acc('1210'), expenseAccountId: await acc('6010'), incomeAccountId: await acc('4090') });
+    const item = await call('POST', '/items', { sku: 'HEALTH-R2', name: 'Health check feed', category: 'FEED', unit: 'kg', ...(await ownAccounts()) });
     const supplier = await call('POST', '/parties', { kind: 'SUPPLIER', name: 'R2 Feeds' });
     const customer = await call('POST', '/parties', { kind: 'CUSTOMER', name: 'R2 Buyer' });
     await call('POST', '/bills', { date: day(), supplierId: supplier.id, lines: [{ itemId: item.id, quantity: 10, unitPrice: 40 }] });
