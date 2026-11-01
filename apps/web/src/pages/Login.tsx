@@ -25,7 +25,7 @@ export default function Login() {
   return (
     <div className="auth-page">
       <section className="auth-hero">
-        <div className="brand" style={{ padding: 0 }}><span className="brand-mark" style={{ background: '#d9f99d', color: '#0f5132' }}><Leaf size={19} /></span><b style={{ fontSize: '1.15em' }}>FarmLedger ERP</b></div>
+        <div className="brand" style={{ padding: 0 }}><span className="brand-mark" style={{ background: '#d9f99d', color: '#0f5132' }}><Leaf size={19} /></span><div><b style={{ fontSize: '1.15em', display: 'block' }}>{farm || 'FarmLedger ERP'}</b>{farm && <small style={{ color: '#c4dfcc', maxWidth: 'none', whiteSpace: 'normal' }}>{farmOther ? `${farmOther} · ` : ''}FarmLedger ERP</small>}</div></div>
         <div>
           <h1>{t('Run the whole farm business from one ledger.', 'পুরো খামার ব্যবসা এক খাতায় পরিচালনা করুন।')}</h1>
           <p>{t('Sales, purchases, cash, inventory, daily production and full double-entry accounting — with real profit & loss, balance sheet and cash flow.', 'বিক্রয়, ক্রয়, নগদ, মজুদ, দৈনিক উৎপাদন ও সম্পূর্ণ দ্বৈত-দাখিলা হিসাব — প্রকৃত লাভ-ক্ষতি, ব্যালান্স শিট ও নগদ প্রবাহসহ।')}</p>
@@ -39,13 +39,13 @@ export default function Login() {
         <small style={{ color: '#9cc7aa' }}>© {new Date().getFullYear()} {brand?.name ?? 'FarmLedger'} · FarmLedger ERP</small>
       </section>
       <section className="auth-form">
-        <form onSubmit={submit}>
+        <form onSubmit={submit} method="post" name="login">
           {brand && <div className="farm-title"><span className="brand-mark"><Leaf size={19} /></span><div><b>{farm}</b>{farmOther && <small>{farmOther}</small>}</div></div>}
           <div className="row between"><h1>{t('Sign in', 'সাইন ইন')}</h1><button type="button" className="btn ghost sm" onClick={() => set({ lang: lang === 'en' ? 'bn' : 'en' })}>{lang === 'en' ? 'বাংলা' : 'English'}</button></div>
           <p className="muted" style={{ margin: 0 }}>{t('Use the account your farm administrator created for you.', 'খামারের প্রশাসক আপনার জন্য যে অ্যাকাউন্ট তৈরি করেছেন তা ব্যবহার করুন।')}</p>
           {error && <Alert tone="error">{error}</Alert>}
-          <Field label={t('Email', 'ইমেইল')}><Input type="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} autoFocus /></Field>
-          <Field label={t('Password', 'পাসওয়ার্ড')}><Input type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></Field>
+          <Field label={t('Email', 'ইমেইল')}><Input type="email" id="email" name="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} autoFocus /></Field>
+          <Field label={t('Password', 'পাসওয়ার্ড')}><Input type="password" id="password" name="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></Field>
           <button className="btn primary" style={{ height: 42 }} disabled={busy}>{busy ? t('Signing in…', 'সাইন ইন হচ্ছে…') : t('Sign in', 'সাইন ইন')}</button>
         </form>
       </section>
