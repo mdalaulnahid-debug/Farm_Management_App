@@ -20,10 +20,22 @@ import backupRoutes from './routes/backup.js';
 import { ensureReferenceData } from './services/reference.js';
 import { startBackupScheduler } from './services/backup.js';
 
+/**
+ * Which proxy may tell us the client's address and whether the browser used HTTPS (X-Forwarded-*).
+ * Unset: none, the address is taken from the connection, so a client cannot fake it to dodge the
+ * login limit. Behind `tailscale serve` or Caddy on the same machine set TRUST_PROXY=127.0.0.1.
+ */
+export function trustProxySetting(value = process.env.TRUST_PROXY): false | string {
+  const v = (value ?? '').trim();
+  if (!v || v === 'false') return false;
+  if (v === 'true') throw new Error('TRUST_PROXY=true would trust any client. Set it to the proxy address, e.g. 127.0.0.1.');
+  return v.split(',').map(s => s.trim()).filter(Boolean).join(',');
+}
+
 export async function buildApp() {
   const app = Fastify({
     logger: { level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'test' ? 'silent' : 'info') },
-    trustProxy: true,
+    trustProxy: trustProxySetting(),
     bodyLimit: 1_000_000,
   });
 
@@ -35,7 +47,25 @@ export async function buildApp() {
     }),
   );
 
-  await app.register(helmet, { contentSecurityPolicy: false });
+  // Only the app's own scripts may run. No upgrade-insecure-requests: the office address is plain HTTP.
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        scriptSrcAttr: ["'none'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        fontSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+  });
   await app.register(cookie);
   await app.register(rateLimit, { max: 600, timeWindow: '1 minute' });
 
