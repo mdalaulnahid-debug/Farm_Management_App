@@ -200,12 +200,13 @@ export function DataTable<T extends { id: string; status?: string }>({ rows, col
   return (
     <>
       <div className="table-wrap">
-        <table className="table">
+        {/* On phones (styles.css › .table.cards) each row becomes a card: first column as its title, the rest labelled by data-label. */}
+        <table className="table cards">
           <thead><tr>{columns.map(c => <th key={c.key} className={`${c.num ? 'num' : ''} ${c.hideSm ? 'hide-sm' : ''}`}>{c.label}</th>)}</tr></thead>
           <tbody>
             {rows.map(r => (
               <tr key={r.id} className={`${onRow ? 'clickable' : ''} ${r.status === 'VOID' ? 'void' : ''}`} onClick={() => onRow?.(r)}>
-                {columns.map(c => <td key={c.key} className={`${c.num ? 'num' : ''} ${c.className ?? ''} ${c.hideSm ? 'hide-sm' : ''}`}>{c.render(r)}</td>)}
+                {columns.map(c => <td key={c.key} data-key={c.key} data-label={c.label || undefined} className={`${c.num ? 'num' : ''} ${c.className ?? ''} ${c.hideSm ? 'hide-sm' : ''}`}>{c.render(r)}</td>)}
               </tr>
             ))}
           </tbody>

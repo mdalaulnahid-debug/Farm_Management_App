@@ -365,6 +365,23 @@ table.table { width: 100%; border-collapse: collapse; }
   .totals { width: 100%; }
   .chart-box { height: 220px; }
   .table td, .table th { padding-left: 10px; padding-right: 10px; }
+  /* DataTable rows as cards: title on top, then label/value pairs in two columns, actions at the end. */
+  .table.cards thead { display: none; }
+  .table.cards tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .table.cards tbody td { display: block; height: auto; padding: 0; border: 0; min-width: 0; overflow-wrap: anywhere; }
+  .table.cards tbody td.hide-sm, .table.cards tbody td:empty { display: none; }
+  .table.cards tbody td:first-child { grid-column: 1 / -1; font-size: 1.05em; font-weight: 650; }
+  .table.cards tbody tr:has(> td[data-key='status']) > td:first-child { grid-column: 1; }
+  .table.cards tbody td[data-key='status'] { grid-row: 1; grid-column: 2; justify-self: end; }
+  .table.cards tbody td[data-key='status']::before { display: none !important; }
+  .table.cards tbody td.num { text-align: left; font-weight: 650; }
+  .table.cards tbody td:not([data-label]):not(:first-child) { grid-column: 1 / -1; justify-self: end; }
+  .table.cards tbody td[data-label]:not(:first-child)::before { content: attr(data-label); display: block; font-size: .74em; font-weight: 650; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+  .table.cards tbody tr:hover td { background: none; }
+  .table.cards tbody tr.clickable:active { background: var(--surface-2); }
+  .table.cards tfoot tr { display: flex; justify-content: space-between; gap: 12px; background: var(--surface-2); border-top: 1px solid var(--border-strong); }
+  .table.cards tfoot td { display: block; height: auto; padding: 12px 14px; border: 0; background: none; }
+  .table.cards tfoot td:empty { display: none; }
   .tabs button { padding: 10px 10px; }
   .toasts { left: 12px; right: 12px; bottom: 12px; }
   .toast { min-width: 0; max-width: none; }
