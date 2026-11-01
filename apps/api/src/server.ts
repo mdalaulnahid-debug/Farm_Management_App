@@ -19,6 +19,7 @@ import projectRoutes from './routes/projects.js';
 import backupRoutes from './routes/backup.js';
 import { ensureReferenceData } from './services/reference.js';
 import { startBackupScheduler } from './services/backup.js';
+import { sealAudit } from './services/audit-chain.js';
 
 /**
  * Which proxy may tell us the client's address and whether the browser used HTTPS (X-Forwarded-*).
@@ -117,4 +118,8 @@ if (isMain) {
   await app.listen({ port, host: process.env.HOST || '0.0.0.0' });
   // Daily automatic database copy (SQLite only). Never started by tests.
   startBackupScheduler(app.log);
+  // Seal new audit-trail rows into the hash chain every few minutes.
+  const seal = () => sealAudit(prisma).catch(e => app.log.error(`Sealing the audit trail failed: ${(e as Error).message}`));
+  void seal();
+  setInterval(seal, 5 * 60_000).unref();
 }

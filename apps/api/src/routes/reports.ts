@@ -6,6 +6,8 @@ import { addDays, endOf, today, toDate, ymd } from '../lib/dates.js';
 import { can } from '../auth/auth.js';
 import * as R from '../services/reports.js';
 import { unusualActivity } from '../services/activity.js';
+import { sealAudit, verifyAuditChain } from '../services/audit-chain.js';
+import { backupPath, isSqlite, listBackups } from '../services/backup.js';
 
 const monthStart = () => `${today().slice(0, 8)}01`;
 const range = z.object({ from: z.string().optional(), to: z.string().optional(), projectId: z.string().optional() });
@@ -51,6 +53,13 @@ export default async function reportRoutes(app: FastifyInstance) {
     const to = r.to ? ymd(parse(zDate, r.to)) : today();
     const from = r.from ? ymd(parse(zDate, r.from)) : ymd(addDays(toDate(to), -6));
     return unusualActivity(from, to);
+  });
+
+  // Is the audit trail intact? Seals new rows, recomputes the chain and compares it with the newest backup.
+  app.get('/audit/integrity', { preHandler: can('audit.view') }, async () => {
+    await sealAudit(prisma);
+    const newest = isSqlite() ? listBackups()[0] : undefined;
+    return verifyAuditChain(prisma, newest ? backupPath(newest.name) : null);
   });
 
   app.get('/audit', { preHandler: can('audit.view') }, async req => {

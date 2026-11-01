@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { prisma } from '../db.js';
 import { audit } from './common.js';
+import { sealAudit } from './audit-chain.js';
 
 export const BACKUP_NAME = /^farmledger-(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})\.db$/;
 
@@ -69,6 +70,8 @@ export async function runBackup(kind: 'auto' | 'manual', log: Log = consoleLog):
   const now = new Date();
   const name = `farmledger-${localDay(now)}-${pad(now.getHours())}${pad(now.getMinutes())}.db`;
   const temp = join(dir, `.tmp-${randomBytes(6).toString('hex')}.db`);
+  // Seal the audit trail first, so every backup carries the chain that later checks compare against.
+  await sealAudit(prisma).catch(e => log.error(`Sealing the audit trail before the backup failed: ${(e as Error).message}`));
   try {
     await prisma.$executeRawUnsafe(`VACUUM INTO '${temp.replace(/'/g, "''")}'`);
     renameSync(temp, join(dir, name));

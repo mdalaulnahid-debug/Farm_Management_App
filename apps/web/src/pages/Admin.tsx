@@ -403,6 +403,30 @@ const entityLabel = (t: T, e: string) => ({
 const actionLabel = (t: T, a: string) => ({ create: t('Created', 'তৈরি'), update: t('Updated', 'হালনাগাদ'), void: t('Voided', 'বাতিল'), login: t('Signed in', 'সাইন ইন'), login_failed: t('Failed sign-in', 'ব্যর্থ সাইন ইন') } as Record<string, string>)[a] ?? a;
 const actionTone = (a: string) => (({ create: 'green', update: 'blue', void: 'red', login_failed: 'amber' } as const) as Record<string, 'green' | 'blue' | 'red' | 'amber'>)[a];
 
+interface ChainReport { ok: boolean; sealed: number; unsealed: number; headCode: string | null; firstBreak: { seq: number; at: string; summary: string; problem: 'edited' | 'missing' } | null; backup: { file: string; compared: number; mismatched: number; firstMismatchSeq: number | null } | null }
+
+/** Is the audit trail intact? Every row is chained to the one before; edits and deletions break the chain. */
+function AuditIntegrity() {
+  const { t, lang } = usePrefs();
+  const q = useApi<ChainReport>('/audit/integrity');
+  const r = q.data;
+  if (!r) return null;
+  if (r.ok) return (
+    <Alert>{t(
+      `Audit trail intact: ${r.sealed} entries chained${r.backup?.compared ? `, and the ${r.backup.compared} in the newest backup are unchanged` : ''}. Check code ${r.headCode ?? '—'}: note it with today’s date; an older code you noted should never stop matching its backup.`,
+      `অডিট ট্রেইল অক্ষত: ${fmtNum(r.sealed, lang, 0)}টি এন্ট্রি শৃঙ্খলিত${r.backup?.compared ? `, এবং সর্বশেষ ব্যাকআপের ${fmtNum(r.backup.compared, lang, 0)}টি অপরিবর্তিত` : ''}। যাচাই কোড ${r.headCode ?? '—'}: আজকের তারিখসহ লিখে রাখুন।`)}</Alert>
+  );
+  return (
+    <Alert tone="error">{t('The audit trail has been tampered with. ', 'অডিট ট্রেইলে কারসাজি হয়েছে। ')}
+      {r.firstBreak && (r.firstBreak.problem === 'edited'
+        ? t(`Entry no. ${r.firstBreak.seq} (${fmtDateTime(r.firstBreak.at, lang)}) was changed after it was recorded. `, `এন্ট্রি নং ${r.firstBreak.seq} (${fmtDateTime(r.firstBreak.at, lang)}) লেখার পরে বদলানো হয়েছে। `)
+        : t(`Entries from no. ${r.firstBreak.seq} were deleted. `, `এন্ট্রি নং ${r.firstBreak.seq} থেকে মুছে ফেলা হয়েছে। `))}
+      {r.backup && r.backup.mismatched > 0 && t(`${r.backup.mismatched} entries no longer match the newest backup (from no. ${r.backup.firstMismatchSeq}). `, `${r.backup.mismatched}টি এন্ট্রি সর্বশেষ ব্যাকআপের সাথে মেলে না (নং ${r.backup.firstMismatchSeq} থেকে)। `)}
+      {t('Only someone with access to the database file can do this. Keep your backups (especially off-computer copies) and ask your developer to compare them.', 'শুধু ডাটাবেস ফাইলে প্রবেশাধিকার থাকা কেউ এটি করতে পারে। ব্যাকআপগুলো (বিশেষত কম্পিউটারের বাইরের কপি) রাখুন এবং ডেভেলপারকে মিলিয়ে দেখতে বলুন।')}
+    </Alert>
+  );
+}
+
 function AuditTab() {
   const { t, lang } = usePrefs();
   const [search, setSearch] = useState('');
@@ -429,6 +453,7 @@ function AuditTab() {
         <SearchBox value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder={t('Search details…', 'বিবরণে খুঁজুন…')} />
         <button className="btn" onClick={exportCsv} disabled={!q.data?.data.length}><Download size={16} />{t('Export page', 'পৃষ্ঠা ডাউনলোড')}</button>
       </>}>
+      <div className="card-body"><AuditIntegrity /></div>
       <DataTable rows={q.data?.data} columns={columns} page={page} pageSize={100} total={q.data?.total} onPage={setPage} empty={t('No activity matches these filters.', 'এই ফিল্টারে কোনো কার্যক্রম নেই।')} />
     </Card>
   );
