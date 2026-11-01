@@ -45,3 +45,29 @@ export function downloadCsv(filename: string, header: string[], rows: (string | 
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// Bangla calendar (Bangladesh, revised 2019): the year starts on 14 April; the first six months have 31 days,
+// Falgun has 30 in a Gregorian leap year and 29 otherwise, the rest 30.
+const BN_MONTHS: [string, string][] = [
+  ['Boishakh', 'বৈশাখ'], ['Joishtho', 'জ্যৈষ্ঠ'], ['Asharh', 'আষাঢ়'], ['Srabon', 'শ্রাবণ'], ['Bhadro', 'ভাদ্র'], ['Ashwin', 'আশ্বিন'],
+  ['Kartik', 'কার্তিক'], ['Agrohayon', 'অগ্রহায়ণ'], ['Poush', 'পৌষ'], ['Magh', 'মাঘ'], ['Falgun', 'ফাল্গুন'], ['Choitro', 'চৈত্র'],
+];
+export const banglaDate = (d: Date = new Date()) => {
+  const y = d.getFullYear();
+  const startYear = d.getMonth() > 3 || (d.getMonth() === 3 && d.getDate() >= 14) ? y : y - 1;
+  let day = Math.round((Date.UTC(y, d.getMonth(), d.getDate()) - Date.UTC(startYear, 3, 14)) / 86_400_000);
+  const ny = startYear + 1;
+  const leap = (ny % 4 === 0 && ny % 100 !== 0) || ny % 400 === 0;
+  const lengths = [31, 31, 31, 31, 31, 31, 30, 30, 30, 30, leap ? 30 : 29, 30];
+  let month = 0;
+  while (day >= lengths[month]) { day -= lengths[month]; month++; }
+  return { day: day + 1, month, year: startYear - 593 };
+};
+
+/** "Monday, 2 November 2026 · 17 Kartik 1433" / "সোমবার, ২ নভেম্বর ২০২৬ · ১৭ কার্তিক ১৪৩৩" */
+export const fmtLongDate = (d: Date = new Date(), lang: Lang = 'en') => {
+  const greg = new Intl.DateTimeFormat(lang === 'bn' ? 'bn-BD' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(d);
+  const b = banglaDate(d);
+  const n = (v: number) => new Intl.NumberFormat(locale(lang), { useGrouping: false }).format(v);
+  return `${greg} · ${n(b.day)} ${BN_MONTHS[b.month][lang === 'bn' ? 1 : 0]} ${n(b.year)}`;
+};

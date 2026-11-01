@@ -7,6 +7,7 @@ import { downloadCsv, fmtDate, fmtMoney, round2, ymd } from '../lib/format';
 import { Alert, Badge, Card, DataTable, Empty, Field, Input, Kpi, Loading, PageHeader, RangePicker, SearchBox, Segmented, Select, StatusBadge, Tabs, thisMonth, VoidDialog, type Column } from '../components/ui';
 import { accountOptions, CashAccountSelect, methodLabel, methodOptions, Money, PaymentDrawer } from '../components/forms';
 import { GrantsTab, ProjectsTab } from './BankingProjects';
+import ledgerDesk from '../assets/photos/ledger-desk.webp';
 
 type Tab = 'accounts' | 'register' | 'transfer' | 'grants' | 'projects' | 'other' | 'count';
 interface Payment {
@@ -35,7 +36,7 @@ export default function Banking() {
 
   return (
     <>
-      <PageHeader crumb={t('Banking', 'ব্যাংকিং')} title={t('Cash & bank', 'নগদ ও ব্যাংক')}
+      <PageHeader photo={ledgerDesk} photoPos="center 60%" crumb={t('Banking', 'ব্যাংকিং')} title={t('Cash & bank', 'নগদ ও ব্যাংক')}
         subtitle={t('Balances, every receipt and payment, transfers between accounts, owner money and cash counts.', 'স্থিতি, প্রতিটি আদায় ও পরিশোধ, হিসাবের মধ্যে স্থানান্তর, মালিকের টাকা এবং নগদ গণনা।')}
         actions={<>
           {can('sales.create') && <button className="btn" onClick={() => setReceiving('IN')}><Receipt size={16} />{t('Receive payment', 'টাকা আদায়')}</button>}

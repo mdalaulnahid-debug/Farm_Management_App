@@ -7,6 +7,7 @@ import { downloadCsv, fmtDate, fmtDateTime, fmtMoney, fmtNum, fmtPct, ymd } from
 import { Alert, Card, Field, Input, Loading, PageHeader, RangePicker, thisMonth, type Range } from '../components/ui';
 import { Money } from '../components/forms';
 import { projectName, useProjects } from './BankingProjects';
+import deltaAerial from '../assets/photos/delta-aerial.webp';
 
 type Key = 'pl' | 'bs' | 'cf' | 'tb' | 'ar' | 'ap' | 'inv' | 'prod' | 'act';
 interface Line { id?: string; code?: string; name: string; nameBn?: string | null; amount: number }
@@ -51,7 +52,7 @@ export default function Reports() {
 
   return (
     <>
-      <PageHeader crumb={t('Finance', 'অর্থ')} title={t('Reports', 'রিপোর্ট')} subtitle={t('All statements are calculated live from the posted general ledger.', 'সব বিবরণী পোস্ট করা সাধারণ খাতা থেকে সরাসরি হিসাব করা হয়।')}
+      <PageHeader photo={deltaAerial} photoPos="center 40%" crumb={t('Finance', 'অর্থ')} title={t('Reports', 'রিপোর্ট')} subtitle={t('All statements are calculated live from the posted general ledger.', 'সব বিবরণী পোস্ট করা সাধারণ খাতা থেকে সরাসরি হিসাব করা হয়।')}
         actions={<>
           {current?.key === 'pl' && <select className="select" style={{ width: 'auto' }} value={projectId} onChange={e => setProjectId(e.target.value)} aria-label={t('Project', 'প্রকল্প')}>
             <option value="">{t('Whole farm (all projects)', 'পুরো খামার (সব প্রকল্প)')}</option>

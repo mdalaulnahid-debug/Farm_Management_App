@@ -137,6 +137,22 @@ h3 { font-size: 1em; font-weight: 650; }
 .page-head p { margin: 4px 0 0; color: var(--text-2); }
 .page-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .crumb { font-size: .8em; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+/* Photo band header: the page's photograph under a brand-hue scrim that is solid behind the title and clears to the right. */
+.page-head.photo { position: relative; isolation: isolate; overflow: hidden; min-height: 150px; padding: 24px 26px 22px; border-radius: var(--radius); color: #fff;
+  background: var(--side-bg) var(--photo) var(--photo-pos) / cover no-repeat; box-shadow: var(--shadow-sm); }
+.page-head.photo::before { content: ''; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--side-bg) 92%, transparent) 0%, color-mix(in srgb, var(--side-bg) 62%, transparent) 40%, color-mix(in srgb, var(--side-bg) 4%, transparent) 100%); }
+.page-head.photo.tall { min-height: 230px; padding-top: 30px; }
+.page-head.photo h1 { color: #fff; }
+.page-head.photo p { color: color-mix(in srgb, #fff 84%, var(--side-bg)); max-width: 60ch; }
+.page-head.photo .crumb { color: var(--gold); }
+.page-head.photo .input, .page-head.photo .select { color: var(--text); }
+.page-head.photo.tall .crumb { text-transform: none; letter-spacing: .01em; font-size: .92em; }
+.page-head.photo .btn.primary { background: var(--gold); border-color: var(--gold); color: #1f1603; }
+@media (prefers-reduced-motion: no-preference) {
+  .page-head.photo { animation: photo-in 1.2s cubic-bezier(.16, 1, .3, 1) both; }
+}
+@keyframes photo-in { from { opacity: 0; transform: translateY(6px); } }
 
 /* ───────── Surfaces ───────── */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); min-width: 0; }
@@ -279,7 +295,7 @@ table.table { width: 100%; border-collapse: collapse; }
 
 /* Login */
 .auth-page { min-height: 100%; display: grid; grid-template-columns: 1.2fr 1fr; }
-/* Sign-in hero: farm name and headline over the dawn river landscape (assets/river-landscape.svg animates itself). */
+/* Sign-in hero: farm name and headline over a dawn photograph of the delta (assets/signin-dawn.webp, generated locally with ComfyUI). */
 .auth-hero { position: relative; overflow: hidden; background: var(--side-bg); color: #fff; padding: 44px 48px; display: flex; flex-direction: column; min-height: 100vh; }
 .auth-crest { position: relative; z-index: 1; display: flex; gap: 14px; align-items: center; }
 .auth-crest .brand-mark { width: 46px; height: 46px; border-radius: 13px; }
@@ -289,14 +305,20 @@ table.table { width: 100%; border-collapse: collapse; }
 .auth-title h1 { font-size: clamp(2.4em, 4.2vw, 4.1em); font-weight: 700; line-height: 1.08; letter-spacing: -.01em; }
 .auth-title em { font-style: normal; color: var(--gold); }
 .auth-title p { margin: 16px 0 0; max-width: 46ch; font-size: 1.08em; line-height: 1.6; color: color-mix(in srgb, #fff 80%, var(--side-bg)); }
-.auth-landscape { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 56%; object-fit: cover; object-position: center top; pointer-events: none; }
+.auth-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 70%; pointer-events: none; }
+/* Darkens the sky behind the headline in the brand hue; fades out before the river so the photo stays bright below. */
+.auth-hero::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--side-bg) 88%, transparent) 0%, color-mix(in srgb, var(--side-bg) 55%, transparent) 38%, transparent 62%); }
+.auth-crest, .auth-title { z-index: 1; }
 .auth-hint { margin: 0; }
 .auth-submit { height: 46px; font-size: 1.02em; }
 @media (prefers-reduced-motion: no-preference) {
-  .auth-title, .auth-landscape { animation: rise .9s cubic-bezier(.16, 1, .3, 1) both; }
-  .auth-landscape { animation-duration: 1.4s; animation-delay: .1s; }
+  .auth-title { animation: rise .9s cubic-bezier(.16, 1, .3, 1) both; }
+  /* A slow drift-in on the photo; it settles and stays still. */
+  .auth-photo { animation: settle 2.4s cubic-bezier(.16, 1, .3, 1) both; }
 }
 @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+@keyframes settle { from { opacity: 0; transform: scale(1.06); } }
 .auth-form { display: grid; place-items: center; padding: 32px; background: var(--surface); }
 .auth-form form { width: min(380px, 100%); display: flex; flex-direction: column; gap: 14px; }
 
@@ -354,7 +376,7 @@ table.table { width: 100%; border-collapse: collapse; }
   /* Phones and tablets: the hero becomes a short landscape band above the form. */
   .auth-hero { min-height: 0; height: 210px; padding: 20px 16px; }
   .auth-title { display: none; }
-  .auth-landscape { height: 70%; }
+  .auth-photo { object-position: center 62%; }
   .auth-form { place-items: start center; padding-top: 24px; }
   .content, .topbar { padding-left: 16px; padding-right: 16px; }
   .search .input { width: 100%; }
@@ -376,6 +398,8 @@ table.table { width: 100%; border-collapse: collapse; }
   .page-head { align-items: stretch; }
   .page-actions { width: 100%; }
   .page-actions .btn { flex: 1 1 auto; }
+  .page-head.photo, .page-head.photo.tall { min-height: 0; padding: 18px 16px; }
+  .page-head.photo::before { background: linear-gradient(180deg, color-mix(in srgb, var(--side-bg) 82%, transparent), color-mix(in srgb, var(--side-bg) 38%, transparent)); }
   .lines:not(.stack-sm) table { min-width: 480px; }
   .lines.stack-sm thead { display: none; }
   .lines.stack-sm tbody, .lines.stack-sm tbody td { display: block; }
@@ -439,6 +463,10 @@ table.table { width: 100%; border-collapse: collapse; }
   .overlay { position: static; background: none; display: block; }
   .drawer { width: 100%; height: auto; box-shadow: none; }
   .drawer-foot, .drawer-head .btn { display: none; }
+  /* Photo headers print as plain black titles (browsers drop background images when printing). */
+  .page-head.photo { background: none; color: #000; min-height: 0; padding: 0; box-shadow: none; animation: none; }
+  .page-head.photo::before { display: none; }
+  .page-head.photo h1, .page-head.photo p, .page-head.photo .crumb { color: #000; }
 }
 
 /* Farm name: sidebar, sign-in page and printed letterheads */

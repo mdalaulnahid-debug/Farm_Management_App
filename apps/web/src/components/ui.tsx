@@ -1,5 +1,5 @@
 // Shared UI kit. Pages compose these; styling lives in styles.css.
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode, type InputHTMLAttributes, type SelectHTMLAttributes } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type CSSProperties, type ReactNode, type InputHTMLAttributes, type SelectHTMLAttributes } from 'react';
 import { AlertTriangle, CheckCircle2, Inbox, Info, Loader2, Search, X, XCircle } from 'lucide-react';
 import { useT, statusLabel } from '../lib/i18n';
 import { iso10, monthEnd, monthStart, ymd } from '../lib/format';
@@ -30,9 +30,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 export const useToast = () => useContext(ToastContext);
 
 // ───── Layout primitives ─────
-export function PageHeader({ title, subtitle, crumb, actions }: { title: string; subtitle?: string; crumb?: string; actions?: ReactNode }) {
+/** `photo` turns the header into a photo band (styles.css › .page-head.photo); `tall` is the dashboard's larger banner. */
+export function PageHeader({ title, subtitle, crumb, actions, photo, photoPos, tall }: { title: string; subtitle?: string; crumb?: string; actions?: ReactNode; photo?: string; photoPos?: string; tall?: boolean }) {
+  const style = photo ? ({ '--photo': `url(${photo})`, '--photo-pos': photoPos ?? 'center' } as CSSProperties) : undefined;
   return (
-    <div className="page-head">
+    <div className={`page-head${photo ? ' photo' : ''}${tall ? ' tall' : ''}`} style={style}>
       <div>{crumb && <div className="crumb">{crumb}</div>}<h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>
       {actions && <div className="page-actions">{actions}</div>}
     </div>
