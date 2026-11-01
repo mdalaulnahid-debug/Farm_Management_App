@@ -5,6 +5,7 @@ import { parse, zDate } from '../lib/validate.js';
 import { addDays, endOf, today, toDate, ymd } from '../lib/dates.js';
 import { can } from '../auth/auth.js';
 import * as R from '../services/reports.js';
+import { booksHealth } from '../services/health.js';
 import { unusualActivity } from '../services/activity.js';
 
 const monthStart = () => `${today().slice(0, 8)}01`;
@@ -52,6 +53,9 @@ export default async function reportRoutes(app: FastifyInstance) {
     const from = r.from ? ymd(parse(zDate, r.from)) : ymd(addDays(toDate(to), -6));
     return unusualActivity(from, to);
   });
+
+  // Ledger invariants: do the ledger, documents and stock records still agree?
+  app.get('/reports/books-health', { preHandler: can('audit.view') }, async () => booksHealth(prisma));
 
   app.get('/audit', { preHandler: can('audit.view') }, async req => {
     const q = parse(z.object({ entity: z.string().optional(), search: z.string().optional(), page: z.coerce.number().int().min(1).default(1) }), req.query);

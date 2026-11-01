@@ -1,0 +1,133 @@
+// Books health (P1-3): the ledger's invariants hold after normal work, and each kind of damage
+// (a bug or a direct edit of the database file) is caught. Damage is made inside a transaction that
+// is rolled back, so other tests never see it.
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { FastifyInstance } from 'fastify';
+import type { Prisma } from '@prisma/client';
+import { buildApp } from '../src/server.js';
+import { seed } from '../src/seed.js';
+import { prisma } from '../src/db.js';
+import { booksHealth } from '../src/services/health.js';
+
+let app: FastifyInstance;
+let cookie = '';
+const PASSWORD = 'TestOwner2026';
+const day = (offset = 0) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+const call = async (method: string, url: string, payload?: unknown, c = cookie) => {
+  const res = await app.inject({ method: method as any, url: `/api/v1${url}`, payload: payload as any, headers: c ? { cookie: c } : {} });
+  if (res.statusCode !== 200) throw new Error(`${method} ${url}: ${res.statusCode} ${res.body}`);
+  return res.json() as any;
+};
+const acc = async (code: string) => (await prisma.account.findUniqueOrThrow({ where: { code } })).id;
+const failing = (r: Awaited<ReturnType<typeof booksHealth>>) => r.checks.filter(c => !c.ok).map(c => c.key);
+
+/** Run `damage` and the health check in one transaction, then roll it all back. */
+async function withDamage(damage: (db: Prisma.TransactionClient) => Promise<unknown>) {
+  let result: Awaited<ReturnType<typeof booksHealth>> | undefined;
+  await prisma.$transaction(async db => {
+    await damage(db);
+    result = await booksHealth(db);
+    throw new Error('rollback');
+  }).catch(e => { if ((e as Error).message !== 'rollback') throw e; });
+  return result!;
+}
+
+beforeAll(async () => {
+  await seed({ history: true, adminEmail: 'owner@test.local', adminPassword: PASSWORD });
+  await prisma.user.update({ where: { email: 'owner@test.local' }, data: { mustChangePassword: false } });
+  app = await buildApp();
+  const res = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email: 'owner@test.local', password: PASSWORD } });
+  cookie = String(res.headers['set-cookie']).split(';')[0];
+
+  // A normal day: stock in, a credit sale partly paid, an unapplied receipt, a paid bill, and a void.
+  const eggs = await prisma.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
+  const feed = await prisma.item.findUniqueOrThrow({ where: { sku: 'FEED-LAYER' } });
+  await call('POST', '/stock-adjustments', { date: day(), itemId: eggs.id, type: 'OPENING', quantity: 50, unitCost: 0 });
+  const customer = await call('POST', '/parties', { kind: 'CUSTOMER', name: 'Health Check Store' });
+  const supplier = await call('POST', '/parties', { kind: 'SUPPLIER', name: 'Health Check Feeds' });
+  await call('POST', '/invoices', { date: day(), customerId: customer.id, lines: [{ itemId: eggs.id, quantity: 20, unitPrice: 15 }], received: { amount: 100, cashAccountId: await acc('1010') } });
+  await call('POST', '/payments', { direction: 'IN', date: day(), partyId: customer.id, cashAccountId: await acc('1010'), amount: 50 });
+  await call('POST', '/bills', { date: day(), supplierId: supplier.id, lines: [{ itemId: feed.id, quantity: 10, unitPrice: 40 }] });
+  const sale = await call('POST', '/invoices', { date: day(), customerId: customer.id, lines: [{ itemId: eggs.id, quantity: 5, unitPrice: 15 }] });
+  await call('POST', `/invoices/${sale.id}/void`, { reason: 'entered for the wrong customer' });
+});
+afterAll(async () => app?.close());
+
+describe('healthy books', () => {
+  it('all checks pass after normal work', async () => {
+    const r = await booksHealth(prisma);
+    expect(failing(r)).toEqual([]);
+    expect(r.ok).toBe(true);
+    expect(r.checks.map(c => c.key)).toEqual(['entries_balanced', 'trial_balance', 'voids_reversed', 'receivables', 'payables', 'stock_quantities', 'inventory_value']);
+  });
+
+  it('is available to the owner and auditors, not to staff', async () => {
+    expect((await call('GET', '/reports/books-health')).ok).toBe(true);
+    const operator = await prisma.role.findUniqueOrThrow({ where: { key: 'operator' } });
+    await call('POST', '/users', { name: 'Health Op', email: 'health-op@test.local', roleId: operator.id, password: 'HealthTemp2026' });
+    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email: 'health-op@test.local', password: 'HealthTemp2026' } });
+    const op = String(login.headers['set-cookie']).split(';')[0];
+    await call('POST', '/auth/change-password', { current: 'HealthTemp2026', next: 'HealthOwn2026' }, op);
+    const res = await app.inject({ method: 'GET', url: '/api/v1/reports/books-health', headers: { cookie: op } });
+    expect(res.statusCode).toBe(403);
+  });
+});
+
+describe('damage is caught', () => {
+  it('an extra amount slipped into one entry', async () => {
+    const r = await withDamage(async db => {
+      const line = await db.journalLine.findFirstOrThrow({ where: { entry: { status: 'POSTED' }, debit: { gt: 0 } } });
+      await db.journalLine.update({ where: { id: line.id }, data: { debit: num(line.debit) + 500 } });
+    });
+    expect(failing(r)).toEqual(expect.arrayContaining(['entries_balanced', 'trial_balance']));
+    expect(r.checks.find(c => c.key === 'entries_balanced')!.examples).toHaveLength(1);
+  });
+
+  it('an entry marked void without its reversal', async () => {
+    const r = await withDamage(async db => {
+      const e = await db.journalEntry.findFirstOrThrow({ where: { status: 'POSTED', sourceType: 'MANUAL' } })
+        .catch(() => db.journalEntry.findFirstOrThrow({ where: { status: 'POSTED' } }));
+      await db.journalEntry.update({ where: { id: e.id }, data: { status: 'VOID' } });
+    });
+    expect(failing(r)).toContain('voids_reversed');
+  });
+
+  it('an invoice marked paid without the money', async () => {
+    const r = await withDamage(async db => {
+      const inv = await db.salesInvoice.findFirstOrThrow({ where: { status: { in: ['POSTED', 'PARTIAL'] } } });
+      await db.salesInvoice.update({ where: { id: inv.id }, data: { amountPaid: inv.total, status: 'PAID' } });
+    });
+    expect(failing(r)).toEqual(['receivables']);
+  });
+
+  it('a bill marked paid without the money', async () => {
+    const r = await withDamage(async db => {
+      const bill = await db.bill.findFirstOrThrow({ where: { status: { in: ['POSTED', 'PARTIAL'] } } });
+      await db.bill.update({ where: { id: bill.id }, data: { amountPaid: bill.total, status: 'PAID' } });
+    });
+    expect(failing(r)).toEqual(['payables']);
+  });
+
+  it('stock changed without a movement', async () => {
+    const r = await withDamage(async db => {
+      const eggs = await db.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
+      await db.item.update({ where: { id: eggs.id }, data: { qtyOnHand: num(eggs.qtyOnHand) - 30 } });
+    });
+    expect(failing(r)).toContain('stock_quantities');
+    expect(r.checks.find(c => c.key === 'stock_quantities')!.examples[0]).toMatch(/EGG-DUCK/);
+  });
+
+  it('stock value changed behind the ledger', async () => {
+    const r = await withDamage(async db => {
+      const feed = await db.item.findUniqueOrThrow({ where: { sku: 'FEED-LAYER' } });
+      await db.item.update({ where: { id: feed.id }, data: { avgCost: num(feed.avgCost) + 25 } });
+    });
+    expect(failing(r)).toEqual(['inventory_value']);
+  });
+
+  it('the rolled-back damage left the real books healthy', async () => {
+    expect((await booksHealth(prisma)).ok).toBe(true);
+  });
+});
+
+function num(v: unknown) { return Number(v ?? 0); }

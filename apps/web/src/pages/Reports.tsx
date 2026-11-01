@@ -1,14 +1,14 @@
 import { useState, type ReactNode } from 'react';
-import { BarChart3, BookCheck, CalendarClock, Download, Egg, Landmark, Package, Printer, Scale, ShieldAlert, Waves } from 'lucide-react';
+import { BarChart3, BookCheck, CalendarClock, CircleCheck, CircleX, Download, Egg, HeartPulse, Landmark, Package, Printer, Scale, ShieldAlert, Waves } from 'lucide-react';
 import { nameOf, unitLabel, usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtDateTime, fmtMoney, fmtNum, fmtPct, ymd } from '../lib/format';
-import { Alert, Card, Field, Input, Loading, PageHeader, RangePicker, thisMonth, type Range } from '../components/ui';
+import { Alert, Badge, Card, Field, Input, Loading, PageHeader, RangePicker, thisMonth, type Range } from '../components/ui';
 import { Money } from '../components/forms';
 import { projectName, useProjects } from './BankingProjects';
 
-type Key = 'pl' | 'bs' | 'cf' | 'tb' | 'ar' | 'ap' | 'inv' | 'prod' | 'act';
+type Key = 'pl' | 'bs' | 'cf' | 'tb' | 'ar' | 'ap' | 'inv' | 'prod' | 'act' | 'health';
 interface Line { id?: string; code?: string; name: string; nameBn?: string | null; amount: number }
 interface Section { lines: Line[]; total: number }
 
@@ -45,6 +45,7 @@ export default function Reports() {
     { key: 'inv', icon: Package, title: t('Inventory valuation', 'মজুদ মূল্যায়ন'), desc: t('Stock on hand at weighted-average cost', 'ভারিত গড় মূল্যে হাতে মজুদ'), perm: 'inventory.view', kind: 'none' },
     { key: 'prod', icon: Egg, title: t('Production performance', 'উৎপাদন কার্যকারিতা'), desc: t('Eggs, laying rate, mortality, feed efficiency', 'ডিম, ডিম পাড়ার হার, মৃত্যু, খাদ্য দক্ষতা'), perm: 'production.view', kind: 'range' },
     { key: 'act', icon: ShieldAlert, title: t('Unusual activity', 'অস্বাভাবিক কার্যকলাপ'), desc: t('Voids, back-dated entries, discounts, write-offs, cash shortages', 'বাতিল, পুরনো তারিখের এন্ট্রি, ছাড়, মজুদ বাদ, নগদ ঘাটতি'), perm: 'audit.view', kind: 'range' },
+    { key: 'health', icon: HeartPulse, title: t('Books health', 'হিসাবের স্বাস্থ্য'), desc: t('Do the ledger, documents and stock still agree?', 'খাতা, ডকুমেন্ট ও মজুদ কি এখনো মেলে?'), perm: 'audit.view', kind: 'none' },
   ];
   const allowed = reports.filter(r => can(r.perm));
   const current = allowed.find(r => r.key === key) ?? allowed[0];
@@ -77,6 +78,7 @@ export default function Reports() {
       {current?.key === 'inv' && <InventoryValuation />}
       {current?.key === 'prod' && <ProductionReport range={range} />}
       {current?.key === 'act' && <ActivityReport range={range} />}
+      {current?.key === 'health' && <BooksHealth />}
     </>
   );
 }
@@ -380,5 +382,43 @@ function ActivityReport({ range }: { range: Range }) {
           a.adminChanges.map((c: any, i: number) => <tr key={i}><td>{fmtDateTime(c.at, lang)}</td><td>{c.user}</td><td>{c.summary}</td></tr>), 3)}
       </Statement>
     </>
+  );
+}
+
+/** Ledger invariants in plain words: each line compares two independent records of the same money or stock. */
+function BooksHealth() {
+  const { t, lang } = usePrefs();
+  const q = useApi<{ ok: boolean; checkedAt: string; checks: { key: string; ok: boolean; ledger: number | null; records: number | null; difference: number; examples: string[] }[] }>('/reports/books-health');
+  if (!q.data) return <Loading />;
+  const h = q.data;
+  const label: Record<string, [string, string]> = {
+    entries_balanced: [t('Every journal entry balances', 'প্রতিটি জার্নাল এন্ট্রি মেলে'), t('Debits equal credits inside each entry.', 'প্রতিটি এন্ট্রিতে ডেবিট = ক্রেডিট।')],
+    trial_balance: [t('The whole ledger balances', 'পুরো খাতা মেলে'), t('Total debits equal total credits (trial balance).', 'মোট ডেবিট = মোট ক্রেডিট (রেওয়ামিল)।')],
+    voids_reversed: [t('Every void has its reversing entry', 'প্রতিটি বাতিলের বিপরীত এন্ট্রি আছে'), t('Nothing was hidden by just marking it void.', 'শুধু বাতিল চিহ্ন দিয়ে কিছু লুকানো হয়নি।')],
+    receivables: [t('Receivables match the invoices', 'পাওনা চালানের সাথে মেলে'), t('The receivables account equals unpaid invoices less unapplied receipts.', 'পাওনা হিসাব = অপরিশোধিত চালান − অপ্রয়োগকৃত আদায়।')],
+    payables: [t('Payables match the bills', 'দেনা বিলের সাথে মেলে'), t('The payables account equals unpaid bills less unapplied payments.', 'দেনা হিসাব = অপরিশোধিত বিল − অপ্রয়োগকৃত পরিশোধ।')],
+    stock_quantities: [t('Stock quantities match their movements', 'মজুদের পরিমাণ চলাচলের সাথে মেলে'), t('Each item’s quantity on hand equals the sum of its stock movements.', 'প্রতিটি পণ্যের হাতে মজুদ = তার চলাচলের যোগফল।')],
+    inventory_value: [t('Stock value matches the ledger', 'মজুদের মূল্য খাতার সাথে মেলে'), t('Stock at average cost equals the inventory accounts (within ৳1 rounding).', 'গড় মূল্যে মজুদ = মজুদ হিসাব (৳১ পর্যন্ত রাউন্ডিং)।')],
+  };
+  return (
+    <Statement title={t('Books health', 'হিসাবের স্বাস্থ্য')} period={t(`Checked ${fmtDateTime(h.checkedAt, lang)}`, `পরীক্ষা ${fmtDateTime(h.checkedAt, lang)}`)}>
+      <div style={{ padding: '0 18px 8px' }}>
+        {h.ok
+          ? <Alert>{t('All checks pass: the ledger, documents and stock records agree.', 'সব পরীক্ষা সফল: খাতা, ডকুমেন্ট ও মজুদের রেকর্ড মেলে।')}</Alert>
+          : <Alert tone="error">{t('Some checks failed. Normal work cannot cause this: it means a program error or someone edited the database file directly. Do not close the period; tell your developer and keep today’s backup.', 'কিছু পরীক্ষা ব্যর্থ। সাধারণ কাজে এমন হয় না: প্রোগ্রামের ত্রুটি বা কেউ সরাসরি ডাটাবেস ফাইল বদলেছে। হিসাবকাল বন্ধ করবেন না; ডেভেলপারকে জানান এবং আজকের ব্যাকআপ রাখুন।')}</Alert>}
+      </div>
+      <table className="table">
+        <thead><tr><th>{t('Check', 'পরীক্ষা')}</th><th className="num">{t('Ledger', 'খাতা')}</th><th className="num">{t('Records', 'রেকর্ড')}</th><th className="num">{t('Difference', 'পার্থক্য')}</th><th>{t('Result', 'ফলাফল')}</th></tr></thead>
+        <tbody>{h.checks.map(c => (
+          <tr key={c.key}>
+            <td><b>{label[c.key]?.[0] ?? c.key}</b><div className="muted small">{label[c.key]?.[1]}</div>{c.examples.length > 0 && <div className="small" style={{ color: 'var(--danger)' }}>{c.examples.join(' · ')}</div>}</td>
+            <td className="num">{c.ledger === null ? '—' : <Money v={c.ledger} />}</td>
+            <td className="num">{c.records === null ? '—' : <Money v={c.records} />}</td>
+            <td className="num">{c.difference ? <Money v={c.difference} /> : '—'}</td>
+            <td>{c.ok ? <Badge tone="green"><CircleCheck size={12} />{t('OK', 'ঠিক আছে')}</Badge> : <Badge tone="red"><CircleX size={12} />{t('Problem', 'সমস্যা')}</Badge>}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+    </Statement>
   );
 }
