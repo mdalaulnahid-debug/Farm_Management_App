@@ -21,7 +21,11 @@ export default function Login() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true); setError('');
-    try { await api.post('/auth/login', { email, password }); refresh(); } catch (err: any) { setError(err.message); } finally { setBusy(false); }
+    try {
+      await api.post('/auth/login', { email, password });
+      try { sessionStorage.removeItem('farmledger.home-opened'); } catch { /* storage unavailable */ } // lets Settings › Start-up apply once per sign-in
+      refresh();
+    } catch (err: any) { setError(err.message); } finally { setBusy(false); }
   };
   return (
     <div className="auth-page">

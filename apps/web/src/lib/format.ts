@@ -64,9 +64,10 @@ export const banglaDate = (d: Date = new Date()) => {
   return { day: day + 1, month, year: startYear - 593 };
 };
 
-/** "Monday, 2 November 2026 · 17 Kartik 1433" / "সোমবার, ২ নভেম্বর ২০২৬ · ১৭ কার্তিক ১৪৩৩" */
-export const fmtLongDate = (d: Date = new Date(), lang: Lang = 'en') => {
+/** "Monday, 2 November 2026 · 17 Kartik 1433" / "সোমবার, ২ নভেম্বর ২০২৬ · ১৭ কার্তিক ১৪৩৩"; `bangla: false` drops the Bangla calendar part. */
+export const fmtLongDate = (d: Date = new Date(), lang: Lang = 'en', bangla = true) => {
   const greg = new Intl.DateTimeFormat(lang === 'bn' ? 'bn-BD' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(d);
+  if (!bangla) return greg;
   const b = banglaDate(d);
   const n = (v: number) => new Intl.NumberFormat(locale(lang), { useGrouping: false }).format(v);
   return `${greg} · ${n(b.day)} ${BN_MONTHS[b.month][lang === 'bn' ? 1 : 0]} ${n(b.year)}`;

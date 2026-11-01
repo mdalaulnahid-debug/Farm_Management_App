@@ -23,7 +23,7 @@ function ChartTip({ active, payload, label, lang, money = true }: any) {
 }
 
 export default function Dashboard() {
-  const { t, lang } = usePrefs();
+  const { t, lang, banglaCalendar } = usePrefs();
   const { me, can } = useAuth();
   const [range, setRange] = useState(thisMonth());
   const q = useApi<any>('/dashboard', range);
@@ -37,7 +37,7 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageHeader photo={dashRiver} photoPos="center 60%" tall crumb={fmtLongDate(new Date(), lang)} title={t(`Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ${me?.user.name.split(' ')[0]}`, `স্বাগতম, ${me?.user.name.split(' ')[0]}`)}
+      <PageHeader photo={dashRiver} photoPos="center 60%" tall crumb={fmtLongDate(new Date(), lang, banglaCalendar)} title={t(`Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ${me?.user.name.split(' ')[0]}`, `স্বাগতম, ${me?.user.name.split(' ')[0]}`)}
         subtitle={t(`${me?.organization.name} — business overview from the posted ledger.`, `${me?.organization.nameBn || me?.organization.name} — পোস্ট করা খাতা থেকে ব্যবসার সারসংক্ষেপ।`)}
         actions={<RangePicker value={range} onChange={setRange} />} />
 
