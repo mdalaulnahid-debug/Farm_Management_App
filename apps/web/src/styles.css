@@ -385,3 +385,12 @@ table.table { width: 100%; border-collapse: collapse; }
   .drawer { width: 100%; height: auto; box-shadow: none; }
   .drawer-foot, .drawer-head .btn { display: none; }
 }
+
+/* Farm name: sidebar, sign-in page and printed letterheads */
+.brand b.brand-org { line-height: 1.25; }
+.letterhead h2 { margin: 0; }
+.letterhead-en { font-weight: 600; color: var(--text-2); margin-top: 2px; }
+.statement-org { font-weight: 700; font-size: 1.05em; }
+.farm-title { display: flex; gap: 10px; align-items: center; padding-bottom: 14px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+.farm-title b { display: block; font-size: 1.08em; line-height: 1.3; }
+.farm-title small { display: block; color: var(--text-3); }

@@ -17,7 +17,7 @@ export default async function masterRoutes(app: FastifyInstance) {
 
   app.put('/settings', { preHandler: can('settings.manage') }, async req => {
     const body = parse(z.object({
-      name: z.string().trim().min(2).max(120), legalName: zOptText(160), address: zOptText(300), phone: zOptText(40),
+      name: z.string().trim().min(2).max(120), nameBn: zOptText(160), legalName: zOptText(160), address: zOptText(300), phone: zOptText(40),
       email: zOptText(120), taxId: zOptText(60), fiscalYearStart: z.coerce.number().int().min(1).max(12), invoiceFooter: zOptText(500),
     }), req.body);
     const org = await prisma.organization.update({ where: { id: 'org' }, data: body });

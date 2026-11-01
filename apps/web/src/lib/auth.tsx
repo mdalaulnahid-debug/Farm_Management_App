@@ -4,7 +4,7 @@ import { api, ApiError } from './api';
 
 export interface Me {
   user: { id: string; name: string; email: string; locale: string; mustChangePassword: boolean; role: { key: string; name: string }; permissions: string[] };
-  organization: { name: string; currency: string; lockDate: string | null; fiscalYearStart: number; address?: string | null; phone?: string | null; email?: string | null; taxId?: string | null; legalName?: string | null; invoiceFooter?: string | null };
+  organization: { name: string; nameBn?: string | null; currency: string; lockDate: string | null; fiscalYearStart: number; address?: string | null; phone?: string | null; email?: string | null; taxId?: string | null; legalName?: string | null; invoiceFooter?: string | null };
 }
 
 interface Ctx { me: Me | null; loading: boolean; can: (p: string) => boolean; refresh: () => void; logout: () => Promise<void> }

@@ -4,7 +4,7 @@ import {
   BarChart3, BookOpen, Bird, Gift, ChevronDown, ClipboardList, Contact, Egg, FileText, LayoutDashboard, Leaf, LogOut, Menu,
   Moon, Package, Plus, Receipt, Settings, ShieldCheck, ShoppingCart, Sun, Truck, Wallet,
 } from 'lucide-react';
-import { usePrefs } from '../lib/i18n';
+import { nameOf, usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { BillDrawer, InvoiceDrawer, PaymentDrawer, ProductionDrawer } from '../components/forms';
 import { AdjustDrawer } from '../pages/Inventory';
@@ -64,6 +64,9 @@ export default function Shell({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('mousedown', close);
   }, []);
 
+  const orgTitle = me ? nameOf(me.organization, lang) : '';
+  useEffect(() => { if (orgTitle) document.title = `${orgTitle} · FarmLedger`; }, [orgTitle]);
+
   const initials = me?.user.name.split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase();
 
   return (
@@ -71,7 +74,7 @@ export default function Shell({ children }: { children: ReactNode }) {
       <aside className="sidebar" aria-label={t('Main navigation', 'প্রধান নেভিগেশন')}>
         <div className="brand">
           <span className="brand-mark"><Leaf size={19} /></span>
-          <div><b>FarmLedger</b><small>{me?.organization.name}</small></div>
+          <div><b className="brand-org">{me ? nameOf(me.organization, lang) : 'FarmLedger'}</b><small>FarmLedger ERP</small></div>
         </div>
         {visible.map((g, i) => (
           <nav key={i} className="nav-group">

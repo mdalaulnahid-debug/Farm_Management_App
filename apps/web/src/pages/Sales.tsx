@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth';
 import { useApi, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate } from '../lib/format';
 import { Card, DataTable, Drawer, Kpi, PageHeader, RangePicker, SearchBox, Segmented, StatusBadge, thisMonth, VoidDialog, type Column } from '../components/ui';
-import { AllocationsTable, DocLinesTable, InvoiceDrawer, Money, PaymentDrawer } from '../components/forms';
+import { AllocationsTable, DocLinesTable, InvoiceDrawer, Money, OrgLetterhead, PaymentDrawer } from '../components/forms';
 
 
 interface Invoice { id: string; number: string; date: string; dueDate: string; status: string; subtotal: number; discount: number; total: number; amountPaid: number; reference?: string; notes?: string; customer: { id: string; name: string } }
@@ -88,7 +88,7 @@ function InvoiceDetail({ id, onClose }: { id: string; onClose: () => void }) {
       </>}>
       {!d ? null : <>
         <div className="row between align-start">
-          <div><h2>{me?.organization.name}</h2><div className="muted small">{[me?.organization.address, me?.organization.phone].filter(Boolean).join(' · ')}</div></div>
+          <OrgLetterhead sub={[me?.organization.address, me?.organization.phone].filter(Boolean).join(' · ')} />
           <dl className="desc-list">
             <dt>{t('Date', 'তারিখ')}</dt><dd>{fmtDate(d.date, lang)}</dd>
             <dt>{t('Due', 'শেষ তারিখ')}</dt><dd>{fmtDate(d.dueDate, lang)}</dd>

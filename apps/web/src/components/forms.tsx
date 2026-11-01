@@ -1,11 +1,26 @@
 // Business forms shared across screens: invoice, bill/expense, receipt/payment, production.
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { useAuth } from '../lib/auth';
 import { nameOf, usePrefs } from '../lib/i18n';
 import { fmtDate, fmtMoney, fmtNum, round2, ymd } from '../lib/format';
 import { useAccounts, useApi, useCashAccounts, useFlocks, useItems, useParties, useSave } from '../lib/hooks';
 import type { Account } from '../lib/api';
 import { Alert, Drawer, Field, Input, Segmented, Select, StatusBadge } from './ui';
+
+/** Farm name at the top of a printed document: Bangla and English together, like a letterhead. */
+export function OrgLetterhead({ sub }: { sub?: string }) {
+  const { me } = useAuth();
+  const org = me?.organization;
+  if (!org) return null;
+  return (
+    <div className="letterhead">
+      <h2>{org.nameBn || org.name}</h2>
+      {org.nameBn && <div className="letterhead-en">{org.name}</div>}
+      {sub && <div className="muted small">{sub}</div>}
+    </div>
+  );
+}
 
 export function Money({ v, decimals }: { v: number | null | undefined; decimals?: number }) {
   const { lang } = usePrefs();

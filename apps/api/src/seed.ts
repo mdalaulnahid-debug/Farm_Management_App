@@ -64,7 +64,7 @@ export async function seed(opts: { history?: boolean; adminEmail?: string; admin
   if (await prisma.organization.findUnique({ where: { id: 'org' } })) return { created: false };
   clearAccountCache();
 
-  await prisma.organization.create({ data: { id: 'org', name: 'Duck & Egg Farm', currency: 'BDT', fiscalYearStart: 7, invoiceFooter: 'Thank you for your business.' } });
+  await prisma.organization.create({ data: { id: 'org', name: 'Barishal District Police Agro Farm', nameBn: 'বরিশাল জেলা পুলিশ এগ্রো ফার্ম', currency: 'BDT', fiscalYearStart: 7, invoiceFooter: 'Thank you for your business.' } });
   for (const r of DEFAULT_ROLES) await prisma.role.create({ data: { key: r.key, name: r.name, description: r.description, permissions: JSON.stringify(r.permissions), system: true } });
   const owner = await prisma.role.findUniqueOrThrow({ where: { key: 'owner' } });
   const admin = await prisma.user.create({
