@@ -18,7 +18,7 @@
   --border-strong: #cfd6c8;
   --text: #17201a;
   --text-2: #4b5a4f;
-  --text-3: #7b887e;
+  --text-3: #5f6c63;
   --brand: #0f5132;
   --brand-2: #157347;
   --brand-soft: #e3f1e8;
@@ -50,7 +50,7 @@
   --border-strong: #354236;
   --text: #e8eee9;
   --text-2: #b3c0b6;
-  --text-3: #849287;
+  --text-3: #8f9d92;
   --brand: #3fb27a;
   --brand-2: #56c48d;
   --brand-soft: #173525;
@@ -389,6 +389,16 @@ table.table { width: 100%; border-collapse: collapse; }
   .row input[type='date'] { width: 100% !important; flex: 1 1 130px; }
 }
 @media (max-width: 340px) { .g4 { grid-template-columns: 1fr; } }
+
+/* Touch screens and phones: every tap target at least 40 px (handbook › phone first). */
+@media (pointer: coarse), (max-width: 600px) {
+  .btn, .input, .select, .lines td .input, .lines td .select { height: 42px; }
+  .btn.sm, .input.discount { height: 40px; }
+  .btn.icon { width: 42px; }
+  .btn.sm.icon { width: 40px; }
+  .segmented button { min-height: 36px; padding: 8px 14px; }
+  .tabs button { min-height: 44px; }
+}
 
 /* ───────── Print (statements, invoices) ───────── */
 @media print {
