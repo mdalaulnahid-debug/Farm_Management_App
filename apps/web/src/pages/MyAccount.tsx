@@ -1,7 +1,7 @@
 import { KeyRound, LogOut, SlidersHorizontal, UserRound } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { usePrefs, type Lang } from '../lib/i18n';
+import { nameOf, usePrefs, type Lang } from '../lib/i18n';
 import { Badge, Card, Field, Loading, PageHeader, Segmented, useToast } from '../components/ui';
 import { ChangePassword } from './Login';
 
@@ -32,7 +32,7 @@ export default function MyAccount() {
                 <dt>{t('Name', 'নাম')}</dt><dd>{u.name}</dd>
                 <dt>{t('Email', 'ইমেইল')}</dt><dd>{u.email}</dd>
                 <dt>{t('Role', 'ভূমিকা')}</dt><dd><Badge tone={u.role.key === 'owner' ? 'blue' : undefined}>{u.role.name}</Badge></dd>
-                <dt>{t('Organization', 'প্রতিষ্ঠান')}</dt><dd>{me.organization.name}</dd>
+                <dt>{t('Organization', 'প্রতিষ্ঠান')}</dt><dd>{nameOf(me.organization, lang)}</dd>
                 <dt>{t('Permissions', 'অনুমতি')}</dt><dd>{t(`${u.permissions.length} granted by your role`, `আপনার ভূমিকা থেকে ${u.permissions.length}টি`)}</dd>
               </dl>
             </div>

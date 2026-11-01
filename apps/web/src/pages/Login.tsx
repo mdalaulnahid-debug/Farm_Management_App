@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { BarChart3, Egg, Leaf, ShieldCheck, Wallet } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -12,6 +12,11 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [brand, setBrand] = useState<{ name: string; nameBn: string | null } | null>(null);
+  useEffect(() => { api.get<{ name: string; nameBn: string | null }>('/auth/brand').then(setBrand).catch(() => {}); }, []);
+  const farm = brand ? (lang === 'bn' && brand.nameBn ? brand.nameBn : brand.name) : '';
+  const farmOther = brand?.nameBn ? (lang === 'bn' ? brand.name : brand.nameBn) : '';
+  useEffect(() => { if (farm) document.title = `${farm} · FarmLedger`; }, [farm]);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true); setError('');
@@ -31,10 +36,11 @@ export default function Login() {
             <li><ShieldCheck size={18} />{t('Role-based access and a full audit trail', 'ভূমিকাভিত্তিক প্রবেশাধিকার ও সম্পূর্ণ অডিট ট্রেইল')}</li>
           </ul>
         </div>
-        <small style={{ color: '#9cc7aa' }}>© {new Date().getFullYear()} FarmLedger</small>
+        <small style={{ color: '#9cc7aa' }}>© {new Date().getFullYear()} {brand?.name ?? 'FarmLedger'} · FarmLedger ERP</small>
       </section>
       <section className="auth-form">
         <form onSubmit={submit}>
+          {brand && <div className="farm-title"><span className="brand-mark"><Leaf size={19} /></span><div><b>{farm}</b>{farmOther && <small>{farmOther}</small>}</div></div>}
           <div className="row between"><h1>{t('Sign in', 'সাইন ইন')}</h1><button type="button" className="btn ghost sm" onClick={() => set({ lang: lang === 'en' ? 'bn' : 'en' })}>{lang === 'en' ? 'বাংলা' : 'English'}</button></div>
           <p className="muted" style={{ margin: 0 }}>{t('Use the account your farm administrator created for you.', 'খামারের প্রশাসক আপনার জন্য যে অ্যাকাউন্ট তৈরি করেছেন তা ব্যবহার করুন।')}</p>
           {error && <Alert tone="error">{error}</Alert>}

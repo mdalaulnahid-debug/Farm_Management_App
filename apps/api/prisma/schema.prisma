@@ -22,6 +22,7 @@ datasource db {
 model Organization {
   id               String    @id @default("org")
   name             String
+  nameBn           String?   // Bangla name, shown when the app is in Bangla and on printed documents
   legalName        String?
   address          String?
   phone            String?

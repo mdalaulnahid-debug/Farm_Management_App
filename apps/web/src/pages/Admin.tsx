@@ -12,7 +12,7 @@ type TabKey = 'users' | 'roles' | 'org' | 'close' | 'import' | 'audit';
 
 interface Role { id: string; key: string; name: string; description: string | null; permissions: string[]; system: boolean; _count: { users: number } }
 interface User { id: string; name: string; email: string; phone: string | null; active: boolean; mustChangePassword: boolean; lastLoginAt: string | null; role: { id: string; key: string; name: string } }
-interface Org { name: string; legalName: string | null; address: string | null; phone: string | null; email: string | null; taxId: string | null; fiscalYearStart: number; invoiceFooter: string | null; lockDate: string | null }
+interface Org { name: string; nameBn: string | null; legalName: string | null; address: string | null; phone: string | null; email: string | null; taxId: string | null; fiscalYearStart: number; invoiceFooter: string | null; lockDate: string | null }
 interface AuditRow { id: string; createdAt: string; action: string; entity: string; entityId: string | null; summary: string; ip: string | null; user: { name: string; email: string } | null }
 
 const passwordProblem = (t: T, pw: string) =>
@@ -303,7 +303,7 @@ function BackupCard() {
 function OrgForm({ org }: { org: Org }) {
   const { t } = usePrefs();
   const { refresh } = useAuth();
-  const init = { name: org.name ?? '', legalName: org.legalName ?? '', address: org.address ?? '', phone: org.phone ?? '', email: org.email ?? '', taxId: org.taxId ?? '', fiscalYearStart: org.fiscalYearStart ?? 7, invoiceFooter: org.invoiceFooter ?? '' };
+  const init = { name: org.name ?? '', nameBn: org.nameBn ?? '', legalName: org.legalName ?? '', address: org.address ?? '', phone: org.phone ?? '', email: org.email ?? '', taxId: org.taxId ?? '', fiscalYearStart: org.fiscalYearStart ?? 7, invoiceFooter: org.invoiceFooter ?? '' };
   const [f, setF] = useState(init);
   const save = useSave<typeof f>('put', '/settings', t('Organization settings saved.', 'প্রতিষ্ঠানের সেটিংস সংরক্ষিত হয়েছে।'));
   const changed = JSON.stringify(f) !== JSON.stringify(init);
@@ -320,6 +320,7 @@ function OrgForm({ org }: { org: Org }) {
       <div className="card-body">
         <div className="form-grid">
           <Field label={t('Trading name', 'ব্যবসায়িক নাম')} error={f.name.trim().length < 2 ? t('Required.', 'আবশ্যক।') : undefined} hint={t('Shown in the sidebar and on documents.', 'সাইডবার ও ডকুমেন্টে দেখাবে।')}><Input value={f.name} maxLength={120} onChange={e => setF({ ...f, name: e.target.value })} /></Field>
+          <Field label={t('Name in Bangla', 'বাংলায় নাম')} hint={t('Shown when the app is in Bangla and printed on vouchers with the English name.', 'অ্যাপ বাংলায় থাকলে দেখাবে এবং চালানে ইংরেজি নামের সাথে ছাপা হবে।')}><Input value={f.nameBn} maxLength={160} onChange={e => setF({ ...f, nameBn: e.target.value })} /></Field>
           <Field label={t('Legal name', 'আইনগত নাম')} hint={t('If different from the trading name.', 'ব্যবসায়িক নাম থেকে ভিন্ন হলে।')}><Input value={f.legalName} maxLength={160} onChange={e => setF({ ...f, legalName: e.target.value })} /></Field>
           <Field label={t('Address', 'ঠিকানা')} className="full"><textarea className="textarea" maxLength={300} value={f.address} onChange={e => setF({ ...f, address: e.target.value })} /></Field>
           <Field label={t('Phone', 'ফোন')}><Input value={f.phone} maxLength={40} onChange={e => setF({ ...f, phone: e.target.value })} /></Field>

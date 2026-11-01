@@ -336,3 +336,18 @@ describe('automatic backups', () => {
     for (const n of recent) expect(left).toContain(n);
   });
 });
+
+describe('farm name', () => {
+  it('shows the farm name in both languages on the sign-in page without signing in', async () => {
+    const brand = await call('GET', '/auth/brand', undefined, '');
+    expect(brand.status).toBe(200);
+    expect(brand.body).toEqual({ name: 'Barishal District Police Agro Farm', nameBn: 'বরিশাল জেলা পুলিশ এগ্রো ফার্ম' });
+  });
+  it('lets the owner change the Bangla name in settings', async () => {
+    const put = await call('PUT', '/settings', { name: 'Barishal District Police Agro Farm', nameBn: 'নতুন নাম', fiscalYearStart: 7 });
+    expect(put.status).toBe(200);
+    expect((await call('GET', '/auth/brand', undefined, '')).body.nameBn).toBe('নতুন নাম');
+    expect((await call('GET', '/auth/me')).body.organization.nameBn).toBe('নতুন নাম');
+    await call('PUT', '/settings', { name: 'Barishal District Police Agro Farm', nameBn: 'বরিশাল জেলা পুলিশ এগ্রো ফার্ম', fiscalYearStart: 7 });
+  });
+});

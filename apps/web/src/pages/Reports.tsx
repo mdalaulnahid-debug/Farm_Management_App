@@ -84,7 +84,7 @@ function Statement({ title, period, children, onCsv }: { title: string; period: 
   const { me } = useAuth();
   return (
     <Card className="statement" actions={onCsv && <button className="btn sm no-print" onClick={onCsv}><Download size={14} />CSV</button>}>
-      <div className="statement-head"><div className="muted small">{me?.organization.name}</div><h2>{title}</h2><p>{period}</p></div>
+      <div className="statement-head"><div className="statement-org">{me?.organization.nameBn || me?.organization.name}</div>{me?.organization.nameBn && <div className="muted small">{me.organization.name}</div>}<h2>{title}</h2><p>{period}</p></div>
       <div className="table-wrap">{children}</div>
       <div className="muted small" style={{ padding: '10px 18px' }}>{t('Amounts in BDT. Generated', 'টাকার অঙ্ক বিডিটি-তে। তৈরি')} {new Date().toLocaleString()}</div>
     </Card>

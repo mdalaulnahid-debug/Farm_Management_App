@@ -39,6 +39,12 @@ export default async function authRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // Public: the sign-in page shows the farm's name before anyone signs in.
+  app.get('/auth/brand', async () => {
+    const org = await prisma.organization.findUnique({ where: { id: 'org' }, select: { name: true, nameBn: true } });
+    return { name: org?.name ?? 'FarmLedger', nameBn: org?.nameBn ?? null };
+  });
+
   app.get('/auth/me', { preHandler: authed }, async req => {
     const org = await prisma.organization.findUnique({ where: { id: 'org' } });
     return { user: req.user, organization: org };

@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth';
 import { useApi, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtMoney } from '../lib/format';
 import { Card, DataTable, Drawer, Kpi, Loading, PageHeader, RangePicker, SearchBox, Segmented, StatusBadge, thisMonth, VoidDialog, type Column } from '../components/ui';
-import { AllocationsTable, BillDrawer, DocLinesTable, Money, PaymentDrawer } from '../components/forms';
+import { AllocationsTable, BillDrawer, DocLinesTable, Money, OrgLetterhead, PaymentDrawer } from '../components/forms';
 
 interface Bill {
   id: string; number: string; date: string; dueDate: string | null; status: string; total: number; amountPaid: number;
@@ -99,7 +99,7 @@ function BillDetail({ id, onClose }: { id: string; onClose: () => void }) {
       </>}>
       {bill.isLoading ? <Loading /> : !d ? null : <>
         <div className="row between align-start">
-          <div><h2>{me?.organization.name}</h2><div className="muted small">{t('Purchase bill', 'ক্রয় বিল')}</div></div>
+          <OrgLetterhead sub={t('Purchase bill', 'ক্রয় বিল')} />
           <dl className="desc-list">
             <dt>{t('Date', 'তারিখ')}</dt><dd>{fmtDate(d.date, lang)}</dd>
             <dt>{t('Due', 'শেষ তারিখ')}</dt><dd>{fmtDate(d.dueDate, lang)}</dd>
