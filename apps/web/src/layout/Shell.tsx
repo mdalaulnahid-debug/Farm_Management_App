@@ -1,25 +1,34 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3, BookOpen, Bird, Gift, ChevronDown, ClipboardList, Contact, Egg, FileText, LayoutDashboard, Leaf, LogOut, Menu,
-  Moon, Package, Plus, Receipt, Settings, ShieldCheck, ShoppingCart, Sun, Truck, Wallet,
+  KeyRound, Monitor, Moon, Package, Palette, Plus, Receipt, Settings, ShieldCheck, ShoppingCart, Sun, Truck, UserRound, Wallet,
 } from 'lucide-react';
 import { nameOf, usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { BillDrawer, InvoiceDrawer, PaymentDrawer, ProductionDrawer } from '../components/forms';
 import { AdjustDrawer } from '../pages/Inventory';
+import { useSetLanguage } from '../pages/MyAccount';
 import { GrantDrawer } from '../pages/BankingProjects';
 
 type Quick = 'invoice' | 'receipt' | 'bill' | 'expense' | 'payment' | 'production' | 'usage' | 'grant' | null;
 
 export default function Shell({ children }: { children: ReactNode }) {
-  const { t, lang, theme, fontSize, set } = usePrefs();
+  const { t, lang, theme, dark, fontSize, home, set } = usePrefs();
+  const setLang = useSetLanguage();
+  const navigate = useNavigate();
   const { me, can, logout } = useAuth();
   const [navOpen, setNavOpen] = useState(false);
   const [quick, setQuick] = useState<Quick>(null);
   const [menu, setMenu] = useState<'new' | 'user' | null>(null);
   const loc = useLocation();
-  useEffect(() => { setNavOpen(false); setMenu(null); }, [loc.pathname]);
+  useEffect(() => { setNavOpen(false); setMenu(null); }, [loc.pathname, loc.hash]);
+  // Settings › Start-up: once per sign-in, open the user's chosen page instead of the dashboard.
+  useEffect(() => {
+    let done = false;
+    try { done = sessionStorage.getItem('farmledger.home-opened') === '1'; sessionStorage.setItem('farmledger.home-opened', '1'); } catch { /* storage unavailable */ }
+    if (!done && home !== '/' && loc.pathname === '/') navigate(home, { replace: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const groups: { label: string; links: { to: string; label: string; icon: any; perm: string }[] }[] = [
     { label: '', links: [{ to: '/', label: t('Dashboard', 'ড্যাশবোর্ড'), icon: LayoutDashboard, perm: 'dashboard.view' }] },
@@ -60,8 +69,10 @@ export default function Shell({ children }: { children: ReactNode }) {
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const close = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenu(null); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(null); };
     document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc); };
   }, []);
 
   const orgTitle = me ? nameOf(me.organization, lang) : '';
@@ -83,7 +94,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           </nav>
         ))}
         <nav className="nav-group">
-          <NavLink to="/account" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><Settings size={17} />{t('Display & language', 'প্রদর্শন ও ভাষা')}</NavLink>
+          <NavLink to="/account" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><Settings size={17} />{t('My settings', 'আমার সেটিংস')}</NavLink>
         </nav>
         <div className="sidebar-foot">
           {me?.organization.lockDate && <div>🔒 {t('Books closed to', 'বই বন্ধ')} {me.organization.lockDate.slice(0, 10)}</div>}
@@ -101,22 +112,44 @@ export default function Shell({ children }: { children: ReactNode }) {
             </div>
           )}
           <button className="btn ghost sm" title={t('Language', 'ভাষা')} onClick={() => set({ lang: lang === 'en' ? 'bn' : 'en' })}>{lang === 'en' ? 'বাংলা' : 'EN'}</button>
-          <button className="btn ghost icon" title={t('Theme', 'থিম')} onClick={() => set({ theme: theme === 'dark' ? 'light' : 'dark' })}>{theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}</button>
+          <button className="btn ghost icon" title={t('Theme', 'থিম')} onClick={() => set({ theme: dark ? 'light' : 'dark' })}>{dark ? <Sun size={17} /> : <Moon size={17} />}</button>
           <div className="relative">
-            <button className="btn ghost" style={{ paddingLeft: 4 }} onClick={() => setMenu(m => (m === 'user' ? null : 'user'))}><span className="avatar">{initials}</span><span className="hide-sm">{me?.user.name}</span><ChevronDown size={14} /></button>
+            <button className="btn ghost user-btn" aria-haspopup="menu" aria-expanded={menu === 'user'} onClick={() => setMenu(m => (m === 'user' ? null : 'user'))}><span className="avatar">{initials}</span><span className="hide-sm">{me?.user.name}</span><ChevronDown size={14} /></button>
             {menu === 'user' && (
-              <div className="menu">
-                <div className="menu-head"><b>{me?.user.name}</b><div className="muted small">{me?.user.email}</div><div className="small">{me?.user.role.name}</div></div>
-                <hr />
-                <div className="menu-head row between">
-                  <span className="small">{t('Text size', 'লেখার আকার')}</span>
-                  <div className="row" style={{ gap: 4 }}>
-                    <button className="btn sm" style={{ width: 'auto' }} disabled={fontSize <= 12} onClick={() => set({ fontSize: fontSize - 1 })} aria-label={t('Smaller text', 'ছোট লেখা')}>A−</button>
-                    <button className="btn sm" style={{ width: 'auto' }} disabled={fontSize >= 20} onClick={() => set({ fontSize: fontSize + 1 })} aria-label={t('Larger text', 'বড় লেখা')}>A+</button>
+              <div className="menu user-menu" role="menu">
+                <div className="um-head">
+                  <span className="avatar lg">{initials}</span>
+                  <div><b>{me?.user.name}</b><small>{me?.user.email}</small><span className="badge">{me?.user.role.name}</span></div>
+                </div>
+                <div className="um-quick">
+                  <div className="um-row"><span>{t('Theme', 'থিম')}</span>
+                    <div className="segmented">
+                      {([['light', Sun, t('Light', 'উজ্জ্বল')], ['dark', Moon, t('Dark', 'গাঢ়')], ['system', Monitor, t('Match device', 'ডিভাইসের মতো')]] as const).map(([v, Icon, label]) => (
+                        <button key={v} type="button" className={theme === v ? 'on' : ''} aria-pressed={theme === v} title={label} aria-label={label} onClick={() => set({ theme: v })}><Icon size={15} /></button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="um-row"><span>{t('Language', 'ভাষা')}</span>
+                    <div className="segmented">
+                      <button type="button" className={lang === 'en' ? 'on' : ''} aria-pressed={lang === 'en'} onClick={() => setLang('en')}>EN</button>
+                      <button type="button" className={lang === 'bn' ? 'on' : ''} aria-pressed={lang === 'bn'} onClick={() => setLang('bn')}>বাংলা</button>
+                    </div>
+                  </div>
+                  <div className="um-row"><span>{t('Text size', 'লেখার আকার')}</span>
+                    <div className="segmented">
+                      <button type="button" disabled={fontSize <= 12} onClick={() => set({ fontSize: fontSize - 1 })} aria-label={t('Smaller text', 'ছোট লেখা')}>A−</button>
+                      <button type="button" disabled={fontSize >= 20} onClick={() => set({ fontSize: fontSize + 1 })} aria-label={t('Larger text', 'বড় লেখা')}>A+</button>
+                    </div>
                   </div>
                 </div>
-                <NavLink to="/account"><Settings size={16} />{t('Display, language & password', 'প্রদর্শন, ভাষা ও পাসওয়ার্ড')}</NavLink>
-                <button onClick={() => logout()}><LogOut size={16} />{t('Sign out', 'সাইন আউট')}</button>
+                <hr />
+                <NavLink to="/account#profile" role="menuitem"><UserRound size={16} />{t('My profile', 'আমার প্রোফাইল')}</NavLink>
+                <NavLink to="/account#appearance" role="menuitem"><Palette size={16} />{t('Appearance', 'প্রদর্শন')}</NavLink>
+                <NavLink to="/account#security" role="menuitem"><KeyRound size={16} />{t('Password & security', 'পাসওয়ার্ড ও নিরাপত্তা')}</NavLink>
+                <NavLink to="/account" role="menuitem"><Settings size={16} />{t('All settings', 'সব সেটিংস')}</NavLink>
+                {(can('users.manage') || can('settings.manage')) && <NavLink to="/admin" role="menuitem"><ShieldCheck size={16} />{t('Users & farm settings', 'ব্যবহারকারী ও খামার সেটিংস')}</NavLink>}
+                <hr />
+                <button type="button" role="menuitem" className="um-signout" onClick={() => logout()}><LogOut size={16} />{t('Sign out', 'সাইন আউট')}</button>
               </div>
             )}
           </div>

@@ -111,6 +111,15 @@ export function Segmented<T extends string>({ value, onChange, options }: { valu
   return <div className="segmented" role="tablist">{options.map(o => <button key={o.value} type="button" className={o.value === value ? 'on' : ''} onClick={() => onChange(o.value)}>{o.label}</button>)}</div>;
 }
 
+/** On/off control; `label` is read out and shown next to the switch. */
+export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} className={`switch ${checked ? 'on' : ''}`} onClick={() => onChange(!checked)}>
+      <i aria-hidden="true" /><span>{label}</span>
+    </button>
+  );
+}
+
 export function Tabs<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[] }) {
   return <div className="tabs" role="tablist">{options.map(o => <button key={o.value} type="button" role="tab" aria-selected={o.value === value} className={o.value === value ? 'on' : ''} onClick={() => onChange(o.value)}>{o.label}</button>)}</div>;
 }

@@ -3,41 +3,59 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 export type Lang = 'en' | 'bn';
-export type Theme = 'light' | 'dark';
+export type Theme = 'light' | 'dark' | 'system';
+export type Motion = 'full' | 'reduce';
 export type Density = 'comfortable' | 'compact';
 export type Accent = 'green' | 'blue' | 'purple' | 'amber';
 
 /** Only display preferences live here — nothing that changes data or what a user may do. */
-interface Prefs { lang: Lang; theme: Theme; density: Density; fontSize: number; accent: Accent }
+/** `home` is the page opened after sign-in; `banglaCalendar` shows the Bangla date on the dashboard. */
+interface Prefs { lang: Lang; theme: Theme; density: Density; fontSize: number; accent: Accent; motion: Motion; banglaCalendar: boolean; home: string }
 interface Ctx extends Prefs {
   t: (en: string, bn: string) => string;
   set: (p: Partial<Prefs>) => void;
+  /** The theme actually shown (resolves 'system' from the device). */
+  dark: boolean;
+  /** Puts every display preference except the language back to its default. */
+  reset: () => void;
 }
 
 const KEY = 'farmledger.prefs.v2';
+export const DEFAULTS: Prefs = { lang: 'en', theme: 'system', density: 'comfortable', fontSize: 14, accent: 'green', motion: 'full', banglaCalendar: true, home: '/' };
+const deviceDark = () => !!window.matchMedia?.('(prefers-color-scheme: dark)').matches;
 const read = (): Prefs => {
-  const fallback: Prefs = { lang: 'en', theme: window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', density: 'comfortable', fontSize: 14, accent: 'green' };
-  try { return { ...fallback, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return fallback; }
+  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return DEFAULTS; }
 };
 
 const PrefsContext = createContext<Ctx | null>(null);
 
 export function PrefsProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefs] = useState<Prefs>(read);
+  const [systemDark, setSystemDark] = useState(deviceDark);
+  useEffect(() => {
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
+    const on = () => setSystemDark(deviceDark());
+    mq?.addEventListener('change', on);
+    return () => mq?.removeEventListener('change', on);
+  }, []);
+  const dark = prefs.theme === 'system' ? systemDark : prefs.theme === 'dark';
   useEffect(() => {
     const root = document.documentElement;
-    root.dataset.theme = prefs.theme;
+    root.dataset.theme = dark ? 'dark' : 'light';
+    root.dataset.motion = prefs.motion;
     root.dataset.density = prefs.density;
     root.dataset.accent = prefs.accent;
     root.lang = prefs.lang;
     root.style.setProperty('--fs', `${prefs.density === 'compact' ? prefs.fontSize - 1 : prefs.fontSize}px`);
     try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch { /* storage unavailable */ }
-  }, [prefs]);
+  }, [prefs, dark]);
   const value = useMemo<Ctx>(() => ({
     ...prefs,
     t: (en, bn) => (prefs.lang === 'bn' ? bn : en),
     set: p => setPrefs(prev => ({ ...prev, ...p })),
-  }), [prefs]);
+    dark,
+    reset: () => setPrefs(prev => ({ ...DEFAULTS, lang: prev.lang })),
+  }), [prefs, dark]);
   return <PrefsContext.Provider value={value}>{children}</PrefsContext.Provider>;
 }
 
