@@ -18,8 +18,18 @@ const call = async (method: string, url: string, payload?: unknown, c = cookie) 
 };
 const id = async (code: string) => (await prisma.account.findUniqueOrThrow({ where: { code } })).id;
 
+/** Sign in with a temporary password and replace it, as every new user must before doing anything. */
+const firstSignIn = async (email: string, temporary: string) => {
+  const res = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email, password: temporary } });
+  const c = String(res.headers['set-cookie']).split(';')[0];
+  expect((await call('POST', '/auth/change-password', { current: temporary, next: `${temporary}New` }, c)).status).toBe(200);
+  return c;
+};
+
 beforeAll(async () => {
   await seed({ history: true, adminEmail: 'owner@test.local', adminPassword: PASSWORD });
+  // The seeded owner starts on a temporary password; these tests need a ready owner.
+  await prisma.user.update({ where: { email: 'owner@test.local' }, data: { mustChangePassword: false } });
   app = await buildApp();
   const res = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email: 'owner@test.local', password: PASSWORD } });
   cookie = String(res.headers['set-cookie']).split(';')[0];
@@ -37,8 +47,7 @@ describe('authentication & authorization', () => {
     const roles = (await call('GET', '/roles')).body.data;
     const operator = roles.find((r: any) => r.key === 'operator');
     expect((await call('POST', '/users', { name: 'Op User', email: 'op@test.local', roleId: operator.id, password: 'Operator2026' })).status).toBe(200);
-    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email: 'op@test.local', password: 'Operator2026' } });
-    const opCookie = String(login.headers['set-cookie']).split(';')[0];
+    const opCookie = await firstSignIn('op@test.local', 'Operator2026');
     expect((await call('GET', '/reports/profit-loss', undefined, opCookie)).status).toBe(403);
     expect((await call('GET', '/users', undefined, opCookie)).status).toBe(403);
     expect((await call('GET', '/dashboard', undefined, opCookie)).status).toBe(200);
@@ -312,8 +321,7 @@ describe('automatic backups', () => {
     const roles = (await call('GET', '/roles')).body.data;
     const viewer = roles.find((r: any) => r.key === 'viewer');
     expect((await call('POST', '/users', { name: 'Backup Viewer', email: 'backup-viewer@test.local', roleId: viewer.id, password: 'Viewer2026x' })).status).toBe(200);
-    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email: 'backup-viewer@test.local', password: 'Viewer2026x' } });
-    const viewerCookie = String(login.headers['set-cookie']).split(';')[0];
+    const viewerCookie = await firstSignIn('backup-viewer@test.local', 'Viewer2026x');
     const name = (await call('GET', '/admin/backups')).body.data[0].name;
     expect((await call('GET', '/admin/backups', undefined, viewerCookie)).status).toBe(403);
     expect((await call('POST', '/admin/backups', undefined, viewerCookie)).status).toBe(403);

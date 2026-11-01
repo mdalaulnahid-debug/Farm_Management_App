@@ -3,7 +3,7 @@ import { randomBytes, scrypt as scryptCb, timingSafeEqual, createHash } from 'no
 import { promisify } from 'node:util';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { prisma } from '../db.js';
-import { forbidden, unauthorized } from '../lib/errors.js';
+import { AppError, forbidden, unauthorized } from '../lib/errors.js';
 import type { Permission } from '../lib/constants.js';
 
 const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number, opts: object) => Promise<Buffer>;
@@ -66,9 +66,17 @@ export async function loadUser(req: FastifyRequest) {
 
 export const actorOf = (req: FastifyRequest) => (req.user ? { id: req.user.id, ip: req.ip } : null);
 
-/** Route guard: `preHandler: can('sales.create')`. Server-side authorization on every operation. */
+/**
+ * Route guard: `preHandler: can('sales.create')`. Server-side authorization on every operation.
+ * Someone still on a temporary password may do nothing until they have chosen their own.
+ */
 export const can = (...perms: Permission[]) => async (req: FastifyRequest, _reply: FastifyReply) => {
   if (!req.user) throw unauthorized();
+  if (req.user.mustChangePassword) throw new AppError(403, 'Set a new password before continuing.', 'PASSWORD_CHANGE_REQUIRED');
   if (perms.length && !perms.every(p => req.user!.permissions.includes(p))) throw forbidden();
 };
 export const authed = can();
+/** Signed in, even on a temporary password. Only for what the "set a new password" screen needs. */
+export const signedIn = async (req: FastifyRequest, _reply: FastifyReply) => {
+  if (!req.user) throw unauthorized();
+};

@@ -28,7 +28,8 @@ Business management and accounting software for a farm (built first for a duck &
 
 ### Security
 
-- Sign-in with scrypt-hashed passwords, server-side sessions in http-only cookies, lockout after 5 failed attempts, forced password change on first sign-in and after resets.
+- Sign-in with scrypt-hashed passwords, server-side sessions in http-only cookies, lockout after 5 failed attempts, forced password change on first sign-in and after resets (enforced by the server: a temporary password can do nothing else).
+- Only an owner can add or change owner accounts or change what a role may do, even if another role is allowed to manage users.
 - Role-based access enforced on **every API endpoint** (the UI only hides what the role cannot use).
 - Audit trail of every create, void, sign-in, settings and user change.
 
@@ -65,6 +66,13 @@ All bookkeeping (journals, ledgers, receivables, payables, stock, profit) is pro
 4. Other devices on the same network (phones, laptops) can open `http://<this-computer's-IP>:4000`.
 
 **Back up regularly:** *Users & settings → Organization → Download backup* (or copy `apps/api/prisma/farmledger.db` while the app is stopped).
+
+## Forgotten passwords
+
+There is no "email me a link": a reset link is one more way in for an attacker.
+
+- **Staff:** the owner opens *Users & settings → Users*, edits the person and sets a temporary password. The account is unlocked, the person is signed out everywhere, and must choose a new password at the next sign-in.
+- **The owner:** keep a **spare owner account** (add a second user with the *Owner* role) and keep its password sealed in the office safe. If both are lost, on the computer that runs FarmLedger double-click **`reset-password.bat`** and type the owner's email (or run `npm run user:reset-password -w apps/api -- owner@farm.local`). It prints a temporary password, unlocks and re-enables the account, ends its old sign-ins and records the reset in the audit trail. It cannot be used over the network.
 
 ## Backups and restore
 
