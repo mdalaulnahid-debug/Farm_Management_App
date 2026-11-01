@@ -1,11 +1,11 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../db.js';
-import { badRequest, conflict, notFound, unauthorized } from '../lib/errors.js';
+import { badRequest, conflict, forbidden, notFound, unauthorized } from '../lib/errors.js';
 import { parse, zOptText } from '../lib/validate.js';
 import { PERMISSIONS } from '../lib/constants.js';
 import { audit } from '../services/common.js';
-import { actorOf, authed, can, createSession, destroySession, hashPassword, passwordProblem, SESSION_COOKIE, verifyPassword } from '../auth/auth.js';
+import { actorOf, can, createSession, destroySession, hashPassword, passwordProblem, SESSION_COOKIE, signedIn, verifyPassword } from '../auth/auth.js';
 
 const MAX_FAILED = 5;
 const LOCK_MINUTES = 15;
@@ -48,12 +48,12 @@ export default async function authRoutes(app: FastifyInstance) {
     return { name: org?.name ?? 'FarmLedger', nameBn: org?.nameBn ?? null };
   });
 
-  app.get('/auth/me', { preHandler: authed }, async req => {
+  app.get('/auth/me', { preHandler: signedIn }, async req => {
     const org = await prisma.organization.findUnique({ where: { id: 'org' } });
     return { user: req.user, organization: org };
   });
 
-  app.post('/auth/change-password', { preHandler: authed }, async req => {
+  app.post('/auth/change-password', { preHandler: signedIn }, async req => {
     const body = parse(z.object({ current: z.string(), next: z.string() }), req.body);
     const user = await prisma.user.findUniqueOrThrow({ where: { id: req.user!.id } });
     if (!(await verifyPassword(body.current, user.passwordHash))) throw badRequest('Current password is incorrect.');
@@ -64,19 +64,28 @@ export default async function authRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.patch('/auth/preferences', { preHandler: authed }, async req => {
+  app.patch('/auth/preferences', { preHandler: signedIn }, async req => {
     const body = parse(z.object({ locale: z.enum(['en', 'bn']) }), req.body);
     await prisma.user.update({ where: { id: req.user!.id }, data: { locale: body.locale } });
     return { ok: true };
   });
 
   // ───── User & role administration ─────
+  // Managing users does not make someone the owner: only an owner may change roles or touch owner accounts.
+  const isOwner = (req: FastifyRequest) => req.user!.role.key === 'owner';
+  const roleOf = async (id: string) => {
+    const role = await prisma.role.findUnique({ where: { id } });
+    if (!role) throw badRequest('Choose a role.');
+    return role;
+  };
+
   app.get('/roles', { preHandler: can('users.manage') }, async () => {
     const roles = await prisma.role.findMany({ orderBy: { createdAt: 'asc' }, include: { _count: { select: { users: true } } } });
     return { data: roles.map(r => ({ ...r, permissions: JSON.parse(r.permissions) })), permissions: PERMISSIONS };
   });
 
   app.put('/roles/:id', { preHandler: can('users.manage') }, async req => {
+    if (!isOwner(req)) throw forbidden('Only the owner can change what a role is allowed to do.');
     const { id } = req.params as { id: string };
     const body = parse(z.object({ name: z.string().min(2).max(60), description: zOptText(200), permissions: z.array(z.enum(Object.keys(PERMISSIONS) as [string, ...string[]])) }), req.body);
     const role = await prisma.role.findUnique({ where: { id } });
@@ -102,6 +111,7 @@ export default async function authRoutes(app: FastifyInstance) {
     if (!body.password) throw badRequest('Set an initial password.');
     const problem = passwordProblem(body.password);
     if (problem) throw badRequest(problem);
+    if ((await roleOf(body.roleId)).key === 'owner' && !isOwner(req)) throw forbidden('Only the owner can add another owner.');
     if (await prisma.user.findUnique({ where: { email: body.email } })) throw conflict('A user with this email already exists.');
     const user = await prisma.user.create({ data: { name: body.name, email: body.email, phone: body.phone, roleId: body.roleId, active: body.active, passwordHash: await hashPassword(body.password), mustChangePassword: true } });
     await audit(prisma, actorOf(req), 'create', 'user', user.id, `Created user ${user.email}`);
@@ -113,6 +123,8 @@ export default async function authRoutes(app: FastifyInstance) {
     const body = parse(userBody, req.body);
     const user = await prisma.user.findUnique({ where: { id }, include: { role: true } });
     if (!user) throw notFound('User');
+    const role = await roleOf(body.roleId);
+    if ((user.role.key === 'owner' || role.key === 'owner') && !isOwner(req)) throw forbidden('Only the owner can change an owner account.');
     if (id === req.user!.id && (!body.active || body.roleId !== user.roleId)) throw conflict('You cannot deactivate yourself or change your own role.');
     const data: Record<string, unknown> = { name: body.name, email: body.email, phone: body.phone, roleId: body.roleId, active: body.active };
     if (body.password) {
