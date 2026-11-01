@@ -30,7 +30,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     me, loading: q.isLoading,
     can: p => !!me?.user.permissions.includes(p),
     refresh: () => qc.invalidateQueries({ queryKey: ['me'] }),
-    logout: async () => { await api.post('/auth/logout'); qc.clear(); qc.setQueryData(['me'], null); },
+    // Mark signed-out first, then drop everything else. qc.clear() would detach the ['me'] query from
+    // its observer, so the screen never saw the sign-out and stayed signed in.
+    logout: async () => {
+      try { await api.post('/auth/logout'); } finally {
+        qc.setQueryData(['me'], null);
+        qc.removeQueries({ predicate: query => query.queryKey[0] !== 'me' });
+      }
+    },
   };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
