@@ -317,6 +317,7 @@ function ActivityReport({ range }: { range: Range }) {
   const kpis: [string, number][] = [
     [t('Voids', 'বাতিল'), a.counts.voids], [t('Back-dated entries', 'পুরনো তারিখের এন্ট্রি'), a.counts.backdated], [t('Discounts', 'ছাড়'), a.counts.discounts],
     [t('Stock write-offs', 'মজুদ বাদ'), a.counts.writeOffs], [t('Cash shortages', 'নগদ ঘাটতি'), a.counts.cashShortages], [t('Failed sign-ins', 'ব্যর্থ সাইন-ইন'), a.counts.failedSignIns],
+    [t('Unusual sign-ins', 'অস্বাভাবিক সাইন-ইন'), a.counts.unusualSignIns ?? 0],
   ];
   const typeLabel = (type: string) => (type === 'WASTE' ? t('Waste', 'নষ্ট') : type === 'GIFT' ? t('Gift', 'উপহার') : t('Count shortfall', 'গণনায় ঘাটতি'));
   const voidMark = t('void', 'বাতিল');
@@ -375,6 +376,14 @@ function ActivityReport({ range }: { range: Range }) {
           <><th>{t('Account', 'অ্যাকাউন্ট')}</th><th className="num">{t('Attempts', 'চেষ্টা')}</th><th>{t('Last', 'শেষ')}</th><th>{t('From', 'কোথা থেকে')}</th></>,
           a.failedSignIns.map((f: any, i: number) => (
             <tr key={i}><td>{f.user} <span className="muted small">{f.email}</span></td><td className="num">{fmtNum(f.count, lang, 0)}</td><td>{fmtDateTime(f.last, lang)}</td><td className="muted small">{f.ips.join(', ')}</td></tr>
+          )), 4)}
+        {section(t('Unusual sign-ins', 'অস্বাভাবিক সাইন-ইন'), t(`Successful sign-ins from a new address, at night (${a.quietHours?.from ?? 22}:00–${a.quietHours?.to ?? 6}:00), or right after several wrong passwords. If it was not that person, reset their password and sign them out everywhere.`, `নতুন ঠিকানা থেকে, রাতে (${a.quietHours?.from ?? 22}:00–${a.quietHours?.to ?? 6}:00), বা কয়েকবার ভুল পাসওয়ার্ডের পরপর সফল সাইন-ইন। যদি সেই ব্যক্তি না হন, পাসওয়ার্ড রিসেট করুন ও সব জায়গা থেকে সাইন আউট করুন।`),
+          <><th>{t('When', 'কখন')}</th><th>{t('Account', 'অ্যাকাউন্ট')}</th><th>{t('From', 'কোথা থেকে')}</th><th>{t('Why listed', 'কেন তালিকায়')}</th></>,
+          (a.signIns ?? []).map((s: any, i: number) => (
+            <tr key={i}>
+              <td>{fmtDateTime(s.at, lang)}</td><td>{s.user} <span className="muted small">{s.email}</span></td><td className="muted small">{s.ip ?? '—'}</td>
+              <td>{s.reasons.map((r: string) => r === 'new_address' ? t('New address', 'নতুন ঠিকানা') : r === 'night' ? t('At night', 'রাতে') : t(`After ${s.failures} wrong passwords`, `${s.failures}টি ভুল পাসওয়ার্ডের পরে`)).join(' · ')}</td>
+            </tr>
           )), 4)}
         {section(t('User and settings changes', 'ব্যবহারকারী ও সেটিংস পরিবর্তন'), t('New users, password resets, role and settings changes.', 'নতুন ব্যবহারকারী, পাসওয়ার্ড রিসেট, ভূমিকা ও সেটিংস পরিবর্তন।'),
           <><th>{t('When', 'কখন')}</th><th>{t('By', 'কে')}</th><th>{t('What', 'কী')}</th></>,
