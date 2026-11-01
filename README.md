@@ -102,7 +102,7 @@ npm run build     # production build; `npm start` serves everything on :4000
 
 ## Deploy (cloud / server)
 
-`docker compose up -d --build` runs the production image on port 4000 with the database on a persistent volume. Put it behind HTTPS (Caddy, Nginx, or your host's load balancer) and set a strong `ADMIN_PASSWORD`. For multiple sites or heavy use, switch to PostgreSQL — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+`docker compose up -d --build` runs the production image on port 4000 with the database on a persistent volume. Put it behind HTTPS (Caddy, Nginx, or your host's load balancer), set `TRUST_PROXY` to the proxy's address, and set a strong `ADMIN_PASSWORD`. For multiple sites or heavy use, switch to PostgreSQL — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Project layout
 

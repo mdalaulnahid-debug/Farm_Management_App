@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { badRequest, conflict, notFound, unauthorized } from '../lib/errors.js';
@@ -11,7 +11,10 @@ const MAX_FAILED = 5;
 const LOCK_MINUTES = 15;
 
 export default async function authRoutes(app: FastifyInstance) {
-  const cookieOpts = { path: '/', httpOnly: true, sameSite: 'lax' as const, secure: process.env.NODE_ENV === 'production' };
+  // Secure whenever the browser reached us over HTTPS (directly or via the trusted proxy, see TRUST_PROXY).
+  const cookieOpts = (req: FastifyRequest) => ({
+    path: '/', httpOnly: true, sameSite: 'lax' as const, secure: process.env.NODE_ENV === 'production' || req.protocol === 'https',
+  });
 
   app.post('/auth/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const body = parse(z.object({ email: z.string().trim().toLowerCase().email(), password: z.string().min(1) }), req.body);
@@ -28,7 +31,7 @@ export default async function authRoutes(app: FastifyInstance) {
     await prisma.session.deleteMany({ where: { expiresAt: { lt: new Date() } } }); // housekeeping
     const { token, expiresAt } = await createSession(user.id, req.ip, req.headers['user-agent']);
     await audit(prisma, { id: user.id, ip: req.ip }, 'login', 'user', user.id, `${user.name} signed in`);
-    reply.setCookie(SESSION_COOKIE, token, { ...cookieOpts, expires: expiresAt });
+    reply.setCookie(SESSION_COOKIE, token, { ...cookieOpts(req), expires: expiresAt });
     return { ok: true };
   });
 
