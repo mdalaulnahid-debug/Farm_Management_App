@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Building2, CalendarCheck, Download, History, KeyRound, Lock, LockOpen, Pencil, Unlock, UserPlus } from 'lucide-react';
+import { Building2, CalendarCheck, Download, History, KeyRound, Lock, LockOpen, LogOut, Pencil, Unlock, UserPlus } from 'lucide-react';
 import { usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi, useSave } from '../lib/hooks';
@@ -11,7 +11,7 @@ type T = (en: string, bn: string) => string;
 type TabKey = 'users' | 'roles' | 'org' | 'close' | 'import' | 'audit';
 
 interface Role { id: string; key: string; name: string; description: string | null; permissions: string[]; system: boolean; _count: { users: number } }
-interface User { id: string; name: string; email: string; phone: string | null; active: boolean; mustChangePassword: boolean; lastLoginAt: string | null; role: { id: string; key: string; name: string } }
+interface User { id: string; name: string; email: string; phone: string | null; active: boolean; mustChangePassword: boolean; lastLoginAt: string | null; activeSessions: number; role: { id: string; key: string; name: string } }
 interface Org { name: string; nameBn: string | null; legalName: string | null; address: string | null; phone: string | null; email: string | null; taxId: string | null; fiscalYearStart: number; invoiceFooter: string | null; lockDate: string | null }
 interface AuditRow { id: string; createdAt: string; action: string; entity: string; entityId: string | null; summary: string; ip: string | null; user: { name: string; email: string } | null }
 
@@ -95,6 +95,7 @@ function UserDrawer({ user, roles, onClose }: { user: User | null; roles: Role[]
   const [f, setF] = useState({ name: user?.name ?? '', email: user?.email ?? '', phone: user?.phone ?? '', roleId: user?.role.id ?? defaultRole?.id ?? '', active: user?.active ?? true, password: '' });
   const [resetPw, setResetPw] = useState(isNew);
   const save = useSave<any>(isNew ? 'post' : 'put', isNew ? '/users' : `/users/${user!.id}`, isNew ? t('User created. They will be asked to set a new password at first sign-in.', 'ব্যবহারকারী তৈরি হয়েছে। প্রথম সাইন ইনে নতুন পাসওয়ার্ড দিতে বলা হবে।') : t('User updated.', 'ব্যবহারকারী হালনাগাদ হয়েছে।'));
+  const signOut = useSave<void>('post', `/users/${user?.id}/sign-out`, t('Signed out on every device.', 'সব ডিভাইস থেকে সাইন আউট হয়েছে।'));
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim());
   const pwProblem = resetPw ? passwordProblem(t, f.password) : null;
@@ -117,6 +118,12 @@ function UserDrawer({ user, roles, onClose }: { user: User | null; roles: Role[]
       </Field>
       <label className="check"><input type="checkbox" checked={f.active} disabled={self} onChange={e => setF({ ...f, active: e.target.checked })} />{t('Active — can sign in', 'সক্রিয় — সাইন ইন করতে পারবেন')}</label>
       {!f.active && !isNew && <small className="muted">{t('Disabling signs them out everywhere immediately.', 'নিষ্ক্রিয় করলে সব জায়গা থেকে সঙ্গে সঙ্গে সাইন আউট হবে।')}</small>}
+      {!isNew && !self && user!.activeSessions > 0 && (
+        <div className="row" style={{ gap: 10, justifyContent: 'space-between' }}>
+          <span className="muted small">{t(`Signed in on ${user!.activeSessions} device(s). Lost phone, or someone left?`, `${user!.activeSessions}টি ডিভাইসে সাইন ইন করা। ফোন হারিয়েছে, বা কেউ চলে গেছে?`)}</span>
+          <button className="btn sm" disabled={signOut.isPending} onClick={() => signOut.mutate(undefined, { onSuccess: onClose })}><LogOut size={14} />{t('Sign out everywhere', 'সব জায়গা থেকে সাইন আউট')}</button>
+        </div>
+      )}
       <div className="card card-pad stack" style={{ background: 'var(--surface-2)' }}>
         <h3>{isNew ? t('Temporary password', 'অস্থায়ী পাসওয়ার্ড') : t('Password', 'পাসওয়ার্ড')}</h3>
         {!isNew && <label className="check"><input type="checkbox" checked={resetPw} onChange={e => { setResetPw(e.target.checked); setF({ ...f, password: '' }); }} />{t('Reset password', 'পাসওয়ার্ড রিসেট')}</label>}

@@ -60,8 +60,33 @@ export default async function authRoutes(app: FastifyInstance) {
     const problem = passwordProblem(body.next);
     if (problem) throw badRequest(problem);
     await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(body.next), mustChangePassword: false } });
-    await audit(prisma, actorOf(req), 'update', 'user', user.id, 'Changed own password');
+    // Whoever knew the old password is signed out everywhere else.
+    const ended = await prisma.session.deleteMany({ where: { userId: user.id, id: { not: req.sessionId } } });
+    await audit(prisma, actorOf(req), 'update', 'user', user.id, `Changed own password${ended.count ? ` (signed out ${ended.count} other device${ended.count === 1 ? '' : 's'})` : ''}`);
     return { ok: true };
+  });
+
+  // ───── Where you are signed in ─────
+  app.get('/auth/sessions', { preHandler: can() }, async req => {
+    const sessions = await prisma.session.findMany({ where: { userId: req.user!.id, expiresAt: { gt: new Date() } }, orderBy: { createdAt: 'desc' } });
+    return {
+      data: sessions.map(s => ({ id: s.id, current: s.id === req.sessionId, createdAt: s.createdAt, lastSeenAt: s.lastSeenAt ?? s.createdAt, expiresAt: s.expiresAt, ip: s.ip, userAgent: s.userAgent ?? '' })),
+    };
+  });
+
+  app.post('/auth/sessions/:id/end', { preHandler: can() }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const ended = await prisma.session.deleteMany({ where: { id, userId: req.user!.id } });
+    if (!ended.count) throw notFound('Sign-in');
+    if (id === req.sessionId) reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    await audit(prisma, actorOf(req), 'update', 'user', req.user!.id, 'Signed out one device');
+    return { ok: true };
+  });
+
+  app.post('/auth/sessions/end-others', { preHandler: can() }, async req => {
+    const ended = await prisma.session.deleteMany({ where: { userId: req.user!.id, id: { not: req.sessionId } } });
+    await audit(prisma, actorOf(req), 'update', 'user', req.user!.id, `Signed out ${ended.count} other device${ended.count === 1 ? '' : 's'}`);
+    return { ended: ended.count };
   });
 
   app.patch('/auth/preferences', { preHandler: signedIn }, async req => {
@@ -97,8 +122,22 @@ export default async function authRoutes(app: FastifyInstance) {
   });
 
   app.get('/users', { preHandler: can('users.manage') }, async () => {
-    const users = await prisma.user.findMany({ orderBy: { createdAt: 'asc' }, include: { role: true } });
-    return { data: users.map(({ passwordHash: _p, ...u }) => u) };
+    const users = await prisma.user.findMany({
+      orderBy: { createdAt: 'asc' },
+      include: { role: true, _count: { select: { sessions: { where: { expiresAt: { gt: new Date() } } } } } },
+    });
+    return { data: users.map(({ passwordHash: _p, _count, ...u }) => ({ ...u, activeSessions: _count.sessions })) };
+  });
+
+  // End every sign-in of a user, e.g. a lost phone or someone who left. They can sign in again with their password.
+  app.post('/users/:id/sign-out', { preHandler: can('users.manage') }, async req => {
+    const { id } = req.params as { id: string };
+    const user = await prisma.user.findUnique({ where: { id }, include: { role: true } });
+    if (!user) throw notFound('User');
+    if (user.role.key === 'owner' && !isOwner(req)) throw forbidden('Only the owner can change an owner account.');
+    const ended = await prisma.session.deleteMany({ where: { userId: id } });
+    await audit(prisma, actorOf(req), 'update', 'user', id, `Signed out ${user.email} everywhere (${ended.count} device${ended.count === 1 ? '' : 's'})`);
+    return { ended: ended.count };
   });
 
   const userBody = z.object({
