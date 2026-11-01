@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Area, Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Bird, CircleDollarSign, Egg, Landmark, Package, Receipt, TrendingUp, Truck, Wallet } from 'lucide-react';
-import { usePrefs } from '../lib/i18n';
+import { nameOf, unitLabel, usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi } from '../lib/hooks';
 import { fmtDate, fmtDateTime, fmtMoney, fmtNum, fmtPct } from '../lib/format';
@@ -44,7 +44,7 @@ export default function Dashboard() {
         <div className="stack">
           {noBirds && <Alert tone="warn">{t('An active flock has 0 birds recorded. Set the bird count in Production → Flocks so laying rate and mortality % can be calculated.', 'একটি সক্রিয় ঝাঁকে ০টি পাখি লেখা আছে। ডিম পাড়ার হার হিসাবের জন্য উৎপাদন → ঝাঁক-এ পাখির সংখ্যা দিন।')} <Link to="/production">{t('Open flocks', 'ঝাঁক খুলুন')}</Link></Alert>}
           {(k?.overdueCount ?? 0) > 0 && <Alert tone="warn">{t(`${k.overdueCount} invoice(s) are overdue, totalling ${fmtMoney(k.overdueAmount, lang)}.`, `${k.overdueCount}টি চালান মেয়াদোত্তীর্ণ, মোট ${fmtMoney(k.overdueAmount, lang)}।`)} <Link to="/customers">{t('Review receivables', 'পাওনা দেখুন')}</Link></Alert>}
-          {(d?.lowStock?.length ?? 0) > 0 && <Alert tone="warn">{t('Low stock: ', 'মজুদ কম: ')}{d.lowStock.map((i: any) => `${i.name} (${fmtNum(i.qtyOnHand, lang)} ${i.unit})`).join(', ')}</Alert>}
+          {(d?.lowStock?.length ?? 0) > 0 && <Alert tone="warn">{t('Low stock: ', 'মজুদ কম: ')}{d.lowStock.map((i: any) => `${nameOf(i, lang)} (${fmtNum(i.qtyOnHand, lang)} ${unitLabel(t, i.unit)})`).join(', ')}</Alert>}
         </div>
       )}
 
@@ -86,7 +86,7 @@ export default function Dashboard() {
             <Card title={t('Where the money went', 'টাকা কোথায় খরচ হলো')} subtitle={fmtDate(d.from, lang) + ' – ' + fmtDate(d.to, lang)}>
               <div className="card-body">
                 {d.expenseBreakdown.length ? <div className="bar-list">{d.expenseBreakdown.map((e: any) => (
-                  <div key={e.id} className="bar-row"><span>{lang === 'bn' && e.nameBn ? e.nameBn : e.name}</span><b className="num">{fmtMoney(e.amount, lang)}</b><div className="bar"><i style={{ width: `${(e.amount / maxExpense) * 100}%` }} /></div></div>
+                  <div key={e.id} className="bar-row"><span>{nameOf(e, lang)}</span><b className="num">{fmtMoney(e.amount, lang)}</b><div className="bar"><i style={{ width: `${(e.amount / maxExpense) * 100}%` }} /></div></div>
                 ))}</div> : <Empty>{t('No expenses in this period.', 'এই সময়ে কোনো খরচ নেই।')}</Empty>}
               </div>
             </Card>
@@ -112,7 +112,7 @@ export default function Dashboard() {
           </Card>
           <Card title={t('Stock on hand', 'হাতে মজুদ')} actions={<Link to="/inventory" className="small">{t('Inventory →', 'মজুদ →')}</Link>}>
             {d.stock.length ? <table className="table"><tbody>{d.stock.map((s: any) => (
-              <tr key={s.id}><td>{lang === 'bn' && s.nameBn ? s.nameBn : s.name}{s.low && <span className="badge red" style={{ marginLeft: 6 }}>{t('Low', 'কম')}</span>}</td><td className="num">{fmtNum(s.qtyOnHand, lang)} <span className="muted small">{s.unit}</span></td></tr>
+              <tr key={s.id}><td>{nameOf(s, lang)}{s.low && <span className="badge red" style={{ marginLeft: 6 }}>{t('Low', 'কম')}</span>}</td><td className="num">{fmtNum(s.qtyOnHand, lang)} <span className="muted small">{unitLabel(t, s.unit)}</span></td></tr>
             ))}</tbody></table> : <Empty icon={Package}>{t('No stocked items yet.', 'এখনো কোনো মজুদ পণ্য নেই।')}</Empty>}
           </Card>
         </div>

@@ -2,8 +2,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
-import { nameOf, usePrefs } from '../lib/i18n';
-import { fmtDate, fmtMoney, fmtNum, round2, ymd } from '../lib/format';
+import { nameOf, unitLabel, usePrefs } from '../lib/i18n';
+import { fmtDate, fmtMoney, fmtNum, fmtPct, round2, ymd } from '../lib/format';
 import { useAccounts, useApi, useCashAccounts, useFlocks, useItems, useParties, useSave } from '../lib/hooks';
 import type { Account } from '../lib/api';
 import { Alert, Drawer, Field, Input, Segmented, Select, StatusBadge } from './ui';
@@ -160,11 +160,11 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
               return (
                 <tr key={i}>
                   <td>
-                    <Select value={l.itemId} placeholder={t('— Other income line —', '— অন্যান্য আয় —')} options={saleItems.map(x => ({ value: x.id, label: `${nameOf(x, lang)}${x.trackInventory ? ` (${x.qtyOnHand} ${x.unit})` : ''}` }))}
+                    <Select value={l.itemId} placeholder={t('— Other income line —', '— অন্যান্য আয় —')} options={saleItems.map(x => ({ value: x.id, label: `${nameOf(x, lang)}${x.trackInventory ? ` (${fmtNum(x.qtyOnHand, lang, 3)} ${unitLabel(t, x.unit)})` : ''}` }))}
                       onChange={e => { const it = items.data?.data.find(x => x.id === e.target.value); set({ itemId: e.target.value, unitPrice: it ? String(it.salePrice || '') : l.unitPrice }); }} />
                     {!l.itemId && <Select className="mt-6" value={l.accountId} placeholder={t('Income account…', 'আয়ের হিসাব…')} options={accountOptions(accounts.data?.data, lang)} onChange={e => set({ accountId: e.target.value })} />}
                   </td>
-                  <td data-label={t('Description', 'বিবরণ')}><Input value={l.description} onChange={e => set({ description: e.target.value })} placeholder={item?.name ?? ''} /></td>
+                  <td data-label={t('Description', 'বিবরণ')}><Input value={l.description} onChange={e => set({ description: e.target.value })} placeholder={item ? nameOf(item, lang) : ''} /></td>
                   <td data-label={t('Qty', 'পরিমাণ')}><Input type="number" min="0" step="any" value={l.quantity} onChange={e => set({ quantity: e.target.value })} /></td>
                   <td data-label={t('Rate', 'দর')}><Input type="number" min="0" step="any" value={l.unitPrice} onChange={e => set({ unitPrice: e.target.value })} /></td>
                   <td className="num line-amount" data-label={t('Amount', 'টাকা')}><Money v={Number(l.quantity || 0) * Number(l.unitPrice || 0)} /></td>
@@ -243,10 +243,10 @@ export function BillDrawer({ onClose, expense }: { onClose: () => void; expense?
               return (
                 <tr key={i}>
                   <td>
-                    <Select value={l.itemId} placeholder={t('— Expense (no item) —', '— খরচ (পণ্য নয়) —')} options={(items.data?.data ?? []).filter(x => x.active && x.category !== 'PRODUCE').map(x => ({ value: x.id, label: `${nameOf(x, lang)} (${x.unit})` }))}
+                    <Select value={l.itemId} placeholder={t('— Expense (no item) —', '— খরচ (পণ্য নয়) —')} options={(items.data?.data ?? []).filter(x => x.active && x.category !== 'PRODUCE').map(x => ({ value: x.id, label: `${nameOf(x, lang)} (${unitLabel(t, x.unit)})` }))}
                       onChange={e => { const it = items.data?.data.find(x => x.id === e.target.value); set({ itemId: e.target.value, unitPrice: it?.purchasePrice ? String(it.purchasePrice) : l.unitPrice }); }} />
                     {(!l.itemId || (item && !(item.trackInventory && item.valued) && !item.expenseAccountId)) && <Select className="mt-6" value={l.accountId} placeholder={t('Expense account…', 'খরচের হিসাব…')} options={expenseAccounts} onChange={e => set({ accountId: e.target.value })} />}
-                    {item?.trackInventory && item.valued && <small className="muted">{t('Adds to stock', 'মজুদে যোগ হবে')} · {item.qtyOnHand} {item.unit}</small>}
+                    {item?.trackInventory && item.valued && <small className="muted">{t('Adds to stock', 'মজুদে যোগ হবে')} · {fmtNum(item.qtyOnHand, lang, 3)} {unitLabel(t, item.unit)}</small>}
                   </td>
                   <td data-label={t('Description', 'বিবরণ')}><Input value={l.description} onChange={e => set({ description: e.target.value })} /></td>
                   <td data-label={t('Qty', 'পরিমাণ')}><Input type="number" min="0" step="any" value={l.quantity} onChange={e => set({ quantity: e.target.value })} /></td>
@@ -351,12 +351,12 @@ export function ProductionDrawer({ onClose }: { onClose: () => void }) {
       <div className="form-grid">
         <Field label={t('Date', 'তারিখ')}><Input type="date" value={f.date} onChange={e => setF({ ...f, date: e.target.value })} /></Field>
         <Field label={t('Flock', 'ঝাঁক')} hint={flock ? t(`${flock.currentCount} birds`, `${flock.currentCount}টি পাখি`) : undefined}><Select value={f.flockId} onChange={e => setF({ ...f, flockId: e.target.value })} options={active.map(x => ({ value: x.id, label: `${x.code} · ${x.name}` }))} /></Field>
-        <Field label={t('Eggs collected', 'সংগৃহীত ডিম')} hint={rate !== null ? t(`Laying rate ${rate.toFixed(1)}%`, `ডিম পাড়ার হার ${rate.toFixed(1)}%`) : undefined}><Input type="number" min="0" autoFocus value={f.eggsCollected} onChange={e => setF({ ...f, eggsCollected: e.target.value })} /></Field>
+        <Field label={t('Eggs collected', 'সংগৃহীত ডিম')} hint={rate !== null ? t(`Laying rate ${fmtPct(rate, lang)}`, `ডিম পাড়ার হার ${fmtPct(rate, lang)}`) : undefined}><Input type="number" min="0" autoFocus value={f.eggsCollected} onChange={e => setF({ ...f, eggsCollected: e.target.value })} /></Field>
         <Field label={t('Broken / rejected', 'ভাঙা / বাতিল')}><Input type="number" min="0" value={f.eggsBroken} onChange={e => setF({ ...f, eggsBroken: e.target.value })} /></Field>
         <Field label={t('Mortality', 'মৃত্যু')}><Input type="number" min="0" value={f.mortality} onChange={e => setF({ ...f, mortality: e.target.value })} /></Field>
         <Field label={t('Culled / sold birds', 'বাছাই / বিক্রি পাখি')}><Input type="number" min="0" value={f.culled} onChange={e => setF({ ...f, culled: e.target.value })} /></Field>
-        <Field label={t('Feed item', 'খাদ্য')} hint={feed ? t(`In stock: ${feed.qtyOnHand} ${feed.unit}`, `মজুদ: ${feed.qtyOnHand} ${feed.unit}`) : undefined}><Select value={f.feedItemId} onChange={e => setF({ ...f, feedItemId: e.target.value })} options={feeds.map(x => ({ value: x.id, label: nameOf(x, lang) }))} placeholder={t('— none —', '— নেই —')} /></Field>
-        <Field label={t(`Feed used${feed ? ` (${feed.unit})` : ''}`, `ব্যবহৃত খাদ্য${feed ? ` (${feed.unit})` : ''}`)} hint={feed && Number(f.feedQty) > 0 ? t(`≈ ${fmtMoney(Number(f.feedQty) * feed.avgCost, lang)} cost`, `≈ ${fmtMoney(Number(f.feedQty) * feed.avgCost, lang)} খরচ`) : undefined}><Input type="number" min="0" step="any" value={f.feedQty} onChange={e => setF({ ...f, feedQty: e.target.value })} /></Field>
+        <Field label={t('Feed item', 'খাদ্য')} hint={feed ? t(`In stock: ${fmtNum(feed.qtyOnHand, lang, 3)} ${unitLabel(t, feed.unit)}`, `মজুদ: ${fmtNum(feed.qtyOnHand, lang, 3)} ${unitLabel(t, feed.unit)}`) : undefined}><Select value={f.feedItemId} onChange={e => setF({ ...f, feedItemId: e.target.value })} options={feeds.map(x => ({ value: x.id, label: nameOf(x, lang) }))} placeholder={t('— none —', '— নেই —')} /></Field>
+        <Field label={t(`Feed used${feed ? ` (${unitLabel(t, feed.unit)})` : ''}`, `ব্যবহৃত খাদ্য${feed ? ` (${unitLabel(t, feed.unit)})` : ''}`)} hint={feed && Number(f.feedQty) > 0 ? t(`≈ ${fmtMoney(Number(f.feedQty) * feed.avgCost, lang)} cost`, `≈ ${fmtMoney(Number(f.feedQty) * feed.avgCost, lang)} খরচ`) : undefined}><Input type="number" min="0" step="any" value={f.feedQty} onChange={e => setF({ ...f, feedQty: e.target.value })} /></Field>
         <Field label={t('Notes', 'নোট')} className="full"><textarea className="textarea" value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} /></Field>
       </div>
     </Drawer>

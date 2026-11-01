@@ -66,7 +66,14 @@ export const categoryLabel = (t: Ctx['t'], s: string) => ({
   PRODUCE: t('Farm produce', 'খামার উৎপাদন'), FEED: t('Feed', 'খাদ্য'), MEDICINE: t('Medicine', 'ওষুধ'), LIVESTOCK: t('Livestock', 'পশুপাখি'), SUPPLY: t('Supplies', 'সরবরাহ'), SERVICE: t('Service', 'সেবা'),
 } as Record<string, string>)[s] ?? s;
 
-export const moveLabel = (t: Ctx['t'], s: string) => ({
+/** Units are free text on an item; the common ones are translated, anything else is shown as typed. */
+export const unitLabel = (t: Ctx['t'], u: string) => ({
+  kg: t('kg', 'কেজি'), g: t('g', 'গ্রাম'), pcs: t('pcs', 'পিস'), piece: t('piece', 'পিস'), litre: t('litre', 'লিটার'), liter: t('litre', 'লিটার'), l: t('litre', 'লিটার'), ml: t('ml', 'মিলি'),
+  pack: t('pack', 'প্যাকেট'), unit: t('unit', 'একক'), vial: t('vial', 'ভায়াল'), head: t('head', 'টি'), bag: t('bag', 'বস্তা'), dozen: t('dozen', 'ডজন'),
+  tray: t('tray', 'ট্রে'), bottle: t('bottle', 'বোতল'), box: t('box', 'বাক্স'),
+} as Record<string, string>)[u.trim().toLowerCase()] ?? u;
+
+export const moveLabel =(t: Ctx['t'], s: string) => ({
   OPENING: t('Opening stock', 'প্রারম্ভিক মজুদ'), PURCHASE: t('Purchase', 'ক্রয়'), SALE: t('Sale', 'বিক্রয়'), PRODUCTION: t('Production', 'উৎপাদন'),
   CONSUMPTION: t('Consumed', 'ব্যবহৃত'), ADJUSTMENT: t('Adjustment', 'সমন্বয়'), GIFT: t('Gift / donation', 'উপহার / দান'), WASTE: t('Waste / loss', 'নষ্ট / ক্ষতি'), MORTALITY: t('Mortality', 'মৃত্যু'),
 } as Record<string, string>)[s] ?? s;

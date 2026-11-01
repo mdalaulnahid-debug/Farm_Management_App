@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { BarChart3, BookCheck, CalendarClock, Download, Egg, Landmark, Package, Printer, Scale, Waves } from 'lucide-react';
-import { usePrefs } from '../lib/i18n';
+import { nameOf, unitLabel, usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtMoney, fmtNum, fmtPct, ymd } from '../lib/format';
@@ -91,7 +91,6 @@ function Statement({ title, period, children, onCsv }: { title: string; period: 
   );
 }
 
-const nm = (l: Line, lang: string) => (lang === 'bn' && l.nameBn ? l.nameBn : l.name);
 
 function ProfitLoss({ range, projectId, projectLabel }: { range: Range; projectId: string; projectLabel: string }) {
   const { t, lang } = usePrefs();
@@ -110,7 +109,7 @@ function ProfitLoss({ range, projectId, projectLabel }: { range: Range; projectI
     return (
       <>
         <tr className="subtotal"><td colSpan={4}>{label}</td></tr>
-        {lines.map(l => { rows.push([label, `${l.code} ${l.name}`, l.amount, prevOf(key, l.id), '']); return <tr key={l.id} className="indent"><td>{l.code} · {nm(l, lang)}</td><td className="num"><Money v={l.amount} /></td><td className="num muted"><Money v={prevOf(key, l.id)} /></td><td className="num muted">{change(l.amount, prevOf(key, l.id))}</td></tr>; })}
+        {lines.map(l => { rows.push([label, `${l.code} ${l.name}`, l.amount, prevOf(key, l.id), '']); return <tr key={l.id} className="indent"><td>{l.code} · {nameOf(l, lang)}</td><td className="num"><Money v={l.amount} /></td><td className="num muted"><Money v={prevOf(key, l.id)} /></td><td className="num muted">{change(l.amount, prevOf(key, l.id))}</td></tr>; })}
         {!lines.length && <tr className="indent"><td className="muted" colSpan={4}>{t('None', 'নেই')}</td></tr>}
         <tr><td><b>{totalLabel}</b></td><td className="num"><b><Money v={s.total} /></b></td><td className="num muted"><Money v={(p[key] as Section).total} /></td><td className="num muted">{change(s.total, (p[key] as Section).total)}</td></tr>
       </>
@@ -153,7 +152,7 @@ function BalanceSheet({ asOf }: { asOf: string }) {
   const sec = (s: Section, label: string, totalLabel: string) => (
     <>
       <tr className="subtotal"><td colSpan={2}>{label}</td></tr>
-      {s.lines.map(l => { csv.push([label, `${l.code ?? ''} ${l.name}`.trim(), l.amount]); return <tr key={l.id} className="indent"><td>{l.code ? `${l.code} · ` : ''}{nm(l, lang)}</td><td className="num"><Money v={l.amount} /></td></tr>; })}
+      {s.lines.map(l => { csv.push([label, `${l.code ?? ''} ${l.name}`.trim(), l.amount]); return <tr key={l.id} className="indent"><td>{l.code ? `${l.code} · ` : ''}{nameOf(l, lang)}</td><td className="num"><Money v={l.amount} /></td></tr>; })}
       {!s.lines.length && <tr className="indent"><td className="muted" colSpan={2}>{t('None', 'নেই')}</td></tr>}
       <tr><td><b>{totalLabel}</b></td><td className="num"><b><Money v={s.total} /></b></td></tr>
     </>
@@ -221,7 +220,7 @@ function TrialBalance({ asOf }: { asOf: string }) {
       <Statement title={t('Trial balance', 'রেওয়ামিল')} period={t(`As of ${fmtDate(tb.asOf, lang)}`, `${fmtDate(tb.asOf, lang)} তারিখে`)} onCsv={() => downloadCsv(`trial-balance_${tb.asOf}.csv`, ['Code', 'Account', 'Type', 'Debit', 'Credit'], tb.lines.map((l: any) => [l.code, l.name, l.type, l.debitBalance, l.creditBalance]))}>
         <table className="table">
           <thead><tr><th>{t('Code', 'কোড')}</th><th>{t('Account', 'হিসাব')}</th><th className="num">{t('Debit', 'ডেবিট')}</th><th className="num">{t('Credit', 'ক্রেডিট')}</th></tr></thead>
-          <tbody>{tb.lines.map((l: any) => <tr key={l.id}><td className="mono">{l.code}</td><td>{nm(l, lang)}</td><td className="num">{l.debitBalance ? <Money v={l.debitBalance} /> : ''}</td><td className="num">{l.creditBalance ? <Money v={l.creditBalance} /> : ''}</td></tr>)}</tbody>
+          <tbody>{tb.lines.map((l: any) => <tr key={l.id}><td className="mono">{l.code}</td><td>{nameOf(l, lang)}</td><td className="num">{l.debitBalance ? <Money v={l.debitBalance} /> : ''}</td><td className="num">{l.creditBalance ? <Money v={l.creditBalance} /> : ''}</td></tr>)}</tbody>
           <tfoot><tr><td colSpan={2}>{t('Total', 'মোট')}</td><td className="num"><Money v={tb.totalDebit} /></td><td className="num"><Money v={tb.totalCredit} /></td></tr></tfoot>
         </table>
       </Statement>
@@ -266,7 +265,7 @@ function InventoryValuation() {
       onCsv={() => downloadCsv(`inventory_${ymd()}.csv`, ['SKU', 'Item', 'Category', 'Qty', 'Unit', 'Avg cost', 'Value'], v.rows.map((r: any) => [r.sku, r.name, r.category, r.qtyOnHand, r.unit, r.avgCost, r.value]))}>
       <table className="table">
         <thead><tr><th>SKU</th><th>{t('Item', 'পণ্য')}</th><th className="num">{t('On hand', 'হাতে')}</th><th className="num">{t('Avg cost', 'গড় মূল্য')}</th><th className="num">{t('Value', 'মূল্য')}</th></tr></thead>
-        <tbody>{v.rows.map((r: any) => <tr key={r.id}><td className="mono">{r.sku}</td><td>{lang === 'bn' && r.nameBn ? r.nameBn : r.name}{!r.valued && <span className="muted small"> · {t('quantity only', 'শুধু পরিমাণ')}</span>}</td><td className="num">{fmtNum(r.qtyOnHand, lang)} {r.unit}</td><td className="num">{r.valued ? <Money v={r.avgCost} decimals={2} /> : '—'}</td><td className="num"><Money v={r.value} /></td></tr>)}</tbody>
+        <tbody>{v.rows.map((r: any) => <tr key={r.id}><td className="mono">{r.sku}</td><td>{nameOf(r, lang)}{!r.valued && <span className="muted small"> · {t('quantity only', 'শুধু পরিমাণ')}</span>}</td><td className="num">{fmtNum(r.qtyOnHand, lang)} {unitLabel(t, r.unit)}</td><td className="num">{r.valued ? <Money v={r.avgCost} decimals={2} /> : '—'}</td><td className="num"><Money v={r.value} /></td></tr>)}</tbody>
         <tfoot><tr><td colSpan={4}>{t('Total inventory value', 'মোট মজুদ মূল্য')}</td><td className="num"><Money v={v.totalValue} /></td></tr></tfoot>
       </table>
     </Statement>

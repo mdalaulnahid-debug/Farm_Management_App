@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { BookOpen, ChevronDown, ChevronRight, Download, Lock, Pencil, Plus, Scale, Trash2 } from 'lucide-react';
-import { accountTypeLabel, usePrefs } from '../lib/i18n';
+import { accountTypeLabel, nameOf, usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useAccounts, useApi, useParties, useSave } from '../lib/hooks';
 import type { Account, List } from '../lib/api';
@@ -110,7 +110,7 @@ function ChartOfAccounts({ onEdit }: { onEdit: (a: AccountRow) => void }) {
                         <td className="mono">{a.code}</td>
                         <td>
                           <div className="row" style={{ gap: 6 }}>
-                            <span style={{ fontWeight: 550 }}>{lang === 'bn' && a.nameBn ? a.nameBn : a.name}</span>
+                            <span style={{ fontWeight: 550 }}>{nameOf(a, lang)}</span>
                             {a.system && <Badge><Lock size={11} />{t('System', 'সিস্টেম')}</Badge>}
                             {!a.active && <Badge tone="red">{t('Inactive', 'নিষ্ক্রিয়')}</Badge>}
                           </div>
@@ -200,7 +200,7 @@ function LedgerDrawer({ account, onClose }: { account: AccountRow; onClose: () =
   const d = gl.data;
   const dr = round2((d?.lines ?? []).reduce((s, l) => s + l.debit, 0));
   const cr = round2((d?.lines ?? []).reduce((s, l) => s + l.credit, 0));
-  const name = lang === 'bn' && account.nameBn ? account.nameBn : account.name;
+  const name = nameOf(account, lang);
   const exportCsv = () => d && downloadCsv(`ledger_${account.code}_${range.from}_${range.to}.csv`, ['Date', 'Entry', 'Source', 'Memo', 'Party', 'Debit', 'Credit', 'Balance'], [
     [range.from, '', '', 'Opening balance', '', '', '', d.opening],
     ...d.lines.map(l => [l.date, l.number, l.sourceType, l.memo, l.party ?? '', l.debit || '', l.credit || '', l.balance]),
