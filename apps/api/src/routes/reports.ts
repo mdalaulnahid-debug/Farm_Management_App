@@ -55,6 +55,16 @@ export default async function reportRoutes(app: FastifyInstance) {
     return unusualActivity(from, to);
   });
 
+  app.get('/audit', { preHandler: can('audit.view') }, async req => {
+    const q = parse(z.object({ entity: z.string().optional(), search: z.string().optional(), page: z.coerce.number().int().min(1).default(1) }), req.query);
+    const where = { ...(q.entity ? { entity: q.entity } : {}), ...(q.search ? { summary: { contains: q.search } } : {}) };
+    const [data, total] = await Promise.all([
+      prisma.auditLog.findMany({ where, include: { user: { select: { name: true, email: true } } }, orderBy: { createdAt: 'desc' }, skip: (q.page - 1) * 100, take: 100 }),
+      prisma.auditLog.count({ where }),
+    ]);
+    return { data, total };
+  });
+
   // Is the audit trail intact? Seals new rows, recomputes the chain and compares it with the newest backup.
   // After a restore, older backups legitimately hold history the restored database does not, so only a
   // backup taken after the latest restore is compared.
@@ -64,15 +74,5 @@ export default async function reportRoutes(app: FastifyInstance) {
     const candidates = isSqlite() ? listBackups().filter(b => !restoredAt || new Date(b.createdAt) > restoredAt) : [];
     const report = await verifyAuditChain(prisma, candidates[0] ? backupPath(candidates[0].name) : null);
     return { ...report, restoredAt: restoredAt?.toISOString() ?? null };
-  });
-
-  app.get('/audit', { preHandler: can('audit.view') }, async req => {
-    const q = parse(z.object({ entity: z.string().optional(), search: z.string().optional(), page: z.coerce.number().int().min(1).default(1) }), req.query);
-    const where = { ...(q.entity ? { entity: q.entity } : {}), ...(q.search ? { summary: { contains: q.search } } : {}) };
-    const [data, total] = await Promise.all([
-      prisma.auditLog.findMany({ where, include: { user: { select: { name: true, email: true } } }, orderBy: { createdAt: 'desc' }, skip: (q.page - 1) * 100, take: 100 }),
-      prisma.auditLog.count({ where }),
-    ]);
-    return { data, total };
   });
 }
