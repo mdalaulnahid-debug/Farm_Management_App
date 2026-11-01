@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { BarChart3, Egg, Leaf, ShieldCheck, Wallet } from 'lucide-react';
+import { Leaf } from 'lucide-react';
+import landscape from '../assets/river-landscape.svg';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { usePrefs } from '../lib/i18n';
+import { nameOf, usePrefs } from '../lib/i18n';
 import { Alert, Field, Input } from '../components/ui';
 
 export default function Login() {
@@ -14,7 +15,7 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [brand, setBrand] = useState<{ name: string; nameBn: string | null } | null>(null);
   useEffect(() => { api.get<{ name: string; nameBn: string | null }>('/auth/brand').then(setBrand).catch(() => {}); }, []);
-  const farm = brand ? (lang === 'bn' && brand.nameBn ? brand.nameBn : brand.name) : '';
+  const farm = brand ? nameOf(brand, lang) : '';
   const farmOther = brand?.nameBn ? (lang === 'bn' ? brand.name : brand.nameBn) : '';
   useEffect(() => { if (farm) document.title = `${farm} · FarmLedger`; }, [farm]);
   const submit = async (e: FormEvent) => {
@@ -25,28 +26,24 @@ export default function Login() {
   return (
     <div className="auth-page">
       <section className="auth-hero">
-        <div className="brand" style={{ padding: 0 }}><span className="brand-mark" style={{ background: '#d9f99d', color: '#0f5132' }}><Leaf size={19} /></span><div><b style={{ fontSize: '1.15em', display: 'block' }}>{farm || 'FarmLedger ERP'}</b>{farm && <small style={{ color: '#c4dfcc', maxWidth: 'none', whiteSpace: 'normal' }}>{farmOther ? `${farmOther} · ` : ''}FarmLedger ERP</small>}</div></div>
-        <div>
-          <h1>{t('Run the whole farm business from one ledger.', 'পুরো খামার ব্যবসা এক খাতায় পরিচালনা করুন।')}</h1>
-          <p>{t('Sales, purchases, cash, inventory, daily production and full double-entry accounting — with real profit & loss, balance sheet and cash flow.', 'বিক্রয়, ক্রয়, নগদ, মজুদ, দৈনিক উৎপাদন ও সম্পূর্ণ দ্বৈত-দাখিলা হিসাব — প্রকৃত লাভ-ক্ষতি, ব্যালান্স শিট ও নগদ প্রবাহসহ।')}</p>
-          <ul>
-            <li><Egg size={18} />{t('Daily production, laying rate & feed cost per egg', 'দৈনিক উৎপাদন, ডিম পাড়ার হার ও প্রতি ডিমে খাদ্য খরচ')}</li>
-            <li><Wallet size={18} />{t('Receivables, payables and cash reconciliation', 'পাওনা, দেনা ও নগদ মিলকরণ')}</li>
-            <li><BarChart3 size={18} />{t('Financial statements straight from the ledger', 'খাতা থেকে সরাসরি আর্থিক বিবরণী')}</li>
-            <li><ShieldCheck size={18} />{t('Role-based access and a full audit trail', 'ভূমিকাভিত্তিক প্রবেশাধিকার ও সম্পূর্ণ অডিট ট্রেইল')}</li>
-          </ul>
+        <div className="auth-crest">
+          <span className="brand-mark"><Leaf size={20} /></span>
+          <div><small>{farmOther || 'FarmLedger ERP'}</small><b>{farm || 'FarmLedger ERP'}</b></div>
         </div>
-        <small style={{ color: '#9cc7aa' }}>© {new Date().getFullYear()} {brand?.name ?? 'FarmLedger'} · FarmLedger ERP</small>
+        <div className="auth-title">
+          <h1>{lang === 'bn' ? <>খামারের প্রতিটি <em>ডিম</em>,<br />প্রতিটি টাকা।</> : <>Every <em>egg</em>,<br />every taka.</>}</h1>
+          <p>{t('Sales, feed, flocks, cash and accounts for the farm — kept in one ledger.', 'বিক্রয়, খাদ্য, ঝাঁক, নগদ ও হিসাব — খামারের সবকিছু এক খাতায়।')}</p>
+        </div>
+        <img className="auth-landscape" src={landscape} alt="" />
       </section>
       <section className="auth-form">
         <form onSubmit={submit} method="post" name="login">
-          {brand && <div className="farm-title"><span className="brand-mark"><Leaf size={19} /></span><div><b>{farm}</b>{farmOther && <small>{farmOther}</small>}</div></div>}
           <div className="row between"><h1>{t('Sign in', 'সাইন ইন')}</h1><button type="button" className="btn ghost sm" onClick={() => set({ lang: lang === 'en' ? 'bn' : 'en' })}>{lang === 'en' ? 'বাংলা' : 'English'}</button></div>
-          <p className="muted" style={{ margin: 0 }}>{t('Use the account your farm administrator created for you.', 'খামারের প্রশাসক আপনার জন্য যে অ্যাকাউন্ট তৈরি করেছেন তা ব্যবহার করুন।')}</p>
+          <p className="muted auth-hint">{t('Use the account your farm administrator created for you.', 'খামারের প্রশাসক আপনার জন্য যে অ্যাকাউন্ট তৈরি করেছেন তা ব্যবহার করুন।')}</p>
           {error && <Alert tone="error">{error}</Alert>}
           <Field label={t('Email', 'ইমেইল')}><Input type="email" id="email" name="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} autoFocus /></Field>
           <Field label={t('Password', 'পাসওয়ার্ড')}><Input type="password" id="password" name="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></Field>
-          <button className="btn primary" style={{ height: 42 }} disabled={busy}>{busy ? t('Signing in…', 'সাইন ইন হচ্ছে…') : t('Sign in', 'সাইন ইন')}</button>
+          <button className="btn primary auth-submit" disabled={busy}>{busy ? t('Signing in…', 'সাইন ইন হচ্ছে…') : t('Sign in', 'সাইন ইন')}</button>
         </form>
       </section>
     </div>
