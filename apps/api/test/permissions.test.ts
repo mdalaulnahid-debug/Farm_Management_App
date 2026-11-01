@@ -49,17 +49,23 @@ const ROUTES: Row[] = [
   row('GET', '/sites', 'signed-in'),
   row('GET', '/cash-accounts', 'signed-in'),
   row('GET', '/projects', 'signed-in'),
+  // Your own sign-ins (PR #21)
+  row('GET', '/auth/sessions', 'signed-in'),
+  row('POST', '/auth/sessions/end-others', 'signed-in'),
+  row('POST', '/auth/sessions/:id/end', 'signed-in'),
   // Users and roles
   row('GET', '/roles', need('users.manage')),
   row('PUT', '/roles/:id', need('users.manage')),
   row('GET', '/users', need('users.manage')),
   row('POST', '/users', need('users.manage')),
+  row('POST', '/users/:id/sign-out', need('users.manage')),
   row('PUT', '/users/:id', need('users.manage')),
   // Organization settings, backups, imports, side projects
   row('PUT', '/settings', need('settings.manage')),
   row('PUT', '/settings/lock-date', need('settings.manage')),
   row('GET', '/admin/backup', need('settings.manage')),
   row('GET', '/admin/backups', need('settings.manage')),
+  row('POST', '/admin/backups/:name/check', need('settings.manage')),
   row('POST', '/admin/backups', need('settings.manage')),
   row('GET', '/admin/backups/:name', need('settings.manage')),
   row('POST', '/import/workbook/preview', need('settings.manage')),
@@ -129,6 +135,8 @@ const ROUTES: Row[] = [
   row('GET', '/reports/trial-balance', need('reports.view')),
   row('GET', '/reports/cash-flow', need('reports.view')),
   row('GET', '/reports/activity', need('audit.view')),
+  row('GET', '/reports/books-health', need('audit.view')),
+  row('GET', '/audit/integrity', need('audit.view')),
   row('GET', '/audit', need('audit.view')),
 ];
 
