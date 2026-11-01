@@ -1,5 +1,5 @@
 // Shared UI kit. Pages compose these; styling lives in styles.css.
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode, type InputHTMLAttributes, type SelectHTMLAttributes } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type CSSProperties, type ReactNode, type InputHTMLAttributes, type SelectHTMLAttributes } from 'react';
 import { AlertTriangle, CheckCircle2, Inbox, Info, Loader2, Search, X, XCircle } from 'lucide-react';
 import { useT, statusLabel } from '../lib/i18n';
 import { iso10, monthEnd, monthStart, ymd } from '../lib/format';
@@ -30,9 +30,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 export const useToast = () => useContext(ToastContext);
 
 // ───── Layout primitives ─────
-export function PageHeader({ title, subtitle, crumb, actions }: { title: string; subtitle?: string; crumb?: string; actions?: ReactNode }) {
+/** `photo` turns the header into a photo band (styles.css › .page-head.photo); `tall` is the dashboard's larger banner. */
+export function PageHeader({ title, subtitle, crumb, actions, photo, photoPos, tall }: { title: string; subtitle?: string; crumb?: string; actions?: ReactNode; photo?: string; photoPos?: string; tall?: boolean }) {
+  const style = photo ? ({ '--photo': `url(${photo})`, '--photo-pos': photoPos ?? 'center' } as CSSProperties) : undefined;
   return (
-    <div className="page-head">
+    <div className={`page-head${photo ? ' photo' : ''}${tall ? ' tall' : ''}`} style={style}>
       <div>{crumb && <div className="crumb">{crumb}</div>}<h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>
       {actions && <div className="page-actions">{actions}</div>}
     </div>
@@ -109,6 +111,15 @@ export function Segmented<T extends string>({ value, onChange, options }: { valu
   return <div className="segmented" role="tablist">{options.map(o => <button key={o.value} type="button" className={o.value === value ? 'on' : ''} onClick={() => onChange(o.value)}>{o.label}</button>)}</div>;
 }
 
+/** On/off control; `label` is read out and shown next to the switch. */
+export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} className={`switch ${checked ? 'on' : ''}`} onClick={() => onChange(!checked)}>
+      <i aria-hidden="true" /><span>{label}</span>
+    </button>
+  );
+}
+
 export function Tabs<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[] }) {
   return <div className="tabs" role="tablist">{options.map(o => <button key={o.value} type="button" role="tab" aria-selected={o.value === value} className={o.value === value ? 'on' : ''} onClick={() => onChange(o.value)}>{o.label}</button>)}</div>;
 }
@@ -178,10 +189,10 @@ export function VoidDialog({ what, onClose, onConfirm, busy }: { what: string; o
   return (
     <Dialog title={t(`Void ${what}`, `${what} বাতিল`)} onClose={onClose} footer={<>
       <button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল করুন')}</button>
-      <button className="btn danger" disabled={reason.trim().length < 3 || busy} onClick={() => onConfirm(reason.trim())}>{t('Void', 'বাতিল')}</button>
+      <button className="btn danger" disabled={reason.trim().length < 10 || busy} onClick={() => onConfirm(reason.trim())}>{t('Void', 'বাতিল')}</button>
     </>}>
       <Alert tone="warn">{t('Voiding keeps the record for audit and posts a reversing entry. Stock and balances are restored.', 'বাতিল করলে রেকর্ডটি অডিটের জন্য থাকবে এবং বিপরীত এন্ট্রি হবে। মজুদ ও স্থিতি আগের অবস্থায় ফিরবে।')}</Alert>
-      <Field label={t('Reason', 'কারণ')}><textarea className="textarea" autoFocus value={reason} onChange={e => setReason(e.target.value)} /></Field>
+      <Field label={t('Reason', 'কারণ')} hint={t('Say clearly why (at least 10 characters). The owner sees every void.', 'কেন তা পরিষ্কার লিখুন (কমপক্ষে ১০ অক্ষর)। মালিক প্রতিটি বাতিল দেখেন।')}><textarea className="textarea" autoFocus value={reason} onChange={e => setReason(e.target.value)} /></Field>
     </Dialog>
   );
 }

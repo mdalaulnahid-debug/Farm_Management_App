@@ -10,7 +10,8 @@ export async function nextNumber(db: Db, prefix: string, width = 6) {
   return `${prefix}-${String(seq.next - 1).padStart(width, '0')}`;
 }
 
-export interface Actor { id: string; ip?: string }
+/** Who is acting. `mayBackdate`: may post or void beyond the recent-days window (owner, accountant). */
+export interface Actor { id: string; ip?: string; mayBackdate?: boolean }
 
 export async function audit(db: Db, actor: Actor | null, action: string, entity: string, entityId: string | null, summary: string, data?: unknown) {
   await db.auditLog.create({

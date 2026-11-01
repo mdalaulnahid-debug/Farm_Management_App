@@ -1,9 +1,9 @@
 // The general ledger. Every financial event in the system ends up here as a balanced
 // journal entry; reports are computed exclusively from journal lines.
 import type { Db } from '../db.js';
-import { badRequest, conflict } from '../lib/errors.js';
+import { badRequest, conflict, forbidden } from '../lib/errors.js';
 import { money, round2, isZero } from '../lib/money.js';
-import { ymd } from '../lib/dates.js';
+import { addDays, toDate, today, ymd } from '../lib/dates.js';
 import { nextNumber, type Actor } from './common.js';
 
 export interface LineInput {
@@ -54,9 +54,30 @@ export async function assertOpenPeriod(db: Db, date: Date) {
   }
 }
 
+/** How far back staff may date (or void) a record. Older dates need someone who can close the books. */
+export const backdateDays = () => {
+  const n = Number.parseInt(process.env.BACKDATE_DAYS ?? '', 10);
+  return Number.isFinite(n) && n >= 0 ? n : 7;
+};
+
+/**
+ * Staff may only work on recent dates: no quietly adding or voiding last month's records, and no
+ * future dates. The owner and accountant (`mayBackdate`) are not limited; system work (actor null) neither.
+ */
+export function assertRecentDate(actor: Actor | null, date: Date) {
+  if (!actor || actor.mayBackdate) return;
+  const now = toDate(today());
+  const days = backdateDays();
+  if (date.getTime() < addDays(now, -days).getTime()) {
+    throw forbidden(`Records more than ${days} days old can only be added or voided by the owner or accountant. Ask them to do it.`);
+  }
+  if (date.getTime() > addDays(now, 1).getTime()) throw badRequest('That date is in the future.');
+}
+
 /** Merge, round and validate lines, then post the entry. Throws if unbalanced. */
 export async function postEntry(db: Db, actor: Actor | null, input: EntryInput) {
   await assertOpenPeriod(db, input.date);
+  assertRecentDate(actor, input.date);
   const lines = input.lines
     .map(l => ({ ...l, debit: money(l.debit), credit: money(l.credit) }))
     .map(l => {

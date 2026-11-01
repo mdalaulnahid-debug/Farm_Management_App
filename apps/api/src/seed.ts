@@ -98,5 +98,5 @@ async function importOctober(adminId: string) {
   const file = existsSync(dir) ? readdirSync(dir).find(f => f.toLowerCase().endsWith('.xlsx')) : undefined;
   if (!file) return;
   const parsed = parseWorkbook(readFileSync(join(dir, file)));
-  await tx(db => importWorkbook(db, { id: adminId }, parsed, { replaceExisting: false, fileName: file }), 180_000);
+  await tx(db => importWorkbook(db, { id: adminId, mayBackdate: true }, parsed, { replaceExisting: false, fileName: file }), 180_000);
 }

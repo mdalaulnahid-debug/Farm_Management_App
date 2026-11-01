@@ -7,6 +7,8 @@ import type { Party } from '../lib/api';
 import { downloadCsv, fmtDate, fmtMoney } from '../lib/format';
 import { Alert, Badge, Card, DataTable, Drawer, Empty, Field, Input, Loading, PageHeader, SearchBox, Segmented, Select, StatusBadge, type Column } from '../components/ui';
 import { Money, PaymentDrawer } from '../components/forms';
+import eggBasket from '../assets/photos/egg-basket.webp';
+import feedStore from '../assets/photos/feed-store.webp';
 
 type Kind = 'CUSTOMER' | 'SUPPLIER';
 type PartyRow = Party & { receivable: number; payable: number };
@@ -52,7 +54,7 @@ export default function Parties({ kind }: { kind: Kind }) {
 
   return (
     <>
-      <PageHeader crumb={isCust ? t('Sales', 'বিক্রয়') : t('Purchases', 'ক্রয়')} title={isCust ? t('Customers', 'ক্রেতা') : t('Suppliers', 'সরবরাহকারী')}
+      <PageHeader photo={isCust ? eggBasket : feedStore} photoPos="center 55%" crumb={isCust ? t('Sales', 'বিক্রয়') : t('Purchases', 'ক্রয়')} title={isCust ? t('Customers', 'ক্রেতা') : t('Suppliers', 'সরবরাহকারী')}
         subtitle={isCust ? t('Everyone you sell to, what they owe you and their full history.', 'যাদের কাছে বিক্রি করেন, তাদের কাছে পাওনা ও সম্পূর্ণ লেনদেনের ইতিহাস।') : t('Everyone you buy from, what you owe them and their full history.', 'যাদের কাছ থেকে কেনেন, তাদের কাছে দেনা ও সম্পূর্ণ লেনদেনের ইতিহাস।')}
         actions={<>
           <button className="btn" onClick={exportCsv} disabled={!rows.length}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>

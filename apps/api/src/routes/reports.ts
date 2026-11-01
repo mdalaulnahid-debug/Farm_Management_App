@@ -2,9 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { parse, zDate } from '../lib/validate.js';
-import { endOf, today } from '../lib/dates.js';
+import { addDays, endOf, today, toDate, ymd } from '../lib/dates.js';
 import { can } from '../auth/auth.js';
 import * as R from '../services/reports.js';
+import { unusualActivity } from '../services/activity.js';
 
 const monthStart = () => `${today().slice(0, 8)}01`;
 const range = z.object({ from: z.string().optional(), to: z.string().optional(), projectId: z.string().optional() });
@@ -42,6 +43,14 @@ export default async function reportRoutes(app: FastifyInstance) {
   app.get('/reports/production', { preHandler: can('production.view') }, async req => {
     const { from, to } = resolve(req.query);
     return R.productionSummary(from, to);
+  });
+
+  // What an insider would do to hide theft, for the owner to look over (default: the last 7 days).
+  app.get('/reports/activity', { preHandler: can('audit.view') }, async req => {
+    const r = parse(range, req.query);
+    const to = r.to ? ymd(parse(zDate, r.to)) : today();
+    const from = r.from ? ymd(parse(zDate, r.from)) : ymd(addDays(toDate(to), -6));
+    return unusualActivity(from, to);
   });
 
   app.get('/audit', { preHandler: can('audit.view') }, async req => {

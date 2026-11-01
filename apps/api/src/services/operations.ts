@@ -4,7 +4,7 @@ import type { Db } from '../db.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { money, num, qty as q3, round2 } from '../lib/money.js';
 import { SYS } from '../lib/constants.js';
-import { accountBalance, accountId, postEntry, reverseEntry } from './ledger.js';
+import { accountBalance, accountId, assertRecentDate, postEntry, reverseEntry } from './ledger.js';
 import { issueStock, receiveStock, reverseStockForSource } from './inventory.js';
 import { audit, type Actor } from './common.js';
 
@@ -25,6 +25,7 @@ export interface ProductionInput {
 }
 
 export async function recordProduction(db: Db, actor: Actor | null, input: ProductionInput) {
+  assertRecentDate(actor, input.date); // also when no journal is posted (eggs only)
   const flock = await db.flock.findUnique({ where: { id: input.flockId } });
   if (!flock || flock.status !== 'ACTIVE') throw badRequest('Choose an active flock.');
   const collected = Math.trunc(input.eggsCollected || 0);
@@ -79,6 +80,7 @@ export async function voidProduction(db: Db, actor: Actor | null, id: string, re
   const log = await db.productionLog.findUnique({ where: { id } });
   if (!log) throw notFound('Production record');
   if (log.status === 'VOID') throw conflict('Already void.');
+  assertRecentDate(actor, log.date);
   await reverseStockForSource(db, 'PRODUCTION', id);
   if (log.journalEntryId) await reverseEntry(db, actor, log.journalEntryId, reason);
   const lost = log.mortality + log.culled;
@@ -100,6 +102,7 @@ export interface AdjustmentInput {
 }
 
 export async function adjustStock(db: Db, actor: Actor | null, input: AdjustmentInput) {
+  assertRecentDate(actor, input.date); // also for items carried at zero value, which post no journal
   const item = await db.item.findUnique({ where: { id: input.itemId } });
   if (!item || !item.trackInventory) throw badRequest('Choose a stock-tracked item.');
   let type = input.type;

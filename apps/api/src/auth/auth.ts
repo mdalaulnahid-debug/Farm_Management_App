@@ -71,7 +71,8 @@ export async function loadUser(req: FastifyRequest) {
   };
 }
 
-export const actorOf = (req: FastifyRequest) => (req.user ? { id: req.user.id, ip: req.ip } : null);
+export const actorOf = (req: FastifyRequest) =>
+  (req.user ? { id: req.user.id, ip: req.ip, mayBackdate: req.user.permissions.includes('settings.manage') } : null);
 
 /**
  * Route guard: `preHandler: can('sales.create')`. Server-side authorization on every operation.
