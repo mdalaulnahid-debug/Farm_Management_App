@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Leaf } from 'lucide-react';
-import landscape from '../assets/river-landscape.svg';
+import dawn from '../assets/signin-dawn.webp';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { nameOf, usePrefs } from '../lib/i18n';
@@ -34,7 +34,7 @@ export default function Login() {
           <h1>{lang === 'bn' ? <><em>মাটির</em> যত্নে,<br />হিসাবের সততায়।</> : <>Rooted in the <em>land</em>,<br />run with integrity.</>}</h1>
           <p>{t('The farm’s sales, flocks, stock and accounts, kept in one place.', 'খামারের বিক্রয়, ঝাঁক, মজুদ ও হিসাব — এক জায়গায়।')}</p>
         </div>
-        <img className="auth-landscape" src={landscape} alt="" />
+        <img className="auth-photo" src={dawn} alt="" />
       </section>
       <section className="auth-form">
         <form onSubmit={submit} method="post" name="login">
