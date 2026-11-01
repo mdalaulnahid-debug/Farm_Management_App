@@ -403,7 +403,7 @@ const entityLabel = (t: T, e: string) => ({
 const actionLabel = (t: T, a: string) => ({ create: t('Created', 'তৈরি'), update: t('Updated', 'হালনাগাদ'), void: t('Voided', 'বাতিল'), login: t('Signed in', 'সাইন ইন'), login_failed: t('Failed sign-in', 'ব্যর্থ সাইন ইন') } as Record<string, string>)[a] ?? a;
 const actionTone = (a: string) => (({ create: 'green', update: 'blue', void: 'red', login_failed: 'amber' } as const) as Record<string, 'green' | 'blue' | 'red' | 'amber'>)[a];
 
-interface ChainReport { ok: boolean; sealed: number; unsealed: number; headCode: string | null; firstBreak: { seq: number; at: string; summary: string; problem: 'edited' | 'missing' } | null; backup: { file: string; compared: number; mismatched: number; firstMismatchSeq: number | null } | null }
+interface ChainReport { ok: boolean; sealed: number; unsealed: number; headCode: string | null; restoredAt: string | null; firstBreak: { seq: number; at: string; summary: string; problem: 'edited' | 'missing' } | null; backup: { file: string; compared: number; mismatched: number; firstMismatchSeq: number | null; error?: string } | null }
 
 /** Is the audit trail intact? Every row is chained to the one before; edits and deletions break the chain. */
 function AuditIntegrity() {
@@ -411,11 +411,15 @@ function AuditIntegrity() {
   const q = useApi<ChainReport>('/audit/integrity');
   const r = q.data;
   if (!r) return null;
-  if (r.ok) return (
+  const backupWarning = r.backup?.error
+    ? <Alert tone="warn">{t(`The newest backup could not be read for comparison (${r.backup.error}). Take a new backup with “Back up now”.`, `তুলনার জন্য সর্বশেষ ব্যাকআপ পড়া যায়নি (${r.backup.error})। “এখনই ব্যাকআপ নিন” দিয়ে নতুন ব্যাকআপ নিন।`)}</Alert>
+    : null;
+  if (r.ok) return (<>
+    {backupWarning}
     <Alert>{t(
       `Audit trail intact: ${r.sealed} entries chained${r.backup?.compared ? `, and the ${r.backup.compared} in the newest backup are unchanged` : ''}. Check code ${r.headCode ?? '—'}: note it with today’s date; an older code you noted should never stop matching its backup.`,
       `অডিট ট্রেইল অক্ষত: ${fmtNum(r.sealed, lang, 0)}টি এন্ট্রি শৃঙ্খলিত${r.backup?.compared ? `, এবং সর্বশেষ ব্যাকআপের ${fmtNum(r.backup.compared, lang, 0)}টি অপরিবর্তিত` : ''}। যাচাই কোড ${r.headCode ?? '—'}: আজকের তারিখসহ লিখে রাখুন।`)}</Alert>
-  );
+  </>);
   return (
     <Alert tone="error">{t('The audit trail has been tampered with. ', 'অডিট ট্রেইলে কারসাজি হয়েছে। ')}
       {r.firstBreak && (r.firstBreak.problem === 'edited'

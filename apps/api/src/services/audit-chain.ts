@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type Prisma } from '@prisma/client';
 import type { Db } from '../db.js';
 
 interface Row { id: string; seq: number | null; hash: string | null; createdAt: Date; userId: string | null; ip: string | null; action: string; entity: string; entityId: string | null; summary: string; data: string | null }
@@ -31,11 +31,18 @@ export function sealAudit(db: Db): Promise<number> {
       for (;;) {
         const rows = await db.auditLog.findMany({ where: { seq: null }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: BATCH });
         if (!rows.length) break;
+        // One short transaction per batch: one disk write instead of one per row, and users wait at most a moment.
+        const sealed: { id: string; seq: number; hash: string }[] = [];
         for (const r of rows) {
           seq++;
           prev = rowHash(prev, seq, r);
-          await db.auditLog.update({ where: { id: r.id }, data: { seq, hash: prev } });
+          sealed.push({ id: r.id, seq, hash: prev });
         }
+        const write = async (tx: Prisma.TransactionClient | Db) => {
+          for (const s of sealed) await tx.auditLog.update({ where: { id: s.id }, data: { seq: s.seq, hash: s.hash } });
+        };
+        if ('$transaction' in db) await db.$transaction(tx => write(tx), { timeout: 60_000 });
+        else await write(db);
         total += rows.length;
       }
     } finally {
@@ -55,7 +62,7 @@ export interface ChainReport {
   /** A short code for the newest sealed row; write it down now and then to compare later. */
   headCode: string | null;
   /** Comparison with a backup taken earlier: every row it holds must still be here, unchanged. */
-  backup: { file: string; compared: number; mismatched: number; firstMismatchSeq: number | null } | null;
+  backup: { file: string; compared: number; mismatched: number; firstMismatchSeq: number | null; error?: string } | null;
 }
 
 /** Recompute the chain from the start and, if given, compare it with a backup's chain. Read-only. */
@@ -86,9 +93,12 @@ export async function verifyAuditChain(db: Db, backupFile?: string | null): Prom
       const ours = new Map((await db.auditLog.findMany({ where: { seq: { lte: theirs.at(-1)?.seq ?? 0 } }, select: { seq: true, hash: true } })).map(r => [r.seq, r.hash]));
       const bad = theirs.filter(t => ours.get(t.seq) !== t.hash);
       report.backup = { file: backupFile, compared: theirs.length, mismatched: bad.length, firstMismatchSeq: bad[0]?.seq ?? null };
-    } catch {
-      // A backup from before sealing existed has no chain columns: nothing to compare.
-      report.backup = { file: backupFile, compared: 0, mismatched: 0, firstMismatchSeq: null };
+    } catch (e) {
+      const message = (e as Error).message;
+      // A backup from before sealing existed has no chain columns: nothing to compare. Anything else
+      // (damaged, locked, unreadable) is reported, never silently treated as "compared, fine".
+      const noChain = /no such column|does not exist|P2022/i.test(message) || (e as { code?: string }).code === 'P2022';
+      report.backup = { file: backupFile, compared: 0, mismatched: 0, firstMismatchSeq: null, ...(noChain ? {} : { error: message.split('\n').filter(Boolean).pop() ?? 'unreadable' }) };
     } finally {
       await other.$disconnect();
     }

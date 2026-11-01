@@ -56,10 +56,14 @@ export default async function reportRoutes(app: FastifyInstance) {
   });
 
   // Is the audit trail intact? Seals new rows, recomputes the chain and compares it with the newest backup.
+  // After a restore, older backups legitimately hold history the restored database does not, so only a
+  // backup taken after the latest restore is compared.
   app.get('/audit/integrity', { preHandler: can('audit.view') }, async () => {
     await sealAudit(prisma);
-    const newest = isSqlite() ? listBackups()[0] : undefined;
-    return verifyAuditChain(prisma, newest ? backupPath(newest.name) : null);
+    const restoredAt = (await prisma.auditLog.findFirst({ where: { action: 'restore' }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }))?.createdAt;
+    const candidates = isSqlite() ? listBackups().filter(b => !restoredAt || new Date(b.createdAt) > restoredAt) : [];
+    const report = await verifyAuditChain(prisma, candidates[0] ? backupPath(candidates[0].name) : null);
+    return { ...report, restoredAt: restoredAt?.toISOString() ?? null };
   });
 
   app.get('/audit', { preHandler: can('audit.view') }, async req => {

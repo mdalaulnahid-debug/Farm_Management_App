@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '@prisma/client';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildApp } from '../src/server.js';
@@ -12,6 +12,9 @@ import { seed } from '../src/seed.js';
 import { prisma } from '../src/db.js';
 import { audit } from '../src/services/common.js';
 import { rowHash, sealAudit, verifyAuditChain } from '../src/services/audit-chain.js';
+import { backupPath, listBackups, runBackup } from '../src/services/backup.js';
+
+const quiet = { info: () => {}, error: () => {} };
 
 let app: FastifyInstance;
 let cookie = '';
@@ -129,6 +132,39 @@ describe('integrity on the Audit trail screen', () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/audit/integrity', headers: { cookie } });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: true, unsealed: 0 });
+  });
+
+  it('after a restore, only backups taken after it are compared (no false alarm)', async () => {
+    const backups = join(dir, 'route-backups');
+    process.env.BACKUP_DIR = backups;
+    try {
+      // A backup that knows rows the "restored" database will not have.
+      await audit(prisma, null, 'create', 'test', null, 'Will be lost by the restore');
+      await runBackup('manual', quiet);
+      const lost = await prisma.auditLog.findFirstOrThrow({ where: { summary: 'Will be lost by the restore' } });
+      await new Promise(r => setTimeout(r, 1100));
+      // Simulate the restore inside a transaction we roll back: the newer rows are gone, a restore row is written.
+      let report: any;
+      await prisma.$transaction(async tx => {
+        await tx.auditLog.deleteMany({ where: { seq: { gte: lost.seq! } } });
+        await tx.auditLog.create({ data: { action: 'restore', entity: 'settings', summary: 'Database restored from an older backup' } });
+        const restoredAt = new Date();
+        const comparable = listBackups().filter(b => new Date(b.createdAt) > restoredAt);
+        report = await verifyAuditChain(tx, comparable[0] ? backupPath(comparable[0].name) : null);
+        throw new Error('rollback');
+      }, { timeout: 60_000 }).catch(e => { if ((e as Error).message !== 'rollback') throw e; });
+      expect(report.ok).toBe(true);
+      expect(report.backup).toBeNull();
+    } finally {
+      delete process.env.BACKUP_DIR;
+    }
+  });
+
+  it('an unreadable newest backup is reported, not silently skipped', async () => {
+    const bad = join(dir, 'unreadable.db');
+    writeFileSync(bad, 'garbage '.repeat(500));
+    const r = await verifyAuditChain(prisma, bad);
+    expect(r.backup!.error).toBeTruthy();
   });
 
   it('needs the audit permission', async () => {
