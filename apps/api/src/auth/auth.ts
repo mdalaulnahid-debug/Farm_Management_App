@@ -61,7 +61,8 @@ export async function loadUser(req: FastifyRequest) {
   if (!session || session.expiresAt < new Date() || !session.user.active) return;
   req.sessionId = session.id;
   if (!session.lastSeenAt || Date.now() - session.lastSeenAt.getTime() > SEEN_EVERY_MS) {
-    await prisma.session.updateMany({ where: { id: session.id }, data: { lastSeenAt: new Date() } });
+    // Best effort: a busy database must never turn an ordinary request into an error.
+    await prisma.session.updateMany({ where: { id: session.id }, data: { lastSeenAt: new Date() } }).catch(() => undefined);
   }
   const u = session.user;
   req.user = {

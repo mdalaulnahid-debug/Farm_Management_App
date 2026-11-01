@@ -76,10 +76,12 @@ export default async function authRoutes(app: FastifyInstance) {
 
   app.post('/auth/sessions/:id/end', { preHandler: can() }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const ended = await prisma.session.deleteMany({ where: { id, userId: req.user!.id } });
-    if (!ended.count) throw notFound('Sign-in');
+    const session = await prisma.session.findFirst({ where: { id, userId: req.user!.id } });
+    if (!session) throw notFound('Sign-in');
+    await prisma.session.deleteMany({ where: { id, userId: req.user!.id } });
     if (id === req.sessionId) reply.clearCookie(SESSION_COOKIE, { path: '/' });
-    await audit(prisma, actorOf(req), 'update', 'user', req.user!.id, 'Signed out one device');
+    await audit(prisma, actorOf(req), 'update', 'user', req.user!.id,
+      `Signed out one device (signed in ${session.createdAt.toISOString().slice(0, 16).replace('T', ' ')} from ${session.ip ?? 'unknown address'}, ${(session.userAgent ?? 'unknown browser').slice(0, 80)})`);
     return { ok: true };
   });
 
@@ -135,6 +137,7 @@ export default async function authRoutes(app: FastifyInstance) {
     const user = await prisma.user.findUnique({ where: { id }, include: { role: true } });
     if (!user) throw notFound('User');
     if (user.role.key === 'owner' && !isOwner(req)) throw forbidden('Only the owner can change an owner account.');
+    if (id === req.user!.id) throw conflict('Use My account → Where you are signed in to sign yourself out.');
     const ended = await prisma.session.deleteMany({ where: { userId: id } });
     await audit(prisma, actorOf(req), 'update', 'user', id, `Signed out ${user.email} everywhere (${ended.count} device${ended.count === 1 ? '' : 's'})`);
     return { ended: ended.count };

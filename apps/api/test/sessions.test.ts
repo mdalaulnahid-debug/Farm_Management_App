@@ -99,6 +99,21 @@ describe('your own sign-ins', () => {
     expect(await alive(d.laptop)).toBe(false);
   });
 
+  it('someone still on a temporary password cannot list or end sign-ins', async () => {
+    const viewer = await prisma.role.findUniqueOrThrow({ where: { key: 'viewer' } });
+    expect((await call('POST', '/users', ownerCookie, { name: 'New Person', email: 'devices-temp@test.local', roleId: viewer.id, password: 'TempOnly2026' })).status).toBe(200);
+    const c = await signIn('devices-temp@test.local', 'TempOnly2026');
+    expect((await call('GET', '/auth/sessions', c)).status).toBe(403);
+    expect((await call('POST', '/auth/sessions/end-others', c)).status).toBe(403);
+  });
+
+  it('records which device was signed out', async () => {
+    const d = await staffWithDevices('devices-audit@test.local');
+    const phone = (await call('GET', '/auth/sessions', d.pc)).body.data.find((s: any) => s.userAgent.includes('Android'));
+    expect((await call('POST', `/auth/sessions/${phone.id}/end`, d.pc)).status).toBe(200);
+    expect(await prisma.auditLog.findFirst({ where: { summary: { contains: 'Android' }, AND: { summary: { contains: 'Signed out one device' } } } })).not.toBeNull();
+  });
+
   it('records when each sign-in was last used', async () => {
     const d = await staffWithDevices('devices-seen@test.local');
     await call('GET', '/auth/me', d.phone);
@@ -119,6 +134,22 @@ describe('owner signs a user out everywhere', () => {
     for (const c of [d.pc, d.phone, d.laptop]) expect(await alive(c)).toBe(false);
     expect((await call('GET', '/users', ownerCookie)).body.data.find((u: any) => u.id === user.id).activeSessions).toBe(0);
     expect(await prisma.auditLog.findFirst({ where: { entityId: user.id, summary: { contains: 'Signed out devices-admin@test.local everywhere' } } })).not.toBeNull();
+  });
+
+  it('a user admin who is not the owner cannot sign the owner out', async () => {
+    const role = await prisma.role.create({ data: { key: 'sessions-user-admin', name: 'User admin', permissions: JSON.stringify(['dashboard.view', 'users.manage']) } });
+    expect((await call('POST', '/users', ownerCookie, { name: 'Office Admin', email: 'sessions-admin@test.local', roleId: role.id, password: 'AdminTemp2026' })).status).toBe(200);
+    const admin = await signIn('sessions-admin@test.local', 'AdminTemp2026');
+    expect((await call('POST', '/auth/change-password', admin, { current: 'AdminTemp2026', next: 'AdminOwn2026' })).status).toBe(200);
+    const owner = await prisma.user.findUniqueOrThrow({ where: { email: 'owner@test.local' } });
+    expect((await call('POST', `/users/${owner.id}/sign-out`, admin)).status).toBe(403);
+    expect(await alive(ownerCookie)).toBe(true);
+  });
+
+  it('the admin button is not for your own account', async () => {
+    const owner = await prisma.user.findUniqueOrThrow({ where: { email: 'owner@test.local' } });
+    expect((await call('POST', `/users/${owner.id}/sign-out`, ownerCookie)).status).toBe(409);
+    expect(await alive(ownerCookie)).toBe(true);
   });
 
   it('needs the right to manage users', async () => {
