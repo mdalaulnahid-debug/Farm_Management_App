@@ -31,8 +31,8 @@ export default function Login() {
           <div><small>{farmOther || 'FarmLedger ERP'}</small><b>{farm || 'FarmLedger ERP'}</b></div>
         </div>
         <div className="auth-title">
-          <h1>{lang === 'bn' ? <>খামারের প্রতিটি <em>ডিম</em>,<br />প্রতিটি টাকা।</> : <>Every <em>egg</em>,<br />every taka.</>}</h1>
-          <p>{t('Sales, feed, flocks, cash and accounts for the farm — kept in one ledger.', 'বিক্রয়, খাদ্য, ঝাঁক, নগদ ও হিসাব — খামারের সবকিছু এক খাতায়।')}</p>
+          <h1>{lang === 'bn' ? <><em>মাটির</em> যত্নে,<br />হিসাবের সততায়।</> : <>Rooted in the <em>land</em>,<br />run with integrity.</>}</h1>
+          <p>{t('The farm’s sales, flocks, stock and accounts, kept in one place.', 'খামারের বিক্রয়, ঝাঁক, মজুদ ও হিসাব — এক জায়গায়।')}</p>
         </div>
         <img className="auth-landscape" src={landscape} alt="" />
       </section>
