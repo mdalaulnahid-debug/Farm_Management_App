@@ -446,6 +446,10 @@ table.table { width: 100%; border-collapse: collapse; }
   .overlay { position: static; background: none; display: block; }
   .drawer { width: 100%; height: auto; box-shadow: none; }
   .drawer-foot, .drawer-head .btn { display: none; }
+  /* Photo headers print as plain black titles (browsers drop background images when printing). */
+  .page-head.photo { background: none; color: #000; min-height: 0; padding: 0; box-shadow: none; animation: none; }
+  .page-head.photo::before { display: none; }
+  .page-head.photo h1, .page-head.photo p, .page-head.photo .crumb { color: #000; }
 }
 
 /* Farm name: sidebar, sign-in page and printed letterheads */
