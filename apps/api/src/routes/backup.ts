@@ -8,7 +8,7 @@ import { audit } from '../services/common.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { today } from '../lib/dates.js';
 import { actorOf, can } from '../auth/auth.js';
-import { BACKUP_NAME, backupDir, backupPath, copyDir, isSqlite, keepDays, listBackups, runBackup } from '../services/backup.js';
+import { BACKUP_NAME, backupDir, backupPath, checkBackup, copyDir, isSqlite, keepDays, listBackups, runBackup } from '../services/backup.js';
 
 const sqliteOnly = () => {
   if (!isSqlite()) throw badRequest('Backups for PostgreSQL are taken with pg_dump / your hosting provider.');
@@ -41,8 +41,21 @@ export default async function backupRoutes(app: FastifyInstance) {
   app.post('/admin/backups', { preHandler: can('settings.manage') }, async req => {
     sqliteOnly();
     const b = await runBackup('manual', req.log);
-    await audit(prisma, actorOf(req), 'backup', 'settings', b.name, `Took a manual database backup ${b.name}`);
+    await audit(prisma, actorOf(req), 'backup', 'settings', b.name, `Took a manual database backup ${b.name}${b.check.ok ? ' (checked OK)' : ` that FAILED its check: ${b.check.problems.join(' ')}`}`);
     return b;
+  });
+
+  // Restore drill: open a backup on its own and check it would work as the farm's database.
+  app.post('/admin/backups/:name/check', { preHandler: can('settings.manage') }, async req => {
+    sqliteOnly();
+    const r = z.object({ name: z.string().max(64).regex(BACKUP_NAME) }).safeParse(req.params);
+    if (!r.success) throw badRequest('That is not a backup file name.');
+    const file = backupPath(r.data.name);
+    if (!file) throw notFound('Backup file');
+    const check = await checkBackup(file);
+    await audit(prisma, actorOf(req), 'backup', 'settings', r.data.name,
+      `Checked backup ${r.data.name}: ${check.ok ? `OK (${check.counts.journalEntries} journal entries, books balance)` : `FAILED: ${check.problems.join(' ')}`}`);
+    return check;
   });
 
   app.get('/admin/backups/:name', { preHandler: can('settings.manage') }, async (req, reply) => {

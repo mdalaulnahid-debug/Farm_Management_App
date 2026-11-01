@@ -93,12 +93,16 @@ Settings in `apps/api/.env` (all optional; restart FarmLedger after changing the
 
 PostgreSQL installs don't use these files; use `pg_dump` or the hosting provider's backups.
 
+**Every backup is checked.** Right after each backup (automatic or *Back up now*) FarmLedger opens the copy on its own and checks it: the file is not damaged (SQLite integrity check), it is really the farm's database (organization and users), and the books balance (total debits = total credits). The audit trail says "checked OK" or why it failed. The **Check** button next to any backup in the list runs the same restore test again, e.g. on an old backup, and records it in the audit trail.
+
 **Restore a backup:**
 
-1. Stop FarmLedger (close its window).
-2. In `apps/api/prisma/`, move the current `farmledger.db` somewhere safe (don't delete it yet).
-3. Copy the backup file you want into `apps/api/prisma/` and rename it to `farmledger.db`.
+1. On the Backup card, click **Check** on the backup you want; it must say OK.
+2. Stop FarmLedger (close its window).
+3. Double-click **`restore-backup.bat`**, type the backup's file name, then type `RESTORE` (or run `npm run db:restore -w apps/api -- <file name>`). It refuses while FarmLedger is still running, checks the backup again, saves the current database as `farmledger-before-restore-<date>.db` in the backup folder (never deleted automatically), puts the backup in place and records the restore in the audit trail.
 4. Start FarmLedger again (`start-farmledger.bat`) and check that the latest records are there.
+
+**Practise once (restore drill).** Do this once now and after any move to a new computer: on a spare PC (or the new VM), install FarmLedger, copy a recent backup into its backup folder, run `restore-backup.bat` and sign in. If you can see last week's sales, your backups work.
 
 ## Develop
 

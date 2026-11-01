@@ -2,10 +2,12 @@
 // Infrastructure, not business logic: it reads the whole database with VACUUM INTO and writes files,
 // so it uses the shared prisma client directly instead of a caller's transaction.
 import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
+import { PrismaClient } from '@prisma/client';
 import { prisma } from '../db.js';
+import { isZero, num, round2 } from '../lib/money.js';
 import { audit } from './common.js';
 
 export const BACKUP_NAME = /^farmledger-(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})\.db$/;
@@ -61,8 +63,99 @@ export function backupPath(name: string) {
   return existsSync(file) ? file : null;
 }
 
-/** Take a consistent copy of the database now. A second backup in the same minute replaces the first. */
-export async function runBackup(kind: 'auto' | 'manual', log: Log = consoleLog): Promise<BackupItem> {
+export interface BackupCheck {
+  ok: boolean;
+  problems: string[];
+  /** Total debits minus total credits over every journal line; zero when the books balance. */
+  difference: number;
+  balanced: boolean;
+  counts: { users: number; journalEntries: number; invoices: number; bills: number; payments: number; auditRows: number };
+  /** Time of the newest audit-trail row: the backup holds work up to about then. */
+  newestRecordAt: string | null;
+  size: number;
+}
+
+/** A separate, short-lived connection to another SQLite file; never the live database's client. */
+const openFile = (file: string) => new PrismaClient({ datasources: { db: { url: `file:${resolve(file).replace(/\\/g, '/')}` } } });
+
+/**
+ * The restore drill: open a backup file on its own and check it would work as the farm's database.
+ * Not damaged (SQLite integrity check), really FarmLedger (organization and users), and the books
+ * balance. Only reads; a missing file is reported, never created.
+ */
+export async function checkBackup(file: string): Promise<BackupCheck> {
+  const result: BackupCheck = {
+    ok: false, problems: [], difference: 0, balanced: false, newestRecordAt: null, size: 0,
+    counts: { users: 0, journalEntries: 0, invoices: 0, bills: 0, payments: 0, auditRows: 0 },
+  };
+  if (!existsSync(file)) {
+    result.problems.push('The backup file does not exist.');
+    return result;
+  }
+  result.size = statSync(file).size;
+  const db = openFile(file);
+  try {
+    const integrity = await db.$queryRawUnsafe<{ integrity_check: string }[]>('PRAGMA integrity_check');
+    const verdict = integrity.map(r => r.integrity_check).join('; ');
+    if (verdict !== 'ok') result.problems.push(`The file is damaged (${verdict.slice(0, 200)}).`);
+    const [org, users, journalEntries, invoices, bills, payments, auditRows, sums, newest] = await Promise.all([
+      db.organization.findUnique({ where: { id: 'org' }, select: { id: true } }),
+      db.user.count(), db.journalEntry.count(), db.salesInvoice.count(), db.bill.count(), db.payment.count(), db.auditLog.count(),
+      db.journalLine.aggregate({ _sum: { debit: true, credit: true } }),
+      db.auditLog.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+    ]);
+    result.counts = { users, journalEntries, invoices, bills, payments, auditRows };
+    if (!org) result.problems.push('It has no farm organization; it is not a FarmLedger database.');
+    if (!users) result.problems.push('It has no users, so nobody could sign in.');
+    result.difference = round2(num(sums._sum.debit) - num(sums._sum.credit));
+    result.balanced = isZero(result.difference);
+    if (!result.balanced) result.problems.push(`The books do not balance: debits and credits differ by ${result.difference}.`);
+    result.newestRecordAt = newest?.createdAt.toISOString() ?? null;
+  } catch (e) {
+    result.problems.push(`It could not be read as a FarmLedger database: ${(e as Error).message.split('\n').filter(Boolean).pop()}`);
+  } finally {
+    await db.$disconnect();
+  }
+  result.ok = result.problems.length === 0;
+  return result;
+}
+
+/**
+ * Replace the database file with a backup. FarmLedger must be stopped first. The backup is checked
+ * before anything changes; the database being replaced is first saved as
+ * farmledger-before-restore-<date>.db in `safetyDir`, which automatic pruning never deletes.
+ */
+export async function restoreDatabase(opts: { backupFile: string; dbFile: string; safetyDir: string }) {
+  const check = await checkBackup(opts.backupFile);
+  if (!check.ok) throw new Error(`Backup not restored: ${check.problems.join(' ')}`);
+  let safetyCopy: string | null = null;
+  if (existsSync(opts.dbFile)) {
+    mkdirSync(opts.safetyDir, { recursive: true });
+    const now = new Date();
+    safetyCopy = join(opts.safetyDir, `farmledger-before-restore-${localDay(now)}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.db`);
+    copyFileSync(opts.dbFile, safetyCopy);
+  }
+  // Copy next to the target first, so the swap itself is a single rename.
+  const temp = `${opts.dbFile}.restoring`;
+  copyFileSync(opts.backupFile, temp);
+  for (const extra of ['-journal', '-wal', '-shm']) rmSync(`${opts.dbFile}${extra}`, { force: true });
+  renameSync(temp, opts.dbFile);
+  const after = await checkBackup(opts.dbFile);
+  if (!after.ok) throw new Error(`The restored database failed its check: ${after.problems.join(' ')} The previous database is saved as ${safetyCopy}.`);
+  const db = openFile(opts.dbFile);
+  try {
+    await db.auditLog.create({ data: {
+      action: 'restore', entity: 'settings', entityId: basename(opts.backupFile),
+      summary: `Database restored from ${basename(opts.backupFile)}${safetyCopy ? `; the database it replaced was saved as ${basename(safetyCopy)}` : ''}`,
+    } });
+  } finally {
+    await db.$disconnect();
+  }
+  return { check: after, safetyCopy };
+}
+
+/** Take a consistent copy of the database now, then check it. A second backup in the same minute replaces the first. */
+export async function runBackup(kind: 'auto' | 'manual', log: Log = consoleLog): Promise<BackupItem & { check: BackupCheck }> {
   if (!isSqlite()) throw new Error('Backups are only taken for SQLite installs.');
   const dir = backupDir();
   mkdirSync(dir, { recursive: true });
@@ -76,6 +169,8 @@ export async function runBackup(kind: 'auto' | 'manual', log: Log = consoleLog):
     rmSync(temp, { force: true });
   }
   log.info(`Database backup (${kind}) saved: ${join(dir, name)}`);
+  const check = await checkBackup(join(dir, name));
+  if (!check.ok) log.error(`Backup ${name} FAILED its check: ${check.problems.join(' ')}`);
   const extra = copyDir();
   if (extra) {
     try {
@@ -86,7 +181,7 @@ export async function runBackup(kind: 'auto' | 'manual', log: Log = consoleLog):
       log.error(`Could not copy the backup to BACKUP_COPY_DIR (${extra}): ${(e as Error).message}`);
     }
   }
-  return item(dir, name);
+  return { ...item(dir, name), check };
 }
 
 /**
@@ -125,7 +220,7 @@ export async function autoBackupIfDue(log: Log = consoleLog) {
     const prefix = `farmledger-${localDay(new Date())}-`;
     if (listBackups().some(b => b.name.startsWith(prefix))) return null;
     const b = await runBackup('auto', log);
-    await audit(prisma, null, 'backup', 'settings', b.name, `Automatic daily backup ${b.name}`);
+    await audit(prisma, null, 'backup', 'settings', b.name, `Automatic daily backup ${b.name}${b.check.ok ? ' (checked OK)' : ` FAILED its check: ${b.check.problems.join(' ')}`}`);
     pruneBackups(log);
     return b;
   } catch (e) {

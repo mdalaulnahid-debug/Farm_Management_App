@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth';
 import { useApi, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtDateTime, fmtNum, monthStart, ymd } from '../lib/format';
 import ImportData from './ImportData';
-import { Alert, Badge, Card, DataTable, Dialog, Drawer, Empty, Field, Input, Loading, PageHeader, SearchBox, Select, Tabs, type Column } from '../components/ui';
+import { Alert, Badge, Card, DataTable, Dialog, Drawer, Empty, Field, Input, Loading, PageHeader, SearchBox, Select, Tabs, useToast, type Column } from '../components/ui';
 
 type T = (en: string, bn: string) => string;
 type TabKey = 'users' | 'roles' | 'org' | 'close' | 'import' | 'audit';
@@ -243,12 +243,25 @@ function OrgTab() {
 }
 
 interface BackupFile { name: string; size: number; createdAt: string }
+interface BackupCheck { ok: boolean; problems: string[]; balanced: boolean; counts: { journalEntries: number; invoices: number; users: number }; newestRecordAt: string | null }
+
+/** Restore drill for one backup: opens it on the server and checks it would work as the farm's database. */
+function CheckBackupButton({ name }: { name: string }) {
+  const { t, lang } = usePrefs();
+  const check = useSave<void, BackupCheck>('post', `/admin/backups/${name}/check`);
+  const r = check.data;
+  if (r) return r.ok
+    ? <span title={r.newestRecordAt ? t(`Holds work up to ${fmtDateTime(r.newestRecordAt, lang)}`, `${fmtDateTime(r.newestRecordAt, lang)} পর্যন্ত কাজ আছে`) : undefined}><Badge tone="green">{t(`OK · ${r.counts.journalEntries} entries, books balance`, `ঠিক আছে · ${fmtNum(r.counts.journalEntries, lang, 0)} এন্ট্রি, হিসাব মেলে`)}</Badge></span>
+    : <span title={r.problems.join(' ')}><Badge tone="red">{t('Failed', 'ব্যর্থ')}: {r.problems[0]}</Badge></span>;
+  return <button className="btn ghost sm" disabled={check.isPending} onClick={() => check.mutate()}>{check.isPending ? t('Checking…', 'পরীক্ষা হচ্ছে…') : t('Check', 'পরীক্ষা')}</button>;
+}
 interface BackupList { data: BackupFile[]; dir: string; keepDays: number; copyDir: string | null }
 
 function BackupCard() {
   const { t, lang } = usePrefs();
   const q = useApi<BackupList>('/admin/backups');
-  const save = useSave<void, BackupFile>('post', '/admin/backups', t('Backup saved.', 'ব্যাকআপ সংরক্ষিত হয়েছে।'));
+  const save = useSave<void, BackupFile & { check: BackupCheck }>('post', '/admin/backups');
+  const toast = useToast();
   const size = (bytes: number) => `${fmtNum(bytes / 1_048_576, lang, 1)} ${t('MB', 'এমবি')}`;
   const newest = q.data?.data[0];
   const stale = q.data && (!newest || Date.now() - new Date(newest.createdAt).getTime() > 2 * 86_400_000);
@@ -256,12 +269,13 @@ function BackupCard() {
     { key: 'createdAt', label: t('Taken', 'সময়'), render: b => fmtDateTime(b.createdAt, lang) },
     { key: 'name', label: t('File', 'ফাইল'), render: b => <span className="mono">{b.name}</span>, hideSm: true },
     { key: 'size', label: t('Size', 'আকার'), render: b => size(b.size), num: true },
+    { key: 'check', label: t('Restore test', 'পুনরুদ্ধার পরীক্ষা'), render: b => <CheckBackupButton name={b.name} /> },
     { key: 'dl', label: t('Download', 'ডাউনলোড'), render: b => <a className="btn ghost sm" href={`/api/v1/admin/backups/${b.name}`} download aria-label={t('Download', 'ডাউনলোড')}><Download size={14} />{t('Download', 'ডাউনলোড')}</a> },
   ];
   return (
     <Card title={t('Backup', 'ব্যাকআপ')} subtitle={t('FarmLedger saves a copy of the database automatically once a day while it is running. Keep a copy off this computer too (USB drive or cloud storage).', 'FarmLedger চালু থাকলে প্রতিদিন একবার নিজে থেকেই ডাটাবেসের একটি কপি রাখে। একটি কপি এই কম্পিউটারের বাইরেও (ইউএসবি বা ক্লাউডে) রাখুন।')}
       actions={<>
-        <button className="btn primary" disabled={save.isPending || !!q.error} onClick={() => save.mutate()}>{t('Back up now', 'এখনই ব্যাকআপ নিন')}</button>
+        <button className="btn primary" disabled={save.isPending || !!q.error} onClick={() => save.mutate(undefined, { onSuccess: b => toast(b.check.ok ? t('Backup saved and checked: it can be restored.', 'ব্যাকআপ সংরক্ষিত ও পরীক্ষিত: এটি পুনরুদ্ধার করা যাবে।') : t(`Backup saved but FAILED its check: ${b.check.problems[0]}`, `ব্যাকআপ সংরক্ষিত কিন্তু পরীক্ষায় ব্যর্থ: ${b.check.problems[0]}`), b.check.ok ? undefined : 'error') })}>{t('Back up now', 'এখনই ব্যাকআপ নিন')}</button>
         <a className="btn" href="/api/v1/admin/backup" download><Download size={16} />{t('Download a fresh copy', 'নতুন কপি ডাউনলোড')}</a>
       </>}>
       <div className="card-body stack">
@@ -291,8 +305,9 @@ function BackupCard() {
       <div className="card-body small">
         <strong>{t('How to restore', 'কীভাবে পুনরুদ্ধার করবেন')}</strong>
         <ol className="muted">
+          <li>{t('Click “Check” on the backup you want: it must say OK.', 'যে ব্যাকআপ চান তার “পরীক্ষা” চাপুন: ঠিক আছে দেখাতে হবে।')}</li>
           <li>{t('Close FarmLedger on the farm computer.', 'খামারের কম্পিউটারে FarmLedger বন্ধ করুন।')}</li>
-          <li>{t('In apps/api/prisma, move the current farmledger.db somewhere safe, then put the backup file there and rename it to farmledger.db.', 'apps/api/prisma ফোল্ডারে বর্তমান farmledger.db ফাইলটি নিরাপদ জায়গায় সরিয়ে রাখুন, তারপর ব্যাকআপ ফাইলটি সেখানে রেখে নাম farmledger.db দিন।')}</li>
+          <li>{t('Double-click restore-backup.bat in the FarmLedger folder, type the backup’s file name, then type RESTORE. The current database is kept as a copy first.', 'FarmLedger ফোল্ডারে restore-backup.bat ডাবল-ক্লিক করুন, ব্যাকআপ ফাইলের নাম লিখুন, তারপর RESTORE লিখুন। আগে বর্তমান ডাটাবেসের একটি কপি রাখা হয়।')}</li>
           <li>{t('Start FarmLedger again and check the latest records.', 'আবার FarmLedger চালু করুন এবং সর্বশেষ হিসাবগুলো দেখে নিন।')}</li>
         </ol>
       </div>
