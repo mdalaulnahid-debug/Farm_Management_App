@@ -133,18 +133,26 @@ export async function restoreDatabase(opts: { backupFile: string; dbFile: string
     mkdirSync(opts.safetyDir, { recursive: true });
     const now = new Date();
     safetyCopy = join(opts.safetyDir, `farmledger-before-restore-${localDay(now)}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.db`);
-    copyFileSync(opts.dbFile, safetyCopy);
+    await safeCopy(opts.dbFile, safetyCopy);
   }
-  // Copy next to the target first, so the swap itself is a single rename.
+  // A leftover journal or write-ahead log means another program still has the database open.
+  const inUse = ['-journal', '-wal'].map(x => `${opts.dbFile}${x}`).filter(existsSync);
+  if (inUse.length) throw new Error(`Backup not restored: the database is still in use (${inUse.map(f => basename(f)).join(', ')} exists). Close FarmLedger and any database tool, then try again.`);
+  // Copy next to the target first, so the swap itself is a single rename; nothing is removed unless it succeeds.
   const temp = `${opts.dbFile}.restoring`;
   copyFileSync(opts.backupFile, temp);
-  for (const extra of ['-journal', '-wal', '-shm']) rmSync(`${opts.dbFile}${extra}`, { force: true });
-  renameSync(temp, opts.dbFile);
+  try {
+    renameSync(temp, opts.dbFile);
+  } catch (e) {
+    rmSync(temp, { force: true });
+    throw new Error(`Backup not restored: the database file could not be replaced (${(e as Error).message}). It is probably still open; close FarmLedger and try again. Nothing was changed.`);
+  }
+  rmSync(`${opts.dbFile}-shm`, { force: true });
   const after = await checkBackup(opts.dbFile);
   if (!after.ok) throw new Error(`The restored database failed its check: ${after.problems.join(' ')} The previous database is saved as ${safetyCopy}.`);
   const db = openFile(opts.dbFile);
   try {
-    await db.auditLog.create({ data: {
+    await db.auditLog.create({ select: { id: true }, data: {
       action: 'restore', entity: 'settings', entityId: basename(opts.backupFile),
       summary: `Database restored from ${basename(opts.backupFile)}${safetyCopy ? `; the database it replaced was saved as ${basename(safetyCopy)}` : ''}`,
     } });
@@ -152,6 +160,23 @@ export async function restoreDatabase(opts: { backupFile: string; dbFile: string
     await db.$disconnect();
   }
   return { check: after, safetyCopy };
+}
+
+/**
+ * Copy a database for safekeeping. Through SQLite when it can be opened (that also completes any write
+ * a crash left half-done, so the copy is complete); a raw copy of the file and its journal otherwise.
+ */
+async function safeCopy(file: string, to: string) {
+  const db = openFile(file);
+  try {
+    await db.$executeRawUnsafe(`VACUUM INTO '${to.replace(/'/g, "''")}'`);
+  } catch {
+    copyFileSync(file, to);
+    for (const x of ['-journal', '-wal']) if (existsSync(`${file}${x}`)) copyFileSync(`${file}${x}`, `${to}${x}`);
+  } finally {
+    await db.$disconnect();
+  }
+  if (!existsSync(to) || statSync(to).size === 0) throw new Error(`Backup not restored: the safety copy ${to} could not be made.`);
 }
 
 /** Take a consistent copy of the database now, then check it. A second backup in the same minute replaces the first. */
@@ -220,7 +245,13 @@ export async function autoBackupIfDue(log: Log = consoleLog) {
     const prefix = `farmledger-${localDay(new Date())}-`;
     if (listBackups().some(b => b.name.startsWith(prefix))) return null;
     const b = await runBackup('auto', log);
-    await audit(prisma, null, 'backup', 'settings', b.name, `Automatic daily backup ${b.name}${b.check.ok ? ' (checked OK)' : ` FAILED its check: ${b.check.problems.join(' ')}`}`);
+    if (!b.check.ok) {
+      // A backup that would not restore is no backup: remove it so the next hourly run tries again.
+      rmSync(join(backupDir(), b.name), { force: true });
+      await audit(prisma, null, 'backup', 'settings', b.name, `Automatic daily backup ${b.name} FAILED its check and was discarded (will retry): ${b.check.problems.join(' ')}`);
+      return null;
+    }
+    await audit(prisma, null, 'backup', 'settings', b.name, `Automatic daily backup ${b.name} (checked OK)`);
     pruneBackups(log);
     return b;
   } catch (e) {

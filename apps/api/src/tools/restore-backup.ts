@@ -11,8 +11,9 @@ import { backupDir, backupPath, checkBackup, isSqlite, listBackups, restoreDatab
 /** Is a FarmLedger server answering on this computer's port? Restoring under a running server would be lost or corrupt. */
 async function serverRunning() {
   try {
-    const res = await fetch(`http://127.0.0.1:${Number(process.env.PORT || 4000)}/api/v1/health`, { signal: AbortSignal.timeout(1500) });
-    return res.ok;
+    // Any answer at all counts as running.
+    await fetch(`http://127.0.0.1:${Number(process.env.PORT || 4000)}/api/v1/health`, { signal: AbortSignal.timeout(1500) });
+    return true;
   } catch {
     return false;
   }

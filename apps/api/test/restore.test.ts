@@ -107,6 +107,27 @@ describe('restoring', () => {
   });
 });
 
+describe('restoring while the database is in use', () => {
+  it('refuses while another program is in the middle of writing, and changes nothing', async () => {
+    const live = join(dir, 'live-busy.db');
+    copyFileSync(good, live);
+    const writer = open(live);
+    let outcome: unknown;
+    try {
+      await writer.$transaction(async tx => {
+        await tx.auditLog.create({ data: { action: 'create', entity: 'test', summary: 'half-written' } });
+        outcome = await restoreDatabase({ backupFile: good, dbFile: live, safetyDir: join(dir, 'safety-busy') }).catch(e => e);
+        throw new Error('rollback');
+      }, { timeout: 60_000 }).catch(e => { if ((e as Error).message !== 'rollback') throw e; });
+    } finally {
+      await writer.$disconnect();
+    }
+    expect(String(outcome)).toMatch(/not restored/i);
+    expect((await checkBackup(live)).ok).toBe(true);
+    expect(existsSync(`${live}.restoring`)).toBe(false);
+  }, 60_000);
+});
+
 describe('restore drill from the Backup card', () => {
   const check = (name: string, cookie = ownerCookie) => app.inject({ method: 'POST', url: `/api/v1/admin/backups/${name}/check`, headers: { cookie } });
 
