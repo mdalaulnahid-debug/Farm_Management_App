@@ -1,13 +1,18 @@
 // "Books health": the ledger's invariants, checked against the live data. Each check says whether two
-// independent views of the same money (or stock) agree. A failure means a bug or a direct edit of the
-// database file, never a normal user action. Read-only.
+// independent views of the same money (or stock) agree. An 'integrity' failure means a bug or a direct
+// edit of the database file. The stock-value check is a 'drift' check: it can also fail after a normal
+// void once the average cost has changed (known issue R2, roadmap P0-3). Read-only.
 import type { Db } from '../db.js';
 import { SYS } from '../lib/constants.js';
 import { isZero, num, round2 } from '../lib/money.js';
 
 export interface HealthCheck {
   key: string;
+  /** integrity: only a bug or tampering can break it. drift: normal voids can also move it (risk R2). */
+  kind: 'integrity' | 'drift';
   ok: boolean;
+  /** Allowed rounding difference. */
+  tolerance: number;
   /** What the ledger says and what the documents / stock records say; null when not a comparison. */
   ledger: number | null;
   records: number | null;
@@ -16,8 +21,6 @@ export interface HealthCheck {
   examples: string[];
 }
 
-/** Inventory values go through average costs kept to 4 decimals, so allow 1 taka of rounding. */
-const INVENTORY_TOLERANCE = 1;
 const DOCUMENT_SOURCES = ['INVOICE', 'BILL', 'PAYMENT'];
 
 /** Net debit − credit of POSTED lines on these accounts (void pairs are both VOID and cancel out anyway). */
@@ -28,8 +31,8 @@ async function postedNet(db: Db, accountIds: string[], extra: object = {}) {
 
 export async function booksHealth(db: Db) {
   const checks: HealthCheck[] = [];
-  const add = (key: string, ledger: number | null, records: number | null, difference: number, examples: string[] = [], tolerance = 0.005) =>
-    checks.push({ key, ok: Math.abs(difference) < tolerance && examples.length === 0, ledger, records, difference: round2(difference), examples: examples.slice(0, 10) });
+  const add = (key: string, ledger: number | null, records: number | null, difference: number, examples: string[] = [], tolerance = 0.005, kind: HealthCheck['kind'] = 'integrity') =>
+    checks.push({ key, kind, ok: Math.abs(difference) < tolerance && examples.length === 0, tolerance: round2(tolerance), ledger, records, difference: round2(difference), examples: examples.slice(0, 10) });
 
   // 1. Every journal entry balances on its own.
   const perEntry = await db.journalLine.groupBy({ by: ['entryId'], _sum: { debit: true, credit: true } });
@@ -86,7 +89,17 @@ export async function booksHealth(db: Db) {
   const inventoryAccounts = (await db.account.findMany({ where: { subtype: 'INVENTORY' }, select: { id: true } })).map(a => a.id);
   const stockValue = round2(items.filter(i => i.valued).reduce((s, i) => s + num(i.qtyOnHand) * num(i.avgCost), 0));
   const inventoryLedger = await postedNet(db, inventoryAccounts);
-  add('inventory_value', inventoryLedger, stockValue, inventoryLedger - stockValue, [], INVENTORY_TOLERANCE);
+  // Rounding allowance: average cost is kept to 4 decimals (half a unit of the 4th decimal per unit in
+  // stock) and every stock movement's value to 2 decimals (half a paisa each), plus 1 taka.
+  const moves = await db.stockMove.count({ where: { voided: false } });
+  const quantity = items.filter(i => i.valued).reduce((s, i) => s + Math.abs(num(i.qtyOnHand)), 0);
+  add('inventory_value', inventoryLedger, stockValue, inventoryLedger - stockValue, [], 1 + quantity * 0.00005 + moves * 0.005, 'drift');
 
-  return { ok: checks.every(c => c.ok), checkedAt: new Date().toISOString(), checks };
+  return {
+    ok: checks.every(c => c.ok),
+    /** True when every integrity check passes (only the stock-value drift check may be off). */
+    integrityOk: checks.every(c => c.ok || c.kind === 'drift'),
+    checkedAt: new Date().toISOString(),
+    checks,
+  };
 }

@@ -388,7 +388,7 @@ function ActivityReport({ range }: { range: Range }) {
 /** Ledger invariants in plain words: each line compares two independent records of the same money or stock. */
 function BooksHealth() {
   const { t, lang } = usePrefs();
-  const q = useApi<{ ok: boolean; checkedAt: string; checks: { key: string; ok: boolean; ledger: number | null; records: number | null; difference: number; examples: string[] }[] }>('/reports/books-health');
+  const q = useApi<{ ok: boolean; integrityOk: boolean; checkedAt: string; checks: { key: string; kind: 'integrity' | 'drift'; ok: boolean; ledger: number | null; records: number | null; difference: number; examples: string[] }[] }>('/reports/books-health');
   if (!q.data) return <Loading />;
   const h = q.data;
   const label: Record<string, [string, string]> = {
@@ -398,14 +398,16 @@ function BooksHealth() {
     receivables: [t('Receivables match the invoices', 'পাওনা চালানের সাথে মেলে'), t('The receivables account equals unpaid invoices less unapplied receipts.', 'পাওনা হিসাব = অপরিশোধিত চালান − অপ্রয়োগকৃত আদায়।')],
     payables: [t('Payables match the bills', 'দেনা বিলের সাথে মেলে'), t('The payables account equals unpaid bills less unapplied payments.', 'দেনা হিসাব = অপরিশোধিত বিল − অপ্রয়োগকৃত পরিশোধ।')],
     stock_quantities: [t('Stock quantities match their movements', 'মজুদের পরিমাণ চলাচলের সাথে মেলে'), t('Each item’s quantity on hand equals the sum of its stock movements.', 'প্রতিটি পণ্যের হাতে মজুদ = তার চলাচলের যোগফল।')],
-    inventory_value: [t('Stock value matches the ledger', 'মজুদের মূল্য খাতার সাথে মেলে'), t('Stock at average cost equals the inventory accounts (within ৳1 rounding).', 'গড় মূল্যে মজুদ = মজুদ হিসাব (৳১ পর্যন্ত রাউন্ডিং)।')],
+    inventory_value: [t('Stock value matches the ledger', 'মজুদের মূল্য খাতার সাথে মেলে'), t('Stock at average cost equals the inventory accounts, allowing for rounding. A known issue can also move it: voiding a sale or bill after the average cost changed.', 'গড় মূল্যে মজুদ = মজুদ হিসাব (রাউন্ডিং বাদে)। একটি জানা সমস্যাও এটি সরাতে পারে: গড় মূল্য বদলানোর পরে বিক্রয় বা বিল বাতিল।')],
   };
   return (
     <Statement title={t('Books health', 'হিসাবের স্বাস্থ্য')} period={t(`Checked ${fmtDateTime(h.checkedAt, lang)}`, `পরীক্ষা ${fmtDateTime(h.checkedAt, lang)}`)}>
       <div style={{ padding: '0 18px 8px' }}>
         {h.ok
           ? <Alert>{t('All checks pass: the ledger, documents and stock records agree.', 'সব পরীক্ষা সফল: খাতা, ডকুমেন্ট ও মজুদের রেকর্ড মেলে।')}</Alert>
-          : <Alert tone="error">{t('Some checks failed. Normal work cannot cause this: it means a program error or someone edited the database file directly. Do not close the period; tell your developer and keep today’s backup.', 'কিছু পরীক্ষা ব্যর্থ। সাধারণ কাজে এমন হয় না: প্রোগ্রামের ত্রুটি বা কেউ সরাসরি ডাটাবেস ফাইল বদলেছে। হিসাবকাল বন্ধ করবেন না; ডেভেলপারকে জানান এবং আজকের ব্যাকআপ রাখুন।')}</Alert>}
+          : h.integrityOk
+            ? <Alert tone="warn">{t('The books are intact, but stock value has drifted from the ledger. This is a known issue after voiding a sale or bill once the average cost has changed. Ask your developer to post a correcting stock adjustment before closing the period.', 'হিসাব অক্ষত, তবে মজুদের মূল্য খাতা থেকে সরে গেছে। গড় মূল্য বদলানোর পরে বিক্রয় বা বিল বাতিল করলে এটি হয় (জানা সমস্যা)। হিসাবকাল বন্ধের আগে ডেভেলপারকে সংশোধনী মজুদ সমন্বয় করতে বলুন।')}</Alert>
+            : <Alert tone="error">{t('Some checks failed. Normal work cannot cause this: it means a program error or someone edited the database file directly. Do not close the period; tell your developer and keep today’s backup.', 'কিছু পরীক্ষা ব্যর্থ। সাধারণ কাজে এমন হয় না: প্রোগ্রামের ত্রুটি বা কেউ সরাসরি ডাটাবেস ফাইল বদলেছে। হিসাবকাল বন্ধ করবেন না; ডেভেলপারকে জানান এবং আজকের ব্যাকআপ রাখুন।')}</Alert>}
       </div>
       <table className="table">
         <thead><tr><th>{t('Check', 'পরীক্ষা')}</th><th className="num">{t('Ledger', 'খাতা')}</th><th className="num">{t('Records', 'রেকর্ড')}</th><th className="num">{t('Difference', 'পার্থক্য')}</th><th>{t('Result', 'ফলাফল')}</th></tr></thead>
@@ -415,7 +417,7 @@ function BooksHealth() {
             <td className="num">{c.ledger === null ? '—' : <Money v={c.ledger} />}</td>
             <td className="num">{c.records === null ? '—' : <Money v={c.records} />}</td>
             <td className="num">{c.difference ? <Money v={c.difference} /> : '—'}</td>
-            <td>{c.ok ? <Badge tone="green"><CircleCheck size={12} />{t('OK', 'ঠিক আছে')}</Badge> : <Badge tone="red"><CircleX size={12} />{t('Problem', 'সমস্যা')}</Badge>}</td>
+            <td>{c.ok ? <Badge tone="green"><CircleCheck size={12} />{t('OK', 'ঠিক আছে')}</Badge> : c.kind === 'drift' ? <Badge tone="amber"><CircleX size={12} />{t('Drifted', 'সরে গেছে')}</Badge> : <Badge tone="red"><CircleX size={12} />{t('Problem', 'সমস্যা')}</Badge>}</td>
           </tr>
         ))}</tbody>
       </table>

@@ -50,6 +50,18 @@ beforeAll(async () => {
   await call('POST', '/bills', { date: day(), supplierId: supplier.id, lines: [{ itemId: feed.id, quantity: 10, unitPrice: 40 }] });
   const sale = await call('POST', '/invoices', { date: day(), customerId: customer.id, lines: [{ itemId: eggs.id, quantity: 5, unitPrice: 15 }] });
   await call('POST', `/invoices/${sale.id}/void`, { reason: 'entered for the wrong customer' });
+
+  // Less common but normal: refunds both ways, an opening balance journalled to receivables,
+  // a voided payment, and a paid sale voided after voiding its receipt.
+  await call('POST', '/payments', { direction: 'OUT', date: day(), partyId: customer.id, cashAccountId: await acc('1010'), counterAccountId: await acc('1100'), amount: 20, notes: 'Refund to customer' });
+  await call('POST', '/payments', { direction: 'IN', date: day(), partyId: supplier.id, cashAccountId: await acc('1010'), counterAccountId: await acc('2010'), amount: 30, notes: 'Refund from supplier' });
+  await call('POST', '/journals', { date: day(), memo: 'Opening balance owed by customer', opening: true, lines: [{ accountId: await acc('1100'), debit: 250, partyId: customer.id }, { accountId: await acc('3900'), credit: 250 }] });
+  const wrongPayment = await call('POST', '/payments', { direction: 'OUT', date: day(), partyId: supplier.id, cashAccountId: await acc('1010'), amount: 40 });
+  await call('POST', `/payments/${wrongPayment.id}/void`, { reason: 'paid the wrong supplier' });
+  const paidSale = await call('POST', '/invoices', { date: day(), customerId: customer.id, lines: [{ itemId: eggs.id, quantity: 3, unitPrice: 15 }], received: { amount: 45, cashAccountId: await acc('1010') } });
+  const receipt = (await call('GET', `/invoices/${paidSale.id}`)).allocations[0].paymentId;
+  await call('POST', `/payments/${receipt}/void`, { reason: 'sale cancelled by the customer' });
+  await call('POST', `/invoices/${paidSale.id}/void`, { reason: 'sale cancelled by the customer' });
 });
 afterAll(async () => app?.close());
 
@@ -59,6 +71,7 @@ describe('healthy books', () => {
     expect(failing(r)).toEqual([]);
     expect(r.ok).toBe(true);
     expect(r.checks.map(c => c.key)).toEqual(['entries_balanced', 'trial_balance', 'voids_reversed', 'receivables', 'payables', 'stock_quantities', 'inventory_value']);
+    expect(r.checks.find(c => c.key === 'inventory_value')!.kind).toBe('drift');
   });
 
   it('is available to the owner and auditors, not to staff', async () => {
@@ -127,6 +140,22 @@ describe('damage is caught', () => {
 
   it('the rolled-back damage left the real books healthy', async () => {
     expect((await booksHealth(prisma)).ok).toBe(true);
+  });
+});
+
+describe('known drift (R2): voiding a sale after the average cost changed', () => {
+  // Runs last and uses its own product, so other tests' stock and costs are untouched.
+  it('shows as stock-value drift only, not as tampering', async () => {
+    const item = await call('POST', '/items', { sku: 'HEALTH-R2', name: 'Health check feed', category: 'FEED', unit: 'kg', inventoryAccountId: await acc('1210'), expenseAccountId: await acc('6010'), incomeAccountId: await acc('4090') });
+    const supplier = await call('POST', '/parties', { kind: 'SUPPLIER', name: 'R2 Feeds' });
+    const customer = await call('POST', '/parties', { kind: 'CUSTOMER', name: 'R2 Buyer' });
+    await call('POST', '/bills', { date: day(), supplierId: supplier.id, lines: [{ itemId: item.id, quantity: 10, unitPrice: 40 }] });
+    const sale = await call('POST', '/invoices', { date: day(), customerId: customer.id, lines: [{ itemId: item.id, quantity: 5, unitPrice: 60 }] });
+    await call('POST', '/bills', { date: day(), supplierId: supplier.id, lines: [{ itemId: item.id, quantity: 10, unitPrice: 100 }] });
+    await call('POST', `/invoices/${sale.id}/void`, { reason: 'checking the known average-cost drift' });
+    const r = await booksHealth(prisma);
+    expect(failing(r)).toEqual(['inventory_value']);
+    expect(r.integrityOk).toBe(true);
   });
 });
 
