@@ -178,10 +178,10 @@ export function VoidDialog({ what, onClose, onConfirm, busy }: { what: string; o
   return (
     <Dialog title={t(`Void ${what}`, `${what} বাতিল`)} onClose={onClose} footer={<>
       <button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল করুন')}</button>
-      <button className="btn danger" disabled={reason.trim().length < 3 || busy} onClick={() => onConfirm(reason.trim())}>{t('Void', 'বাতিল')}</button>
+      <button className="btn danger" disabled={reason.trim().length < 10 || busy} onClick={() => onConfirm(reason.trim())}>{t('Void', 'বাতিল')}</button>
     </>}>
       <Alert tone="warn">{t('Voiding keeps the record for audit and posts a reversing entry. Stock and balances are restored.', 'বাতিল করলে রেকর্ডটি অডিটের জন্য থাকবে এবং বিপরীত এন্ট্রি হবে। মজুদ ও স্থিতি আগের অবস্থায় ফিরবে।')}</Alert>
-      <Field label={t('Reason', 'কারণ')}><textarea className="textarea" autoFocus value={reason} onChange={e => setReason(e.target.value)} /></Field>
+      <Field label={t('Reason', 'কারণ')} hint={t('Say clearly why (at least 10 characters). The owner sees every void.', 'কেন তা পরিষ্কার লিখুন (কমপক্ষে ১০ অক্ষর)। মালিক প্রতিটি বাতিল দেখেন।')}><textarea className="textarea" autoFocus value={reason} onChange={e => setReason(e.target.value)} /></Field>
     </Dialog>
   );
 }

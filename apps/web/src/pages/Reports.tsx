@@ -1,14 +1,14 @@
 import { useState, type ReactNode } from 'react';
-import { BarChart3, BookCheck, CalendarClock, Download, Egg, Landmark, Package, Printer, Scale, Waves } from 'lucide-react';
+import { BarChart3, BookCheck, CalendarClock, Download, Egg, Landmark, Package, Printer, Scale, ShieldAlert, Waves } from 'lucide-react';
 import { nameOf, unitLabel, usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi } from '../lib/hooks';
-import { downloadCsv, fmtDate, fmtMoney, fmtNum, fmtPct, ymd } from '../lib/format';
+import { downloadCsv, fmtDate, fmtDateTime, fmtMoney, fmtNum, fmtPct, ymd } from '../lib/format';
 import { Alert, Card, Field, Input, Loading, PageHeader, RangePicker, thisMonth, type Range } from '../components/ui';
 import { Money } from '../components/forms';
 import { projectName, useProjects } from './BankingProjects';
 
-type Key = 'pl' | 'bs' | 'cf' | 'tb' | 'ar' | 'ap' | 'inv' | 'prod';
+type Key = 'pl' | 'bs' | 'cf' | 'tb' | 'ar' | 'ap' | 'inv' | 'prod' | 'act';
 interface Line { id?: string; code?: string; name: string; nameBn?: string | null; amount: number }
 interface Section { lines: Line[]; total: number }
 
@@ -44,6 +44,7 @@ export default function Reports() {
     { key: 'ap', icon: Landmark, title: t('Payables aging', 'দেনার বয়স বিশ্লেষণ'), desc: t('What you owe suppliers', 'সরবরাহকারীদের কাছে দেনা'), perm: 'purchases.view', kind: 'asof' },
     { key: 'inv', icon: Package, title: t('Inventory valuation', 'মজুদ মূল্যায়ন'), desc: t('Stock on hand at weighted-average cost', 'ভারিত গড় মূল্যে হাতে মজুদ'), perm: 'inventory.view', kind: 'none' },
     { key: 'prod', icon: Egg, title: t('Production performance', 'উৎপাদন কার্যকারিতা'), desc: t('Eggs, laying rate, mortality, feed efficiency', 'ডিম, ডিম পাড়ার হার, মৃত্যু, খাদ্য দক্ষতা'), perm: 'production.view', kind: 'range' },
+    { key: 'act', icon: ShieldAlert, title: t('Unusual activity', 'অস্বাভাবিক কার্যকলাপ'), desc: t('Voids, back-dated entries, discounts, write-offs, cash shortages', 'বাতিল, পুরনো তারিখের এন্ট্রি, ছাড়, মজুদ বাদ, নগদ ঘাটতি'), perm: 'audit.view', kind: 'range' },
   ];
   const allowed = reports.filter(r => can(r.perm));
   const current = allowed.find(r => r.key === key) ?? allowed[0];
@@ -75,6 +76,7 @@ export default function Reports() {
       {(current?.key === 'ar' || current?.key === 'ap') && <Aging kind={current.key} asOf={asOf} />}
       {current?.key === 'inv' && <InventoryValuation />}
       {current?.key === 'prod' && <ProductionReport range={range} />}
+      {current?.key === 'act' && <ActivityReport range={range} />}
     </>
   );
 }
@@ -296,3 +298,87 @@ function ProductionReport({ range }: { range: Range }) {
   );
 }
 
+
+/** What someone would do to hide theft, listed by when it was done, for the owner to look over. */
+function ActivityReport({ range }: { range: Range }) {
+  const { t, lang } = usePrefs();
+  const q = useApi<any>('/reports/activity', range);
+  if (!q.data) return <Loading />;
+  const a = q.data;
+  const none = (cols: number) => <tr><td colSpan={cols} className="muted" style={{ textAlign: 'center' }}>{t('Nothing found.', 'কিছু পাওয়া যায়নি।')}</td></tr>;
+  const section = (title: string, hint: string, head: ReactNode, rows: ReactNode[], cols: number) => (
+    <>
+      <h3 style={{ margin: '18px 18px 2px' }}>{title}</h3>
+      <p className="muted small" style={{ margin: '0 18px 6px' }}>{hint}</p>
+      <table className="table"><thead><tr>{head}</tr></thead><tbody>{rows.length ? rows : none(cols)}</tbody></table>
+    </>
+  );
+  const kpis: [string, number][] = [
+    [t('Voids', 'বাতিল'), a.counts.voids], [t('Back-dated entries', 'পুরনো তারিখের এন্ট্রি'), a.counts.backdated], [t('Discounts', 'ছাড়'), a.counts.discounts],
+    [t('Stock write-offs', 'মজুদ বাদ'), a.counts.writeOffs], [t('Cash shortages', 'নগদ ঘাটতি'), a.counts.cashShortages], [t('Failed sign-ins', 'ব্যর্থ সাইন-ইন'), a.counts.failedSignIns],
+  ];
+  const typeLabel = (type: string) => (type === 'WASTE' ? t('Waste', 'নষ্ট') : type === 'GIFT' ? t('Gift', 'উপহার') : t('Count shortfall', 'গণনায় ঘাটতি'));
+  const voidMark = t('void', 'বাতিল');
+  return (
+    <>
+      <div className="grid g4 no-print">
+        {kpis.map(([l, v]) => <div key={l} className="card kpi"><div className="kpi-label">{l}</div><div className="kpi-value">{fmtNum(v, lang, 0)}</div></div>)}
+      </div>
+      <Statement title={t('Unusual activity', 'অস্বাভাবিক কার্যকলাপ')} period={t(`Done between ${fmtDate(a.from, lang)} and ${fmtDate(a.to, lang)}`, `${fmtDate(a.from, lang)} থেকে ${fmtDate(a.to, lang)} এর মধ্যে করা`)}>
+        <div style={{ padding: '0 18px' }}>
+          <Alert>{t(`Staff cannot add or void anything dated more than ${a.backdateDays} days back; the owner and accountant can. For each line below, ask: is there a good reason for it?`, `কর্মীরা ${a.backdateDays} দিনের বেশি পুরনো তারিখে কিছু যোগ বা বাতিল করতে পারেন না; মালিক ও হিসাবরক্ষক পারেন। নিচের প্রতিটি লাইনের জন্য ভাবুন: এর পেছনে কি যথাযথ কারণ আছে?`)}</Alert>
+        </div>
+        {section(t('Voids', 'বাতিল'), t('Every cancelled record and the reason given.', 'প্রতিটি বাতিল রেকর্ড ও দেওয়া কারণ।'),
+          <><th>{t('When', 'কখন')}</th><th>{t('By', 'কে')}</th><th>{t('Why', 'কেন')}</th><th>{t('What', 'কী')}</th></>,
+          a.voids.map((v: any, i: number) => (
+            <tr key={i}>
+              <td>{fmtDateTime(v.at, lang)}</td><td>{v.user}</td><td>{v.reason}</td>
+              <td className="small">{v.count > 1 ? `${fmtNum(v.count, lang, 0)} ${t('records', 'রেকর্ড')}: ` : ''}{v.records.join(', ')}{v.count > v.records.length ? '…' : ''}</td>
+            </tr>
+          )), 4)}
+        {section(t('Back-dated entries', 'পুরনো তারিখের এন্ট্রি'), t(`Entries dated more than ${a.backdatedAfterDays} days before they were typed in. A month's workbook import shows as one line.`, `টাইপ করার ${a.backdatedAfterDays} দিনের বেশি আগের তারিখের এন্ট্রি। এক মাসের ওয়ার্কবুক ইমপোর্ট এক লাইনে দেখায়।`),
+          <><th>{t('Entered on', 'এন্ট্রির দিন')}</th><th>{t('By', 'কে')}</th><th>{t('Dated', 'তারিখ')}</th><th className="num">{t('Entries', 'এন্ট্রি')}</th><th className="num">{t('Amount', 'পরিমাণ')}</th><th>{t('Examples', 'উদাহরণ')}</th></>,
+          a.backdated.map((g: any, i: number) => (
+            <tr key={i}>
+              <td>{fmtDate(g.enteredOn, lang)}</td><td>{g.user}</td>
+              <td>{g.earliest === g.latest ? fmtDate(g.earliest, lang) : `${fmtDate(g.earliest, lang)} – ${fmtDate(g.latest, lang)}`}</td>
+              <td className="num">{fmtNum(g.count, lang, 0)}{g.voided ? ` (${fmtNum(g.voided, lang, 0)} ${voidMark})` : ''}</td>
+              <td className="num"><Money v={g.amount} /></td><td className="muted small">{g.numbers.join(', ')}</td>
+            </tr>
+          )), 6)}
+        {section(t('Discounts', 'ছাড়'), t('Sales given a discount, biggest share first.', 'যেসব বিক্রয়ে ছাড় দেওয়া হয়েছে, বড় ছাড় আগে।'),
+          <><th>{t('Invoice', 'চালান')}</th><th>{t('By', 'কে')}</th><th>{t('Customer', 'ক্রেতা')}</th><th className="num">{t('Subtotal', 'উপমোট')}</th><th className="num">{t('Discount', 'ছাড়')}</th><th className="num">%</th></>,
+          [...a.discounts].sort((x: any, y: any) => y.percent - x.percent).map((d: any) => (
+            <tr key={d.number}>
+              <td>{d.number}{d.status === 'VOID' ? ` (${voidMark})` : ''}</td><td>{d.user}</td><td>{d.customer}</td>
+              <td className="num"><Money v={d.subtotal} /></td><td className="num"><Money v={d.discount} /></td><td className="num">{fmtPct(d.percent, lang)}</td>
+            </tr>
+          )), 6)}
+        {section(t('Stock write-offs', 'মজুদ বাদ'), t('Stock taken out without a sale: waste, gifts and count shortfalls.', 'বিক্রি ছাড়া মজুদ কমানো: নষ্ট, উপহার ও গণনায় ঘাটতি।'),
+          <><th>{t('Entered on', 'এন্ট্রির দিন')}</th><th>{t('By', 'কে')}</th><th>{t('Item', 'পণ্য')}</th><th>{t('Type', 'ধরন')}</th><th className="num">{t('Quantity', 'পরিমাণ')}</th><th className="num">{t('Value', 'মূল্য')}</th></>,
+          a.writeOffs.map((w: any, i: number) => (
+            <tr key={i}>
+              <td>{fmtDate(w.enteredOn, lang)}</td><td>{w.user}</td><td>{nameOf({ name: w.item, nameBn: w.itemBn }, lang)}</td><td>{typeLabel(w.type)}</td>
+              <td className="num">{fmtNum(w.quantity, lang)} {unitLabel(t, w.unit)}</td><td className="num"><Money v={w.value} /></td>
+            </tr>
+          )), 6)}
+        {section(t('Cash shortages', 'নগদ ঘাটতি'), t('Cash counts that found less money than the books.', 'যে নগদ গণনায় খাতার চেয়ে কম টাকা পাওয়া গেছে।'),
+          <><th>{t('Date', 'তারিখ')}</th><th>{t('By', 'কে')}</th><th>{t('Account', 'হিসাব')}</th><th className="num">{t('Books', 'খাতায়')}</th><th className="num">{t('Counted', 'গণনা')}</th><th className="num">{t('Short', 'ঘাটতি')}</th></>,
+          a.cashShortages.map((c: any, i: number) => (
+            <tr key={i}>
+              <td>{fmtDate(c.date, lang)}</td><td>{c.user}</td><td>{nameOf({ name: c.account, nameBn: c.accountBn }, lang)}</td>
+              <td className="num"><Money v={c.book} /></td><td className="num"><Money v={c.counted} /></td><td className="num"><Money v={c.variance} /></td>
+            </tr>
+          )), 6)}
+        {section(t('Failed sign-ins', 'ব্যর্থ সাইন-ইন'), t('Wrong passwords. Many for one person may mean someone is guessing.', 'ভুল পাসওয়ার্ড। একজনের জন্য অনেকবার হলে কেউ অনুমান করছে হতে পারে।'),
+          <><th>{t('Account', 'অ্যাকাউন্ট')}</th><th className="num">{t('Attempts', 'চেষ্টা')}</th><th>{t('Last', 'শেষ')}</th><th>{t('From', 'কোথা থেকে')}</th></>,
+          a.failedSignIns.map((f: any, i: number) => (
+            <tr key={i}><td>{f.user} <span className="muted small">{f.email}</span></td><td className="num">{fmtNum(f.count, lang, 0)}</td><td>{fmtDateTime(f.last, lang)}</td><td className="muted small">{f.ips.join(', ')}</td></tr>
+          )), 4)}
+        {section(t('User and settings changes', 'ব্যবহারকারী ও সেটিংস পরিবর্তন'), t('New users, password resets, role and settings changes.', 'নতুন ব্যবহারকারী, পাসওয়ার্ড রিসেট, ভূমিকা ও সেটিংস পরিবর্তন।'),
+          <><th>{t('When', 'কখন')}</th><th>{t('By', 'কে')}</th><th>{t('What', 'কী')}</th></>,
+          a.adminChanges.map((c: any, i: number) => <tr key={i}><td>{fmtDateTime(c.at, lang)}</td><td>{c.user}</td><td>{c.summary}</td></tr>), 3)}
+      </Statement>
+    </>
+  );
+}
