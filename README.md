@@ -32,6 +32,7 @@ Business management and accounting software for a farm (built first for a duck &
 - Only an owner can add or change owner accounts or change what a role may do, even if another role is allowed to manage users.
 - Role-based access enforced on **every API endpoint** (the UI only hides what the role cannot use).
 - Audit trail of every create, void, sign-in, settings and user change.
+- Insider-fraud controls: staff cannot add or void anything dated more than 7 days back (or in the future); the owner and accountant can. Every void needs a reason of at least 10 characters. *Reports → Unusual activity* lists voids, back-dated entries, discounts, stock write-offs, cash shortages, failed sign-ins and user/settings changes, by who did them and when.
 
 ## Daily use
 

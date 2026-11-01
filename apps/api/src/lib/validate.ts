@@ -18,6 +18,6 @@ export const zQty = z.coerce.number().finite();
 export const zId = z.string().min(1);
 export const zText = (max = 500) => z.string().trim().max(max);
 export const zOptText = (max = 500) => z.string().trim().max(max).nullish().transform(v => (v ? v : null));
-export const zReason = z.object({ reason: z.string().trim().min(3, 'Give a reason (at least 3 characters).').max(300) });
+export const zReason = z.object({ reason: z.string().trim().min(10, 'Say clearly why (at least 10 characters). The owner sees every void.').max(300) });
 
 export const zRange = z.object({ from: zDate.optional(), to: zDate.optional() });
