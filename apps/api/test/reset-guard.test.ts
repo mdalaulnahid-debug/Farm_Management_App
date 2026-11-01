@@ -2,7 +2,7 @@
 // and a copy of the database is always kept first. Only throwaway files in a temp folder are reset here.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PrismaClient } from '@prisma/client';
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { seed } from '../src/seed.js';
@@ -52,6 +52,37 @@ describe('resetting', () => {
     expect(await users(file)).toBe(before);
     expect(existsSync(join(dir, 'safety-b'))).toBe(false);
   });
+
+  it('an unreadable file is treated as holding records, and is still copied first', async () => {
+    const file = join(dir, 'damaged.db');
+    writeFileSync(file, 'not a database '.repeat(300));
+    const a = await assessReset(file);
+    expect(a.hasData).toBe(true);
+    expect(a.counts).toBeNull();
+    await expect(resetDatabase({ file, confirm: 'yes', safetyDir: join(dir, 'safety-d'), seed: false })).rejects.toThrow(/not reset/i);
+    const r = await resetDatabase({ file, confirm: 'DELETE damaged.db', safetyDir: join(dir, 'safety-d'), seed: false });
+    expect(readFileSync(r.safetyCopy!, 'utf8')).toContain('not a database');
+    expect(await users(file)).toBe(0);
+  }, 60_000);
+
+  it('refuses while another program is in the middle of writing to the database', async () => {
+    const file = await farmCopy('farm-e.db');
+    const before = await users(file);
+    const writer = open(file);
+    let outcome: unknown;
+    try {
+      // Another connection has started changing the database and not finished.
+      await writer.$transaction(async tx => {
+        await tx.auditLog.create({ data: { action: 'create', entity: 'test', summary: 'half-written' } });
+        outcome = await resetDatabase({ file, confirm: 'DELETE farm-e.db', safetyDir: join(dir, 'safety-e'), seed: false }).catch(e => e);
+        throw new Error('rollback');
+      }, { timeout: 60_000 }).catch(e => { if ((e as Error).message !== 'rollback') throw e; });
+    } finally {
+      await writer.$disconnect();
+    }
+    expect(String(outcome)).toMatch(/still in use|busy|locked/i);
+    expect(await users(file)).toBe(before);
+  }, 60_000);
 
   it('with the phrase, keeps a copy first and then starts empty', async () => {
     const file = await farmCopy('farm-c.db');
