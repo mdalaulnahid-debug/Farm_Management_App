@@ -11,7 +11,7 @@
     "test": "vitest run",
     "db:setup": "prisma db push && tsx --env-file-if-exists=.env prisma/seed.ts",
     "db:push": "prisma db push --skip-generate",
-    "db:reset": "prisma db push --force-reset && tsx --env-file-if-exists=.env prisma/seed.ts",
+    "db:reset": "tsx --env-file-if-exists=.env src/tools/reset-database.ts",
     "db:studio": "prisma studio",
     "user:reset-password": "tsx --env-file-if-exists=.env src/tools/reset-password.ts",
     "db:restore": "tsx --env-file-if-exists=.env src/tools/restore-backup.ts"

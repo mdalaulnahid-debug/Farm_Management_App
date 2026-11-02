@@ -114,6 +114,8 @@ npm test          # API integration tests (accounting, permissions, voids, perio
 npm run build     # production build; `npm start` serves everything on :4000
 ```
 
+`npm run db:reset -w apps/api` wipes the database and loads the starting data again, for a developer's own copy. It is guarded because it would erase the farm's books: it refuses while FarmLedger is running, and on a database that holds records it shows what would be lost and needs the exact phrase `DELETE <file name>` (e.g. `DELETE farmledger.db`). It always keeps a copy first as `farmledger-before-reset-<date>.db` in the backup folder. Never run it on the farm computer. `npm run db:studio` opens a raw table editor that bypasses voids, the period lock and the audit trail; don't use it on the farm's database either.
+
 ## Deploy (cloud / server)
 
 `docker compose up -d --build` runs the production image on port 4000 with the database on a persistent volume. Put it behind HTTPS (Caddy, Nginx, or your host's load balancer), set `TRUST_PROXY` to the proxy's address, and set a strong `ADMIN_PASSWORD`. For multiple sites or heavy use, switch to PostgreSQL — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
