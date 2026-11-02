@@ -73,6 +73,7 @@ model Session {
   expiresAt  DateTime
   ip         String?
   userAgent  String?
+  lastSeenAt DateTime? // last request on this sign-in (updated at most every few minutes)
   createdAt  DateTime @default(now())
 
   @@index([userId])

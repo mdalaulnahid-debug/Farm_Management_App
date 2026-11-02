@@ -48,8 +48,10 @@ export interface AuthUser {
 }
 
 declare module 'fastify' {
-  interface FastifyRequest { user?: AuthUser }
+  interface FastifyRequest { user?: AuthUser; sessionId?: string }
 }
+
+const SEEN_EVERY_MS = 5 * 60_000;
 
 /** Resolve the user from the session cookie (if any). Registered as an onRequest hook. */
 export async function loadUser(req: FastifyRequest) {
@@ -57,6 +59,11 @@ export async function loadUser(req: FastifyRequest) {
   if (!token) return;
   const session = await prisma.session.findUnique({ where: { id: hashToken(token) }, include: { user: { include: { role: true } } } });
   if (!session || session.expiresAt < new Date() || !session.user.active) return;
+  req.sessionId = session.id;
+  if (!session.lastSeenAt || Date.now() - session.lastSeenAt.getTime() > SEEN_EVERY_MS) {
+    // Best effort: a busy database must never turn an ordinary request into an error.
+    await prisma.session.updateMany({ where: { id: session.id }, data: { lastSeenAt: new Date() } }).catch(() => undefined);
+  }
   const u = session.user;
   req.user = {
     id: u.id, name: u.name, email: u.email, locale: u.locale, mustChangePassword: u.mustChangePassword,

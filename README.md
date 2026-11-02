@@ -30,6 +30,7 @@ Business management and accounting software for a farm (built first for a duck &
 
 - Sign-in with scrypt-hashed passwords, server-side sessions in http-only cookies, lockout after 5 failed attempts, forced password change on first sign-in and after resets (enforced by the server: a temporary password can do nothing else).
 - Only an owner can add or change owner accounts or change what a role may do, even if another role is allowed to manage users.
+- *My account → Where you are signed in* lists every device with its last activity; sign out one device or everywhere else. Changing your password signs out your other devices. The owner can sign any user out everywhere from *Users & settings → Users* (lost phone, someone left).
 - Role-based access enforced on **every API endpoint** (the UI only hides what the role cannot use).
 - Audit trail of every create, void, sign-in, settings and user change.
 - Insider-fraud controls: staff cannot add or void anything dated more than 7 days back (or in the future); the owner and accountant can. Every void needs a reason of at least 10 characters. *Reports → Unusual activity* lists voids, back-dated entries, discounts, stock write-offs, cash shortages, failed sign-ins and user/settings changes, by who did them and when.

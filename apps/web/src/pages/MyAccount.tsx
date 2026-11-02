@@ -1,10 +1,11 @@
 import { Fragment, type ComponentType, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { CircleDollarSign, Info, KeyRound, Languages, LogOut, Palette, Rocket, RotateCcw, ShieldCheck, UserRound } from 'lucide-react';
+import { CircleDollarSign, Info, KeyRound, Languages, LogOut, Monitor, MonitorSmartphone, Palette, Rocket, RotateCcw, ShieldCheck, Smartphone, UserRound } from 'lucide-react';
 import { api } from '../lib/api';
+import { useApi, useSave } from '../lib/hooks';
 import { useAuth } from '../lib/auth';
 import { nameOf, usePrefs, type Accent, type Lang } from '../lib/i18n';
-import { fmtDate, fmtLongDate, fmtMoney, ymd } from '../lib/format';
+import { fmtDate, fmtDateTime, fmtLongDate, fmtMoney, ymd } from '../lib/format';
 import { Badge, Card, Kpi, Loading, PageHeader, Segmented, Select, Switch, useToast } from '../components/ui';
 import { ChangePassword } from './Login';
 
@@ -167,9 +168,10 @@ export default function MyAccount() {
           )}
 
           {section === 'security' && <>
-            <Card title={t('Change password', 'পাসওয়ার্ড পরিবর্তন')} subtitle={t('Use a password you do not use anywhere else.', 'এমন পাসওয়ার্ড দিন যা অন্য কোথাও ব্যবহার করেন না।')} pad>
+            <Card title={t('Change password', 'পাসওয়ার্ড পরিবর্তন')} subtitle={t('Use a password you do not use anywhere else. Changing it signs you out on your other devices.', 'এমন পাসওয়ার্ড দিন যা অন্য কোথাও ব্যবহার করেন না। বদলালে আপনার অন্য ডিভাইসগুলো থেকে সাইন আউট হবে।')} pad>
               <ChangePassword />
             </Card>
+            <SignedInDevices />
             <Card title={t('Staying safe', 'নিরাপদ থাকুন')} pad>
               <ul className="tips">
                 <li><ShieldCheck size={16} />{t('Never share your password. Each person signs in with their own account, so the activity log shows who did what.', 'পাসওয়ার্ড কাউকে দেবেন না। প্রত্যেকে নিজের অ্যাকাউন্টে সাইন ইন করেন, তাই লগে কে কী করেছে তা দেখা যায়।')}</li>
@@ -193,5 +195,47 @@ export default function MyAccount() {
         </div>
       </div>
     </>
+  );
+}
+
+interface SignIn { id: string; current: boolean; createdAt: string; lastSeenAt: string; expiresAt: string; ip: string | null; userAgent: string }
+
+/** "Chrome · Windows" from a browser's user-agent text; good enough to recognise your own devices. */
+const deviceOf = (ua: string) => {
+  const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '';
+  const os = /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iPhone' : /Windows/.test(ua) ? 'Windows' : /Macintosh|Mac OS/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : '';
+  return { label: [browser, os].filter(Boolean).join(' · '), phone: /Android|iPhone|Mobile/.test(ua) };
+};
+
+/** Where this account is signed in, with a way to end a lost or unknown device. */
+function SignedInDevices() {
+  const { t, lang } = usePrefs();
+  const q = useApi<{ data: SignIn[] }>('/auth/sessions');
+  const endOne = useSave<{ id: string }>('post', b => `/auth/sessions/${b.id}/end`, t('That device is signed out.', 'ঐ ডিভাইস সাইন আউট হয়েছে।'));
+  const endOthers = useSave<void>('post', '/auth/sessions/end-others', t('Signed out on every other device.', 'অন্য সব ডিভাইস থেকে সাইন আউট হয়েছে।'));
+  const list = q.data?.data ?? [];
+  const others = list.filter(s => !s.current).length;
+  return (
+    <Card title={<span className="row" style={{ gap: 8 }}><MonitorSmartphone size={18} />{t('Where you are signed in', 'যেখানে সাইন ইন করা আছে')}</span>}
+      subtitle={t('If you see a device you do not recognise, sign it out and change your password.', 'অচেনা কোনো ডিভাইস দেখলে সেটি সাইন আউট করুন এবং পাসওয়ার্ড বদলান।')}
+      actions={others > 0 && <button className="btn sm" disabled={endOthers.isPending} onClick={() => endOthers.mutate()}><LogOut size={14} />{t('Sign out everywhere else', 'অন্য সব জায়গা থেকে সাইন আউট')}</button>} pad>
+      {!q.data ? <Loading /> : (
+        <div className="stack" style={{ gap: 10 }}>
+          {list.map(s => {
+            const d = deviceOf(s.userAgent);
+            return (
+              <div key={s.id} className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
+                {d.phone ? <Smartphone size={20} className="muted" /> : <Monitor size={20} className="muted" />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="row" style={{ gap: 8 }}><b>{d.label || t('Unknown device', 'অজানা ডিভাইস')}</b>{s.current && <Badge tone="green">{t('This device', 'এই ডিভাইস')}</Badge>}</div>
+                  <div className="muted small">{t('Last active', 'শেষ সক্রিয়')} {fmtDateTime(s.lastSeenAt, lang)} · {t('signed in', 'সাইন ইন')} {fmtDateTime(s.createdAt, lang)}{s.ip ? ` · ${s.ip}` : ''}</div>
+                </div>
+                {!s.current && <button className="btn ghost sm" disabled={endOne.isPending} onClick={() => endOne.mutate({ id: s.id })}>{t('Sign out', 'সাইন আউট')}</button>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
   );
 }
