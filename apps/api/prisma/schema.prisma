@@ -90,9 +90,13 @@ model AuditLog {
   data      String?  // JSON snapshot
   ip        String?
   createdAt DateTime @default(now())
+  // Tamper-evidence: position in the hash chain and this row's hash (set by the sealing job; null until sealed).
+  seq       Int?
+  hash      String?
 
   @@index([entity, entityId])
   @@index([createdAt])
+  @@index([seq])
 }
 
 model Sequence {
