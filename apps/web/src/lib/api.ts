@@ -27,6 +27,7 @@ async function request<T>(method: string, path: string, body?: unknown, query?: 
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
     if (res.status === 401 && path !== '/auth/login' && path !== '/auth/me') window.dispatchEvent(new Event('fl:unauthorized'));
+    if (res.status === 403 && (data?.error === 'TWO_STEP_REQUIRED' || data?.error === 'PASSWORD_CHANGE_REQUIRED')) window.dispatchEvent(new Event('fl:me-stale'));
     throw new ApiError(res.status, data?.message || res.statusText, data?.error, data?.details);
   }
   return data as T;

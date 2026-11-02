@@ -5,13 +5,13 @@ import { useAuth } from '../lib/auth';
 import { useApi, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtDateTime, fmtNum, monthStart, ymd } from '../lib/format';
 import ImportData from './ImportData';
-import { Alert, Badge, Card, DataTable, Dialog, Drawer, Empty, Field, Input, Loading, PageHeader, SearchBox, Select, Tabs, useToast, type Column } from '../components/ui';
+import { Alert, Badge, Card, DataTable, Dialog, Drawer, Empty, Field, Input, Loading, PageHeader, SearchBox, Select, Switch, Tabs, useToast, type Column } from '../components/ui';
 
 type T = (en: string, bn: string) => string;
 type TabKey = 'users' | 'roles' | 'org' | 'close' | 'import' | 'audit';
 
 interface Role { id: string; key: string; name: string; description: string | null; permissions: string[]; system: boolean; _count: { users: number } }
-interface User { id: string; name: string; email: string; phone: string | null; active: boolean; mustChangePassword: boolean; lastLoginAt: string | null; activeSessions: number; role: { id: string; key: string; name: string } }
+interface User { id: string; name: string; email: string; phone: string | null; active: boolean; mustChangePassword: boolean; lastLoginAt: string | null; activeSessions: number; twoStepEnabled: boolean; role: { id: string; key: string; name: string } }
 interface Org { name: string; nameBn: string | null; legalName: string | null; address: string | null; phone: string | null; email: string | null; taxId: string | null; fiscalYearStart: number; invoiceFooter: string | null; lockDate: string | null }
 interface AuditRow { id: string; createdAt: string; action: string; entity: string; entityId: string | null; summary: string; ip: string | null; user: { name: string; email: string } | null }
 
@@ -53,6 +53,7 @@ export default function Admin() {
 // ───────────── Users ─────────────
 function UsersTab() {
   const { t, lang } = usePrefs();
+  const { me } = useAuth();
   const users = useApi<{ data: User[] }>('/users');
   const roles = useApi<{ data: Role[] }>('/roles');
   const [editing, setEditing] = useState<User | 'new' | null>(null);
@@ -69,6 +70,7 @@ function UsersTab() {
     { key: 'status', label: t('Status', 'অবস্থা'), render: u => <div className="row" style={{ gap: 6 }}>
       {u.active ? <Badge tone="green">{t('Active', 'সক্রিয়')}</Badge> : <Badge tone="red">{t('Disabled', 'নিষ্ক্রিয়')}</Badge>}
       {u.mustChangePassword && u.active && <Badge tone="amber"><KeyRound size={11} />{t('Must set password', 'পাসওয়ার্ড বদলাতে হবে')}</Badge>}
+      {u.twoStepEnabled && u.active && <Badge tone="blue"><ShieldCheck size={11} />{t('2-step', '২-ধাপ')}</Badge>}
     </div> },
     { key: 'last', label: t('Last sign-in', 'শেষ সাইন ইন'), hideSm: true, render: u => (u.lastLoginAt ? fmtDateTime(u.lastLoginAt, lang) : <span className="muted">{t('Never', 'কখনো না')}</span>) },
     { key: 'edit', label: '', render: () => <Pencil size={15} className="muted" /> },
@@ -80,9 +82,29 @@ function UsersTab() {
         <SearchBox value={search} onChange={setSearch} placeholder={t('Name or email…', 'নাম বা ইমেইল…')} />
         <button className="btn primary" onClick={() => setEditing('new')} disabled={!roles.data}><UserPlus size={16} />{t('New user', 'নতুন ব্যবহারকারী')}</button>
       </>}>
+      {me?.user.role.key === 'owner' && users.data && <TwoStepPolicy users={users.data.data} />}
       <DataTable rows={rows} columns={columns} onRow={u => setEditing(u)} empty={t('No users found.', 'কোনো ব্যবহারকারী পাওয়া যায়নি।')} />
       {editing && roles.data && <UserDrawer user={editing === 'new' ? null : editing} roles={roles.data.data} onClose={() => setEditing(null)} />}
     </Card>
+  );
+}
+
+/** Owner only: require 2-step sign-in for everyone, with how many still have to set it up. */
+function TwoStepPolicy({ users }: { users: User[] }) {
+  const { t, lang } = usePrefs();
+  const { me, refresh } = useAuth();
+  const required = !!me?.organization.requireTwoStep;
+  const save = useSave<{ required: boolean }>('put', '/admin/two-step-policy');
+  const active = users.filter(u => u.active);
+  const without = active.filter(u => !u.twoStepEnabled).length;
+  return (
+    <div className="card-body row" style={{ gap: 12, justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <div className="row" style={{ gap: 8 }}><ShieldCheck size={16} /><b>{t('Require 2-step sign-in for everyone', 'সবার জন্য ২-ধাপ সাইন-ইন বাধ্যতামূলক')}</b></div>
+        <div className="muted small">{t(`${active.length - without} of ${active.length} active users have it on. When required, the others must set it up the next time they use FarmLedger.`, `${fmtNum(active.length, lang, 0)} জন সক্রিয় ব্যবহারকারীর ${fmtNum(active.length - without, lang, 0)} জনের চালু আছে। বাধ্যতামূলক হলে বাকিদের পরের বার FarmLedger ব্যবহারের সময় এটি সেট আপ করতে হবে।`)}</div>
+      </div>
+      <Switch checked={required} label={required ? t('Required', 'বাধ্যতামূলক') : t('Optional', 'ঐচ্ছিক')} onChange={v => save.mutate({ required: v }, { onSuccess: () => refresh() })} />
+    </div>
   );
 }
 
@@ -96,6 +118,7 @@ function UserDrawer({ user, roles, onClose }: { user: User | null; roles: Role[]
   const [resetPw, setResetPw] = useState(isNew);
   const save = useSave<any>(isNew ? 'post' : 'put', isNew ? '/users' : `/users/${user!.id}`, isNew ? t('User created. They will be asked to set a new password at first sign-in.', 'ব্যবহারকারী তৈরি হয়েছে। প্রথম সাইন ইনে নতুন পাসওয়ার্ড দিতে বলা হবে।') : t('User updated.', 'ব্যবহারকারী হালনাগাদ হয়েছে।'));
   const signOut = useSave<void>('post', `/users/${user?.id}/sign-out`, t('Signed out on every device.', 'সব ডিভাইস থেকে সাইন আউট হয়েছে।'));
+  const resetTwoStep = useSave<void>('post', `/users/${user?.id}/reset-two-step`, t('2-step sign-in reset. They sign in with their password and set it up again.', '২-ধাপ সাইন-ইন রিসেট হয়েছে। তারা পাসওয়ার্ড দিয়ে সাইন ইন করে আবার সেট আপ করবেন।'));
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim());
   const pwProblem = resetPw ? passwordProblem(t, f.password) : null;
@@ -122,6 +145,12 @@ function UserDrawer({ user, roles, onClose }: { user: User | null; roles: Role[]
         <div className="row" style={{ gap: 10, justifyContent: 'space-between' }}>
           <span className="muted small">{t(`Signed in on ${user!.activeSessions} device(s). Lost phone, or someone left?`, `${user!.activeSessions}টি ডিভাইসে সাইন ইন করা। ফোন হারিয়েছে, বা কেউ চলে গেছে?`)}</span>
           <button className="btn sm" disabled={signOut.isPending} onClick={() => signOut.mutate(undefined, { onSuccess: onClose })}><LogOut size={14} />{t('Sign out everywhere', 'সব জায়গা থেকে সাইন আউট')}</button>
+        </div>
+      )}
+      {!isNew && !self && user!.twoStepEnabled && (
+        <div className="row" style={{ gap: 10, justifyContent: 'space-between' }}>
+          <span className="muted small">{t('2-step sign-in is on. Lost their phone and their recovery codes?', '২-ধাপ সাইন-ইন চালু। ফোন ও রিকভারি কোড দুটোই হারিয়েছেন?')}</span>
+          <button className="btn sm" disabled={resetTwoStep.isPending} onClick={() => resetTwoStep.mutate(undefined, { onSuccess: onClose })}><ShieldCheck size={14} />{t('Reset 2-step sign-in', '২-ধাপ সাইন-ইন রিসেট')}</button>
         </div>
       )}
       <div className="card card-pad stack" style={{ background: 'var(--surface-2)' }}>

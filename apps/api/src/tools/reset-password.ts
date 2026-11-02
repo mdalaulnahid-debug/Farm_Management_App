@@ -24,7 +24,8 @@ export function temporaryPassword() {
 }
 
 /**
- * Give the user a new temporary password, unlock and re-enable the account and end every sign-in.
+ * Give the user a new temporary password, unlock and re-enable the account, turn off 2-step sign-in
+ * (for a lost phone) and end every sign-in.
  * They must choose their own password at the next sign-in. Returns null if no user has this email.
  */
 export async function resetPasswordFromConsole(email: string) {
@@ -34,9 +35,9 @@ export async function resetPasswordFromConsole(email: string) {
   const passwordHash = await hashPassword(temporary);
   const by = `${userInfo().username} on ${hostname()}`;
   await tx(async db => {
-    await db.user.update({ where: { id: user.id }, data: { passwordHash, mustChangePassword: true, failedLogins: 0, lockedUntil: null, active: true } });
+    await db.user.update({ where: { id: user.id }, data: { passwordHash, mustChangePassword: true, failedLogins: 0, lockedUntil: null, active: true, totpSecret: null, totpEnabledAt: null, totpLastStep: null, recoveryCodes: null } });
     await db.session.deleteMany({ where: { userId: user.id } });
-    await audit(db, null, 'update', 'user', user.id, `Password reset from the server console for ${user.email} (by ${by})`);
+    await audit(db, null, 'update', 'user', user.id, `Password reset from the server console for ${user.email} (by ${by})${user.totpEnabledAt ? '; 2-step sign-in was turned off' : ''}`);
   });
   return { user, temporary };
 }
@@ -54,7 +55,9 @@ if (isMain) {
     } else {
       console.log(`\nPassword reset for ${result.user.name} <${result.user.email}> (${result.user.role.name}).`);
       console.log(`Temporary password:  ${result.temporary}`);
-      console.log('Sign in with it now; FarmLedger will ask for a new password. All old sign-ins were ended.\n');
+      console.log('Sign in with it now; FarmLedger will ask for a new password. All old sign-ins were ended.');
+      if (result.user.totpEnabledAt) console.log('2-step sign-in was turned off (lost phone): set it up again in My settings → Password & security.');
+      console.log('');
     }
   } finally {
     await prisma.$disconnect();

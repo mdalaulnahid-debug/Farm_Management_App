@@ -5,6 +5,7 @@ import { useT } from './lib/i18n';
 import { Empty, Loading } from './components/ui';
 import Shell from './layout/Shell';
 import Login, { ChangePassword } from './pages/Login';
+import { TwoStepSetup } from './pages/TwoStep';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Sales = lazy(() => import('./pages/Sales'));
@@ -31,6 +32,7 @@ export default function App() {
   if (loading) return <Loading />;
   if (!me) return <Login />;
   if (me.user.mustChangePassword) return <ChangePassword forced />;
+  if (me.user.mustSetUpTwoStep) return <TwoStepSetup forced />;
   return (
     <Shell>
       <Suspense fallback={<Loading />}>

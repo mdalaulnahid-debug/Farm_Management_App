@@ -8,6 +8,7 @@ import { nameOf, usePrefs, type Accent, type Lang } from '../lib/i18n';
 import { fmtDate, fmtDateTime, fmtLongDate, fmtMoney, ymd } from '../lib/format';
 import { Badge, Card, Kpi, Loading, PageHeader, Segmented, Select, Switch, useToast } from '../components/ui';
 import { ChangePassword } from './Login';
+import { TwoStepCard } from './TwoStep';
 
 type Section = 'profile' | 'appearance' | 'language' | 'startup' | 'security' | 'about';
 
@@ -171,6 +172,7 @@ export default function MyAccount() {
             <Card title={t('Change password', 'পাসওয়ার্ড পরিবর্তন')} subtitle={t('Use a password you do not use anywhere else. Changing it signs you out on your other devices.', 'এমন পাসওয়ার্ড দিন যা অন্য কোথাও ব্যবহার করেন না। বদলালে আপনার অন্য ডিভাইসগুলো থেকে সাইন আউট হবে।')} pad>
               <ChangePassword />
             </Card>
+            <TwoStepCard />
             <SignedInDevices />
             <Card title={t('Staying safe', 'নিরাপদ থাকুন')} pad>
               <ul className="tips">
