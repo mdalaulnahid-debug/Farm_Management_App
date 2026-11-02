@@ -8,6 +8,7 @@ import { audit } from '../services/common.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { today } from '../lib/dates.js';
 import { actorOf, can } from '../auth/auth.js';
+import { securityCheck } from '../services/security-check.js';
 import { BACKUP_NAME, backupDir, backupPath, checkBackup, copyDir, isSqlite, keepDays, listBackups, runBackup } from '../services/backup.js';
 
 const sqliteOnly = () => {
@@ -70,4 +71,8 @@ export default async function backupRoutes(app: FastifyInstance) {
     reply.header('Content-Disposition', `attachment; filename="${r.data.name}"`);
     return reply.send(createReadStream(file));
   });
+
+  // Is this install set up the safe way (network, passwords, backups)? Read-only. Only for whoever
+  // manages users (the owner by default), since it names accounts that still use a starting password.
+  app.get('/admin/security-check', { preHandler: can('users.manage') }, async () => securityCheck(prisma));
 }

@@ -20,6 +20,7 @@ import backupRoutes from './routes/backup.js';
 import { ensureReferenceData } from './services/reference.js';
 import { startBackupScheduler } from './services/backup.js';
 import { sealAudit } from './services/audit-chain.js';
+import { securityCheck } from './services/security-check.js';
 
 /**
  * Which proxy may tell us the client's address and whether the browser used HTTPS (X-Forwarded-*).
@@ -122,4 +123,9 @@ if (isMain) {
   const seal = () => sealAudit(prisma).catch(e => app.log.error(`Sealing the audit trail failed: ${(e as Error).message}`));
   void seal();
   setInterval(seal, 5 * 60_000).unref();
+  // Say at start-up what is not set up safely, so it shows in the server window and log.
+  securityCheck(prisma).then(r => {
+    for (const c of r.checks) if (c.level !== 'ok') app.log.warn(`Security ${c.level === 'fail' ? 'PROBLEM' : 'warning'}: ${c.title.en} ${c.fix?.en ?? ''}`);
+    app.log.info(`Security check: ${r.failures} problems, ${r.warnings} warnings (details: Settings → Organization, or security-check.bat).`);
+  }).catch(e => app.log.error(`The security check could not run: ${(e as Error).message}`));
 }
