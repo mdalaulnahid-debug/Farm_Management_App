@@ -13,6 +13,9 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // After a right password, accounts with 2-step sign-in get a ticket and are asked for the code.
+  const [ticket, setTicket] = useState('');
+  const [code, setCode] = useState('');
   const [brand, setBrand] = useState<{ name: string; nameBn: string | null } | null>(null);
   useEffect(() => { api.get<{ name: string; nameBn: string | null }>('/auth/brand').then(setBrand).catch(() => {}); }, []);
   const farm = brand ? nameOf(brand, lang) : '';
@@ -22,10 +25,19 @@ export default function Login() {
     e.preventDefault();
     setBusy(true); setError('');
     try {
-      await api.post('/auth/login', { email, password });
+      if (ticket) {
+        await api.post('/auth/login/two-step', { ticket, code });
+      } else {
+        const r = await api.post<{ ok?: boolean; twoStep?: boolean; ticket?: string }>('/auth/login', { email, password });
+        if (r.twoStep && r.ticket) { setTicket(r.ticket); setPassword(''); return; }
+      }
       try { sessionStorage.removeItem('farmledger.home-opened'); } catch { /* storage unavailable */ } // lets Settings › Start-up apply once per sign-in
       refresh();
-    } catch (err: any) { setError(err.message); } finally { setBusy(false); }
+    } catch (err: any) {
+      setError(err.message);
+      // An expired or used-up ticket means starting again from the password.
+      if (ticket && /password again/i.test(err.message)) { setTicket(''); setCode(''); }
+    } finally { setBusy(false); }
   };
   return (
     <div className="auth-page">
@@ -45,9 +57,17 @@ export default function Login() {
           <div className="row between"><h1>{t('Sign in', 'সাইন ইন')}</h1><button type="button" className="btn ghost sm" onClick={() => set({ lang: lang === 'en' ? 'bn' : 'en' })}>{lang === 'en' ? 'বাংলা' : 'English'}</button></div>
           <p className="muted auth-hint">{t('Use the account your farm administrator created for you.', 'খামারের প্রশাসক আপনার জন্য যে অ্যাকাউন্ট তৈরি করেছেন তা ব্যবহার করুন।')}</p>
           {error && <Alert tone="error">{error}</Alert>}
-          <Field label={t('Email', 'ইমেইল')}><Input type="email" id="email" name="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} autoFocus /></Field>
-          <Field label={t('Password', 'পাসওয়ার্ড')}><Input type="password" id="password" name="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></Field>
-          <button className="btn primary auth-submit" disabled={busy}>{busy ? t('Signing in…', 'সাইন ইন হচ্ছে…') : t('Sign in', 'সাইন ইন')}</button>
+          {!ticket ? <>
+            <Field label={t('Email', 'ইমেইল')}><Input type="email" id="email" name="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} autoFocus /></Field>
+            <Field label={t('Password', 'পাসওয়ার্ড')}><Input type="password" id="password" name="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></Field>
+          </> : <>
+            <p style={{ margin: 0 }}>{t('Open the authenticator app on your phone and type the 6-digit code for FarmLedger.', 'ফোনের অথেনটিকেটর অ্যাপ খুলে FarmLedger-এর ৬ অঙ্কের কোড দিন।')}</p>
+            <Field label={t('Code', 'কোড')} hint={t('Lost your phone? Type one of your printed recovery codes instead.', 'ফোন হারিয়েছেন? এর বদলে আপনার প্রিন্ট করা একটি রিকভারি কোড দিন।')}>
+              <Input id="code" name="code" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={e => setCode(e.target.value)} autoFocus />
+            </Field>
+          </>}
+          <button className="btn primary auth-submit" disabled={busy}>{busy ? t('Signing in…', 'সাইন ইন হচ্ছে…') : ticket ? t('Verify', 'যাচাই করুন') : t('Sign in', 'সাইন ইন')}</button>
+          {ticket && <button type="button" className="btn ghost" onClick={() => { setTicket(''); setCode(''); setError(''); }}>{t('Back', 'ফিরে যান')}</button>}
         </form>
       </section>
     </div>

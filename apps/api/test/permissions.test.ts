@@ -34,6 +34,7 @@ const ROUTES: Row[] = [
   // Open to everyone
   row('GET', '/health', 'public'),
   row('POST', '/auth/login', 'public'),
+  row('POST', '/auth/login/two-step', 'public'),
   row('POST', '/auth/logout', 'public'),
   row('GET', '/auth/brand', 'public'),
   // Any signed-in person, even on a temporary password
@@ -52,6 +53,11 @@ const ROUTES: Row[] = [
   // Your own sign-ins (PR #21)
   row('GET', '/auth/sessions', 'signed-in'),
   row('POST', '/auth/sessions/end-others', 'signed-in'),
+  row('GET', '/auth/two-step', 'signed-in'),
+  row('POST', '/auth/two-step/start', 'signed-in'),
+  row('POST', '/auth/two-step/confirm', 'signed-in'),
+  row('POST', '/auth/two-step/disable', 'signed-in'),
+  row('POST', '/auth/two-step/recovery-codes', 'signed-in'),
   row('POST', '/auth/sessions/:id/end', 'signed-in'),
   // Users and roles
   row('GET', '/roles', need('users.manage')),
@@ -59,6 +65,8 @@ const ROUTES: Row[] = [
   row('GET', '/users', need('users.manage')),
   row('POST', '/users', need('users.manage')),
   row('POST', '/users/:id/sign-out', need('users.manage')),
+  row('POST', '/users/:id/reset-two-step', need('users.manage')),
+  row('PUT', '/admin/two-step-policy', need('users.manage')),
   row('PUT', '/users/:id', need('users.manage')),
   // Organization settings, backups, imports, side projects
   row('PUT', '/settings', need('settings.manage')),

@@ -44,6 +44,10 @@ export const destroySession = (token: string) => prisma.session.deleteMany({ whe
 
 export interface AuthUser {
   id: string; name: string; email: string; locale: string; mustChangePassword: boolean;
+  /** 2-step sign-in is on for this account. */
+  twoStepEnabled: boolean;
+  /** The farm requires 2-step sign-in and this account has not set it up yet. */
+  mustSetUpTwoStep: boolean;
   role: { key: string; name: string }; permissions: Permission[];
 }
 
@@ -65,8 +69,11 @@ export async function loadUser(req: FastifyRequest) {
     await prisma.session.updateMany({ where: { id: session.id }, data: { lastSeenAt: new Date() } }).catch(() => undefined);
   }
   const u = session.user;
+  const twoStepEnabled = !!u.totpEnabledAt;
+  const required = twoStepEnabled ? false : !!(await prisma.organization.findUnique({ where: { id: 'org' }, select: { requireTwoStep: true } }))?.requireTwoStep;
   req.user = {
     id: u.id, name: u.name, email: u.email, locale: u.locale, mustChangePassword: u.mustChangePassword,
+    twoStepEnabled, mustSetUpTwoStep: required,
     role: { key: u.role.key, name: u.role.name }, permissions: JSON.parse(u.role.permissions),
   };
 }
@@ -76,15 +83,21 @@ export const actorOf = (req: FastifyRequest) =>
 
 /**
  * Route guard: `preHandler: can('sales.create')`. Server-side authorization on every operation.
- * Someone still on a temporary password may do nothing until they have chosen their own.
+ * Someone still on a temporary password may do nothing until they have chosen their own, and when the
+ * farm requires 2-step sign-in, nothing until they have set it up.
  */
-export const can = (...perms: Permission[]) => async (req: FastifyRequest, _reply: FastifyReply) => {
-  if (!req.user) throw unauthorized();
-  if (req.user.mustChangePassword) throw new AppError(403, 'Set a new password before continuing.', 'PASSWORD_CHANGE_REQUIRED');
+export const can = (...perms: Permission[]) => async (req: FastifyRequest, reply: FastifyReply) => {
+  await passwordSet(req, reply);
+  if (req.user!.mustSetUpTwoStep) throw new AppError(403, 'Set up 2-step sign-in before continuing.', 'TWO_STEP_REQUIRED');
   if (perms.length && !perms.every(p => req.user!.permissions.includes(p))) throw forbidden();
 };
 export const authed = can();
 /** Signed in, even on a temporary password. Only for what the "set a new password" screen needs. */
 export const signedIn = async (req: FastifyRequest, _reply: FastifyReply) => {
   if (!req.user) throw unauthorized();
+};
+/** Signed in with their own password, 2-step set up or not. Only for what the 2-step setup screen needs. */
+export const passwordSet = async (req: FastifyRequest, _reply: FastifyReply) => {
+  if (!req.user) throw unauthorized();
+  if (req.user.mustChangePassword) throw new AppError(403, 'Set a new password before continuing.', 'PASSWORD_CHANGE_REQUIRED');
 };

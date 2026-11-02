@@ -32,6 +32,7 @@ model Organization {
   fiscalYearStart  Int       @default(7) // month number; Bangladesh FY starts in July
   lockDate         DateTime? // no posting on or before this date (period close)
   invoiceFooter    String?
+  requireTwoStep   Boolean   @default(false) // everyone must use 2-step sign-in (authenticator app)
   updatedAt        DateTime  @updatedAt
 }
 
@@ -60,6 +61,12 @@ model User {
   failedLogins       Int        @default(0)
   lockedUntil        DateTime?
   lastLoginAt        DateTime?
+  // 2-step sign-in: authenticator secret (set while setting up, active once totpEnabledAt is set),
+  // the last code's time step (a code is never accepted twice), and hashes of unused recovery codes.
+  totpSecret         String?
+  totpEnabledAt      DateTime?
+  totpLastStep       Int?
+  recoveryCodes      String?
   sessions           Session[]
   auditLogs          AuditLog[]
   createdAt          DateTime   @default(now())
