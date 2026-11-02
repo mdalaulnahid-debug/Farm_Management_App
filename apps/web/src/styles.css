@@ -433,9 +433,18 @@ table.table { width: 100%; border-collapse: collapse; }
   .auth-form { place-items: start center; padding-top: 24px; }
   .content, .topbar { padding-left: 16px; padding-right: 16px; }
   .search .input { width: 100%; }
+  /* Tablets upright: a row of three summary cards still fits; grids holding a wide chart stay stacked. */
+  .g3:not(:has(> .span2)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+/* Tablets and small laptops: tables are still tables here, so keep codes and dates on one line and
+   tighten the cell padding; anything wider scrolls sideways inside its card. */
+@media (min-width: 601px) and (max-width: 1180px) {
+  .table td, .table th { padding-left: 10px; padding-right: 10px; }
+  .table .mono, .table td[data-key='date'], .table td[data-key='due'], .table td[data-key='last'] { white-space: nowrap; }
 }
 @media (max-width: 600px) {
   .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g3:not(:has(> .span2)) { grid-template-columns: 1fr; }
   .form-grid, .form-grid.three { grid-template-columns: 1fr; }
   .hide-sm { display: none; }
   h1 { font-size: 1.3em; }
