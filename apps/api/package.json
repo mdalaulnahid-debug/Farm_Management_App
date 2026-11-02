@@ -14,7 +14,8 @@
     "db:reset": "tsx --env-file-if-exists=.env src/tools/reset-database.ts",
     "db:studio": "prisma studio",
     "user:reset-password": "tsx --env-file-if-exists=.env src/tools/reset-password.ts",
-    "db:restore": "tsx --env-file-if-exists=.env src/tools/restore-backup.ts"
+    "db:restore": "tsx --env-file-if-exists=.env src/tools/restore-backup.ts",
+    "security:check": "tsx --env-file-if-exists=.env src/tools/security-check.ts"
   },
   "prisma": { "seed": "tsx prisma/seed.ts" },
   "dependencies": {

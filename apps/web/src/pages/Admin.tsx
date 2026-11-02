@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Building2, CalendarCheck, Download, History, KeyRound, Lock, LockOpen, LogOut, Pencil, Unlock, UserPlus } from 'lucide-react';
+import { Building2, CalendarCheck, Download, History, KeyRound, Lock, LockOpen, LogOut, Pencil, ShieldCheck, Unlock, UserPlus } from 'lucide-react';
 import { usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi, useSave } from '../lib/hooks';
@@ -244,9 +244,41 @@ function RolesTab() {
 
 // ───────────── Organization ─────────────
 function OrgTab() {
+  const { can } = useAuth();
   const q = useApi<Org>('/settings');
   if (!q.data) return <Card><Loading /></Card>;
-  return <><OrgForm org={q.data} /><BackupCard /></>;
+  return <>{can('users.manage') && <SecurityCard />}<OrgForm org={q.data} /><BackupCard /></>;
+}
+
+interface SecurityReport { ok: boolean; warnings: number; failures: number; checks: { key: string; level: 'ok' | 'warn' | 'fail'; title: { en: string; bn: string }; fix: { en: string; bn: string } | null }[] }
+function SecurityCard() {
+  const { t, lang } = usePrefs();
+  const q = useApi<SecurityReport>('/admin/security-check');
+  const say = (m: { en: string; bn: string }) => (lang === 'bn' ? m.bn : m.en);
+  const r = q.data;
+  return (
+    <Card title={<span className="row" style={{ gap: 8 }}><ShieldCheck size={18} />{t('Security settings', 'নিরাপত্তা সেটিংস')}</span>}
+      subtitle={t('Checks how this computer runs FarmLedger: network, passwords and backups. Settings marked here are changed in apps/api/.env on the server, then FarmLedger is restarted.', 'এই কম্পিউটারে FarmLedger কীভাবে চলছে তা পরীক্ষা করে: নেটওয়ার্ক, পাসওয়ার্ড ও ব্যাকআপ। এখানে দেখানো সেটিংস সার্ভারের apps/api/.env-এ বদলাতে হয়, তারপর FarmLedger আবার চালু করতে হয়।')}
+      actions={<button className="btn" disabled={q.isFetching} onClick={() => q.refetch()}>{t('Check again', 'আবার পরীক্ষা')}</button>}>
+      <div className="card-body stack">
+        {q.error && <Alert tone="warn">{q.error.message}</Alert>}
+        {q.isLoading && <Loading />}
+        {r && <>
+          {r.failures ? <Alert tone="error">{t(`${r.failures} problem(s) to fix before the farm team uses FarmLedger.`, `ফার্ম টিম FarmLedger ব্যবহারের আগে ${fmtNum(r.failures, lang, 0)}টি সমস্যা ঠিক করতে হবে।`)}</Alert>
+            : r.warnings ? <Alert tone="warn">{t(`No problems; ${r.warnings} thing(s) worth improving.`, `কোনো সমস্যা নেই; ${fmtNum(r.warnings, lang, 0)}টি বিষয় উন্নত করা ভালো।`)}</Alert>
+            : <Alert>{t('Everything is set up the safe way.', 'সবকিছু নিরাপদভাবে সেট করা আছে।')}</Alert>}
+          <ul className="stack" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            {r.checks.map(c => (
+              <li key={c.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <Badge tone={c.level === 'ok' ? 'green' : c.level === 'warn' ? 'amber' : 'red'}>{c.level === 'ok' ? t('OK', 'ঠিক আছে') : c.level === 'warn' ? t('Improve', 'উন্নত করুন') : t('Problem', 'সমস্যা')}</Badge>
+                <div style={{ flex: 1, minWidth: 0 }}><div>{say(c.title)}</div>{c.fix && <div className="muted small">{say(c.fix)}</div>}</div>
+              </li>
+            ))}
+          </ul>
+        </>}
+      </div>
+    </Card>
+  );
 }
 
 interface BackupFile { name: string; size: number; createdAt: string }

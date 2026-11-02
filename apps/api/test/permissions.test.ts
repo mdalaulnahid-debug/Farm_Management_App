@@ -65,6 +65,7 @@ const ROUTES: Row[] = [
   row('PUT', '/settings/lock-date', need('settings.manage')),
   row('GET', '/admin/backup', need('settings.manage')),
   row('GET', '/admin/backups', need('settings.manage')),
+  row('GET', '/admin/security-check', need('users.manage')),
   row('POST', '/admin/backups/:name/check', need('settings.manage')),
   row('POST', '/admin/backups', need('settings.manage')),
   row('GET', '/admin/backups/:name', need('settings.manage')),
