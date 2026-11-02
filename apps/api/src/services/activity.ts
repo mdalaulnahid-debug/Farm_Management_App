@@ -6,6 +6,15 @@ import { num, round2 } from '../lib/money.js';
 import { toDate, ymd } from '../lib/dates.js';
 import { backdateDays } from './ledger.js';
 
+/** Sign-ins outside these farm-local hours are listed. */
+export const QUIET_HOURS = { from: 22, to: 6 };
+/** This many wrong passwords in the hour before a successful sign-in is listed. */
+export const FAILURES_BEFORE = 3;
+/** An address not used by that person in this many days counts as new. */
+const NEW_ADDRESS_DAYS = 60;
+
+export const isQuietHour = (d: Date) => d.getHours() >= QUIET_HOURS.from || d.getHours() < QUIET_HOURS.to;
+
 /** An entry dated more than this many days before it was typed in is listed as back-dated. */
 export const BACKDATED_AFTER_DAYS = 2;
 const LIMIT = 500;
@@ -93,6 +102,29 @@ export async function unusualActivity(from: string, to: string) {
     failed.set(a.entityId ?? '', g);
   }
 
+  // Sign-ins that look unusual: from an address this person has not used lately (not their first ever),
+  // at night, or straight after several wrong passwords.
+  const logins = await prisma.auditLog.findMany({ where: { action: 'login', createdAt: when }, orderBy: { createdAt: 'desc' }, take: 5000 });
+  const lookback = { gte: new Date(when.gte.getTime() - NEW_ADDRESS_DAYS * 86_400_000), lte: when.lte };
+  const userIds = [...new Set(logins.map(l => l.userId).filter((x): x is string => !!x))];
+  const history = userIds.length
+    ? await prisma.auditLog.findMany({ where: { userId: { in: userIds }, action: { in: ['login', 'login_failed'] }, createdAt: lookback }, select: { userId: true, action: true, ip: true, createdAt: true } })
+    : [];
+  const signIns: { at: Date; user: string; email: string; ip: string | null; reasons: ('new_address' | 'night' | 'after_failures')[]; failures: number }[] = [];
+  for (const l of logins) {
+    const mine = history.filter(h => h.userId === l.userId && h.createdAt < l.createdAt);
+    const earlierLogins = mine.filter(h => h.action === 'login');
+    const failures = mine.filter(h => h.action === 'login_failed' && l.createdAt.getTime() - h.createdAt.getTime() <= 3_600_000).length;
+    const reasons: (typeof signIns)[number]['reasons'] = [];
+    if (earlierLogins.length && l.ip && !earlierLogins.some(h => h.ip === l.ip)) reasons.push('new_address');
+    if (isQuietHour(l.createdAt)) reasons.push('night');
+    if (failures >= FAILURES_BEFORE) reasons.push('after_failures');
+    if (reasons.length && signIns.length < LIMIT) {
+      const u = l.userId ? users.get(l.userId) : undefined;
+      signIns.push({ at: l.createdAt, user: u?.name ?? 'Unknown user', email: u?.email ?? '', ip: l.ip, reasons, failures });
+    }
+  }
+
   const adminChanges = audits.filter(a => a.action !== 'void' && a.action !== 'login_failed').slice(0, LIMIT)
     .map(a => ({ at: a.createdAt, user: who(a.userId), entity: a.entity, action: a.action, summary: a.summary }));
 
@@ -104,6 +136,8 @@ export async function unusualActivity(from: string, to: string) {
     writeOffs: [...writeOffs.values()].sort((a, b) => b.value - a.value || b.quantity - a.quantity),
     cashShortages,
     failedSignIns: [...failed.values()].sort((a, b) => b.count - a.count),
+    signIns,
+    quietHours: QUIET_HOURS,
     adminChanges,
   };
   return {
@@ -111,7 +145,7 @@ export async function unusualActivity(from: string, to: string) {
     counts: {
       voids: voids.reduce((s, g) => s + g.count, 0), backdated: result.backdated.reduce((s, g) => s + g.count, 0), discounts: discounts.length,
       writeOffs: result.writeOffs.length, cashShortages: cashShortages.length,
-      failedSignIns: result.failedSignIns.reduce((s, f) => s + f.count, 0), adminChanges: adminChanges.length,
+      failedSignIns: result.failedSignIns.reduce((s, f) => s + f.count, 0), unusualSignIns: signIns.length, adminChanges: adminChanges.length,
     },
   };
 }
