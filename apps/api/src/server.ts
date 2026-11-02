@@ -126,6 +126,6 @@ if (isMain) {
   // Say at start-up what is not set up safely, so it shows in the server window and log.
   securityCheck(prisma).then(r => {
     for (const c of r.checks) if (c.level !== 'ok') app.log.warn(`Security ${c.level === 'fail' ? 'PROBLEM' : 'warning'}: ${c.title.en} ${c.fix?.en ?? ''}`);
-    app.log.info(`Security check: ${r.failures} problems, ${r.warnings} warnings (details: Settings → Organization, or security-check.bat).`);
+    app.log.info(`Security check: ${r.failures} problems, ${r.warnings} warnings (details: Settings → Organization, or npm run security:check -w apps/api).`);
   }).catch(e => app.log.error(`The security check could not run: ${(e as Error).message}`));
 }

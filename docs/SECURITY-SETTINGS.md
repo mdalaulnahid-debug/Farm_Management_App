@@ -1,63 +1,65 @@
-# Security settings for the office VM
+# Security settings
 
-FarmLedger checks its own setup. On the server, double-click **security-check.bat** (or run
-`npm run security:check -w apps/api`). The owner sees the same list in **Settings → Organization →
-Security settings**. Each start-up also writes any problem to the server log. The check only reads; it
-never changes a setting.
+FarmLedger checks its own setup. The check only reads; it never changes a setting.
 
-## Recommended settings
+- **On the server:** run `npm run security:check -w apps/api`, or double-click **security-check.bat** on Windows. It exits with code 1 when it finds a problem.
+- **In the app:** the owner sees the same list in **Settings → Organization → Security settings**.
+- **At start-up:** any problem is written to the server log.
 
-How people reach the app: through `tailscale serve` (HTTPS at `https://<vm-name>.<tailnet>.ts.net`), with
-FarmLedger answering only inside the VM.
+## Recommended setup: Linux VM with Tailscale
 
-`apps/api/.env` on the VM:
+People reach FarmLedger only through `tailscale serve` (`https://<vm-name>.<tailnet>.ts.net`). FarmLedger itself
+answers only inside the VM. Every phone and PC that uses it needs the Tailscale app, signed in to the tailnet.
 
-```ini
-HOST=127.0.0.1
-PORT=4000
-NODE_ENV=production
-TRUST_PROXY=127.0.0.1
-SESSION_HOURS=12
-BACKUP_COPY_DIR=G:\My Drive\FarmLedger     # or a USB drive, e.g. E:\FarmLedger
-# ADMIN_PASSWORD deleted after the first setup
-```
+Make sure that is true **before step 2**, because step 2 closes the plain `http://<address>:4000` addresses.
 
-Then, on the VM:
+Run the check after each restart.
 
-```bat
-tailscale serve --bg 4000
-```
+1. **Remove the starting password.** Delete the `ADMIN_PASSWORD` line from `.env`, along with any file the
+   setup left holding the starting password.
+2. **HTTPS only.** Set `HOST=127.0.0.1` and `TRUST_PROXY=127.0.0.1`, then restart the service.
+   - Check that the HTTPS address still signs in. The `:4000` addresses now stop answering. That is intended.
+   - If a deploy script health-checks the app, it must call `127.0.0.1:4000`.
+3. **Secure cookie.** Set `NODE_ENV=production`, restart, and sign in again over HTTPS.
+   - Never do this before step 2. Over plain HTTP nobody could sign in, and the check reports that as a problem.
+4. **A backup copy off the host PC.** A VM's disk lives on its host PC, so a copy inside the VM, or on that PC,
+   dies with it.
+   - Mount a USB drive in the VM, writable by the service account.
+   - Set `BACKUP_COPY_DIR` to a folder on it, then restart.
+5. **Firewall (ufw).** Allow ports 443 (`tailscale serve`) and 22 (SSH) only on `tailscale0`, and deny everything
+   else incoming, including 4000. Before you start, check that SSH works over Tailscale and that you have a
+   console way back in.
+   ```sh
+   sudo ufw status verbose
+   sudo ufw default deny incoming
+   sudo ufw allow in on tailscale0 to any port 443 proto tcp
+   sudo ufw allow in on tailscale0 to any port 22 proto tcp
+   sudo ufw delete allow 22/tcp          # only if a rule open to every network exists
+   sudo ufw deny 4000/tcp
+   sudo ufw status verbose
+   ```
+6. **Spare owner account.** Add one (Users → Add user, role Owner) and seal its password in the office safe.
 
-Restart FarmLedger after changing `.env`, then run **security-check.bat** again. Every line should say OK.
-
-### The order matters
-
-1. Start `tailscale serve` first. Check that `https://<vm-name>.<tailnet>.ts.net` opens the sign-in page.
-2. Set `TRUST_PROXY=127.0.0.1` and `HOST=127.0.0.1`, then restart.
-   - After this, the old `http://<ip>:4000` address stops working. That is the point: everyone uses the
-     HTTPS address.
-3. Only then set `NODE_ENV=production`.
-   - It marks the sign-in cookie HTTPS-only. Over plain HTTP, nobody could sign in. The check reports this
-     as a problem if the order is wrong.
+The setup is done when every line of the check says OK.
 
 ## What each check means
 
-| Check | OK when | Why |
+| Check | OK when | Why it matters |
 |---|---|---|
-| HTTPS proxy | `TRUST_PROXY` set | Passwords never cross the office network unencrypted |
-| Listen address | `HOST` is 127.0.0.1 or the VM's Tailscale address (100.x) | Nobody on the office network can reach the app without Tailscale, or skip HTTPS |
-| Sign-in cookie | not `NODE_ENV=production` over plain HTTP | Otherwise no one can sign in |
-| Starting password | nobody uses `ChangeMe!2026` or the `.env` `ADMIN_PASSWORD` | Those passwords are written in files |
-| Password in .env | no `ADMIN_PASSWORD` line | Anyone who can read the file learns it |
-| Owner accounts | 2 or more owners, none on a temporary password | A spare owner (password sealed in the office safe) can let the main owner back in |
-| Sign-in lifetime | `SESSION_HOURS` 12 or less | A forgotten browser does not stay signed in for days |
-| Recent backup | one in the last 2 days | FarmLedger takes one a day while running |
-| Off-computer copy | `BACKUP_COPY_DIR` set and writable | A dead or stolen VM does not take the books with it |
-| Audit trail | hash chain intact | Nobody edited the history behind the app's back |
+| HTTPS proxy | `TRUST_PROXY` is set | Passwords never cross the office network unencrypted |
+| Listen address | `HOST` is 127.0.0.1, or the Tailscale address (100.x) | Nobody on the office network can reach the app or skip HTTPS |
+| Sign-in cookie | `NODE_ENV=production` is not used over plain HTTP | Otherwise no one can sign in |
+| Starting password | Nobody uses `ChangeMe!2026` or the `.env` `ADMIN_PASSWORD` | Those passwords are written in files |
+| Password in .env | There is no `ADMIN_PASSWORD` line | Anyone who can read the file learns it |
+| Owner accounts | 2 or more owners, none on a temporary password | A spare owner can let the main owner back in |
+| Sign-in lifetime | `SESSION_HOURS` is 12 or less | A forgotten browser does not stay signed in for days |
+| Recent backup | There is a backup from the last 2 days | FarmLedger takes one a day while running |
+| Off-computer copy | `BACKUP_COPY_DIR` is set and writable | A dead or stolen PC does not take the books with it |
+| Audit trail | The hash chain is intact | Nobody edited the history behind the app's back |
 
-## Also on the VM (not checked by the app)
+The app does **not** check the firewall, SSH, or leftover password files. Steps 1 and 5 cover them.
 
-- Windows Firewall: allow port 4000 only from localhost (or not at all, once `HOST=127.0.0.1`).
-- Windows Update on; a standard (non-admin) Windows account runs FarmLedger.
-- `apps/api/.env` and `apps/api/prisma/` readable only by that account and the administrators.
-- Practise one restore with `restore-backup.bat` on a spare copy.
+## Single Windows PC
+
+Use the same `.env` settings, run `tailscale serve --bg 4000`, and point `BACKUP_COPY_DIR` at a USB drive (for example
+`E:\FarmLedger`). Run `security-check.bat`, and block port 4000 in Windows Firewall.

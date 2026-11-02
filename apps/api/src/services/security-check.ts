@@ -1,7 +1,7 @@
 // Security settings check: is this install set up the safe way? Looks at the .env settings, the owner
 // accounts and the backups, and says in plain words what to change. Read-only; it never changes a
 // setting itself. Shown to the owner in Settings → Organization, printed by `npm run security:check`
-// (security-check.bat) on the server, and summarised in the server log at start-up.
+// (security-check.bat on Windows) on the server, and summarised in the server log at start-up.
 import { accessSync, constants, existsSync } from 'node:fs';
 import { isIP } from 'node:net';
 import { resolve } from 'node:path';
@@ -76,7 +76,7 @@ export async function securityCheck(db: Db, env: Env = process.env): Promise<Sec
   }
   if (weak.length) add('default_password', 'fail',
     text(`Still using the starting password from the setup file: ${weak.join(', ')}.`, `সেটআপ ফাইলের শুরুর পাসওয়ার্ড এখনো ব্যবহার হচ্ছে: ${weak.join(', ')}।`),
-    text('Sign in as that person and change the password now (My account → Password), or run reset-password.bat for them.', 'সেই ব্যক্তি হিসেবে সাইন ইন করে এখনই পাসওয়ার্ড বদলান (আমার অ্যাকাউন্ট → পাসওয়ার্ড), অথবা তার জন্য reset-password.bat চালান।'));
+    text('Sign in as that person and change the password now (My account → Password), or reset it from the server console (npm run user:reset-password -w apps/api -- <email>, or reset-password.bat on Windows).', 'সেই ব্যক্তি হিসেবে সাইন ইন করে এখনই পাসওয়ার্ড বদলান (আমার অ্যাকাউন্ট → পাসওয়ার্ড), অথবা তার জন্য reset-password.bat চালান।'));
   else add('default_password', 'ok', text('Nobody uses the starting password from the setup file.', 'কেউ সেটআপ ফাইলের শুরুর পাসওয়ার্ড ব্যবহার করছেন না।'));
 
   if (env.ADMIN_PASSWORD) add('admin_password_in_env', 'warn',
@@ -116,7 +116,7 @@ export async function securityCheck(db: Db, env: Env = process.env): Promise<Sec
     if (extra && existsSync(extra)) try { accessSync(extra, constants.W_OK); writable = true; } catch { /* reported below */ }
     if (!extra) add('backup_copy', 'warn',
       text('Backups stay only on this computer.', 'ব্যাকআপ শুধু এই কম্পিউটারেই থাকে।'),
-      text('If this computer dies or is stolen, the books go with it. Set BACKUP_COPY_DIR in apps/api/.env to a USB drive or a Google Drive folder (e.g. BACKUP_COPY_DIR=G:\\My Drive\\FarmLedger).', 'এই কম্পিউটার নষ্ট বা চুরি হলে হিসাবও যাবে। apps/api/.env-এ BACKUP_COPY_DIR-এ একটি ইউএসবি ড্রাইভ বা Google Drive ফোল্ডার দিন।'));
+      text('If this computer dies or is stolen, the books go with it. Set BACKUP_COPY_DIR in apps/api/.env to a USB drive or a Google Drive folder (e.g. E:\\FarmLedger on Windows, or a mounted drive such as /mnt/farm-backup on Linux).', 'এই কম্পিউটার নষ্ট বা চুরি হলে হিসাবও যাবে। apps/api/.env-এ BACKUP_COPY_DIR-এ একটি ইউএসবি ড্রাইভ বা Google Drive ফোল্ডার দিন।'));
     else if (!writable) add('backup_copy', 'fail',
       text(`The second backup folder ${extra} is missing or cannot be written to.`, `দ্বিতীয় ব্যাকআপ ফোল্ডার ${extra} নেই বা এতে লেখা যায় না।`),
       text('Plug in the drive or start Google Drive, or correct BACKUP_COPY_DIR in apps/api/.env.', 'ড্রাইভটি লাগান বা Google Drive চালু করুন, অথবা apps/api/.env-এ BACKUP_COPY_DIR ঠিক করুন।'));
