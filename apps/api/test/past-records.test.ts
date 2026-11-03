@@ -124,7 +124,7 @@ describe('reading the rows', () => {
     expect(p.start).toMatchObject({ row: 3, cash: 5 });
     const own = parseTemplate(writeXlsx([
       { name: 'Instructions', rows: [[''], [TEMPLATE_MARK]] },
-      { name: 'Start', header: true, rows: [['Start date *'], ['01/02/2025']] },
+      { name: 'Start', header: true, rows: [['Start date *', 'Cash in hand', 'Bank balance', 'Mobile banking balance'], ['01/02/2025']] },
     ]));
     expect(own.start).toMatchObject({ row: 2, date: '2025-02-01' });
   });
@@ -147,6 +147,27 @@ describe('reading the rows', () => {
     expect(at('Daily eggs & sales', 4)).toEqual(['Date: This date is in the future.']);
     expect(at('Daily eggs & sales', 5)[0]).toContain('"yesterday" is not a date');
     expect(at('Purchases & expenses', 3)).toEqual(['Total amount: Cannot be below zero.']);
+  });
+
+  it('refuses a sheet with a heading renamed or deleted, so "Received now" cannot quietly read as all paid', () => {
+    const daily = SHEETS.find(s => s.key === 'daily')!;
+    const p = parseTemplate(writeXlsx([
+      { name: 'Instructions', rows: [[''], [TEMPLATE_MARK]] },
+      { name: 'Start', header: true, rows: [SHEETS[0].cols.map(c => c.en), [null], ['01/03/2025']] },
+      { name: 'Daily eggs & sales', header: true, rows: [daily.cols.map(c => (c.key === 'received' ? 'Cash got' : c.en)), daily.cols.map(() => null), ['02/03/2025']] },
+    ]));
+    expect(p.issues).toEqual([{ sheet: 'Daily eggs & sales', row: 1, column: 'Received now', message: 'This heading is missing from row 1. Download a fresh template and copy your rows into it.' }]);
+    expect(p.records.daily).toEqual([]);
+  });
+
+  it('caps the rows per file', () => {
+    const p = parseTemplate(fill({ start: [{ date: '01/03/2025' }], grants: Array.from({ length: 5001 }, () => ({ date: '02/03/2025', giver: 'X', amount: 1 })) }));
+    expect(p.issues.map(i => i.message)).toContainEqual(expect.stringContaining('at most 5000 can be imported at once'));
+  });
+
+  it('reads an Excel date-time in the afternoon as that day', () => {
+    const p = parseTemplate(fill({ start: [{ date: 45717.75 }] })); // 2025-03-01 18:00
+    expect(p.start?.date).toBe('2025-03-01');
   });
 
   it('refuses the same name twice on one sheet', () => {
@@ -254,14 +275,44 @@ describe('import and undo', () => {
     expect(r.body.message).toContain('already imported');
   });
 
+  it('refuses a different file with the same start date while the first import stands', async () => {
+    const r = await call('POST', '/import/template', upload(fill({ ...GOOD, grants: [] }), { confirmOverlap: true }));
+    expect(r.status).toBe(409);
+    expect(r.body.message).toContain('same start date');
+  });
+
   it('warns that the dates now overlap the imported records', async () => {
     const r = await call('POST', '/import/template/preview', upload(fill({ start: [{ date: '01/03/2025' }], grants: [{ date: '08/03/2025', giver: 'Someone else', amount: 1 }] })));
     expect(r.body.overlap.total).toBeGreaterThan(0);
     expect(r.body.overlap.imports).toContain((await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId } })).number);
   });
 
+  it('will not undo while a payment entered later settles an imported record', async () => {
+    const hotel = await prisma.party.findFirstOrThrow({ where: { name: 'PR Hotel' } });
+    const inv = await prisma.salesInvoice.findFirstOrThrow({ where: { customerId: hotel.id, status: { not: 'PAID' } } });
+    const pay = await call('POST', '/payments', { direction: 'IN', date: '2025-03-20', partyId: hotel.id, cashAccountId: await accountId(prisma, SYS.CASH), amount: 100, allocations: [{ invoiceId: inv.id, amount: 100 }] });
+    expect(pay.status).toBe(200);
+    const r = await call('POST', `/import/batches/${batchId}/undo`, { reason: 'testing undo' });
+    expect(r.status).toBe(409);
+    expect(r.body.message).toContain(pay.body.number);
+    expect((await call('POST', `/payments/${pay.body.id}/void`, { reason: 'entered by mistake' })).body.message ?? 'ok').toBe('ok');
+  });
+
+  it('blocks replacing a workbook month that a past records import covers', async () => {
+    const extra = await call('POST', '/import/template', upload(fill({ start: [{ date: '01/10/2026' }], grants: [{ date: '05/10/2026', giver: 'PR October donor', amount: 1 }] }), { confirmOverlap: true }));
+    expect(extra.body.message ?? 'ok').toBe('ok');
+    const dir = new URL('../../../upload/', import.meta.url);
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const name = readdirSync(dir).find(f => f.endsWith('.xlsx'))!;
+    const wb = { fileName: name, fileBase64: readFileSync(new URL(name, dir)).toString('base64') };
+    const pre = await call('POST', '/import/workbook/preview', wb);
+    expect(pre.body.blockers).toContainEqual(expect.stringContaining(extra.body.batch.number));
+    expect((await call('POST', '/import/workbook', { ...wb, replaceExisting: true })).status).toBe(409);
+    expect((await call('POST', `/import/batches/${extra.body.batch.id}/undo`, { reason: 'testing the block' })).status).toBe(200);
+  });
+
   it('undoes in one step, and the records can then be imported again', async () => {
-    expect((await call('POST', `/import/batches/${batchId}/undo`, { reason: 'testing undo' })).status).toBe(200);
+    expect((await call('POST', `/import/batches/${batchId}/undo`, { reason: 'testing undo' })).body.message ?? 'ok').toBe('ok');
     expect((await call('GET', '/reports/trial-balance?asOf=2026-12-31')).body.balanced).toBe(true);
     expect(await bal(SYS.CASH)).toBe(cash0.cash);
     expect(await bal(SYS.BANK)).toBe(cash0.bank);

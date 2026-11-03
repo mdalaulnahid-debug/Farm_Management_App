@@ -192,7 +192,7 @@ export async function previewWorkbook(p: ParsedWorkbook) {
   ]);
   const existing = { invoices, bills, payments, production, adjustments: adjustments.length, journals };
   const hasExisting = Object.values(existing).some(Boolean);
-  const blockers = await outsidePaymentBlockers(from, to);
+  const blockers = [...(await outsidePaymentBlockers(from, to)), ...(await templateBlockers(from, to))];
 
   // Simulate egg stock day by day, starting from stock before the period (assuming the period is replaced).
   const errors: string[] = [];
@@ -222,6 +222,15 @@ async function outsidePaymentBlockers(from: Date, to: Date) {
     include: { payment: true, invoice: true, bill: true },
   });
   return allocs.map(a => `${a.payment.number} (${ymd(a.payment.date)}) settles ${a.invoice?.number ?? a.bill?.number}`);
+}
+
+/**
+ * A past-records import overlapping the month: replacing would void only its records in this month and leave
+ * the rest with no import to undo them, so it is refused.
+ */
+async function templateBlockers(from: Date, to: Date) {
+  const batches = await prisma.importBatch.findMany({ where: { kind: 'TEMPLATE', status: 'POSTED', periodFrom: { lte: to }, periodTo: { gte: from } } });
+  return batches.map(b => `Past records import ${b.number} covers this month. Undo it first, or enter this month in the past records template instead.`);
 }
 
 // ───────────── Replace & undo ─────────────
@@ -258,6 +267,13 @@ export async function undoBatch(db: Db, actor: Actor | null, id: string, reason:
   const d = JSON.parse(batch.documents) as Docs;
   const livePaymentsOf = async (where: object) => (await db.paymentAllocation.findMany({ where: { ...where, payment: { status: 'POSTED' } }, select: { paymentId: true } })).map(a => a.paymentId);
   const payments = new Set([...d.payments, ...(await livePaymentsOf({ invoiceId: { in: d.invoices } })), ...(await livePaymentsOf({ billId: { in: d.bills } }))]);
+  if (batch.kind === 'TEMPLATE') {
+    // Money entered later against these records is real work: never void it quietly.
+    const nums = (await db.payment.findMany({ where: { id: { in: [...payments] }, createdAt: { gt: batch.createdAt } }, select: { number: true } })).map(p => p.number);
+    if (nums.length) {
+      throw conflict(`Payments entered after this import settle its records: ${nums.join(', ')}. Void them first if they are wrong, then undo the import.`);
+    }
+  }
   for (const p of payments) { const x = await db.payment.findUnique({ where: { id: p } }); if (x?.status === 'POSTED') await voidPayment(db, actor, p, reason); }
   for (const i of d.invoices) { const x = await db.salesInvoice.findUnique({ where: { id: i } }); if (x && x.status !== 'VOID') await voidInvoice(db, actor, i, reason); }
   for (const b of d.bills) { const x = await db.bill.findUnique({ where: { id: b } }); if (x && x.status !== 'VOID') await voidBill(db, actor, b, reason); }
@@ -286,6 +302,8 @@ export async function importWorkbook(db: Db, actor: Actor | null, p: ParsedWorkb
   if (opts.replaceExisting) {
     const blockers = await outsidePaymentBlockers(from, to);
     if (blockers.length) throw conflict(`Void these later payments first: ${blockers.join('; ')}`);
+    const templates = await templateBlockers(from, to);
+    if (templates.length) throw conflict(templates.join(' '));
     await voidPeriod(db, actor, from, to, `Replaced by workbook import`);
   }
   const flock = opts.flockId ? await db.flock.findUnique({ where: { id: opts.flockId } }) : await db.flock.findFirst({ where: { status: 'ACTIVE' }, orderBy: { startDate: 'asc' } });

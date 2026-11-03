@@ -22,7 +22,7 @@ function unzip(buf: Buffer) {
     const name = buf.toString('utf8', p + 46, p + 46 + nameLen);
     const dataStart = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
     const raw = buf.subarray(dataStart, dataStart + size);
-    files.set(name, method === 0 ? raw : inflateRawSync(raw));
+    files.set(name, method === 0 ? raw : inflateRawSync(raw, { maxOutputLength: 100 * 1024 * 1024 })); // no zip bombs
     p += 46 + nameLen + extraLen + commentLen;
   }
   return files;

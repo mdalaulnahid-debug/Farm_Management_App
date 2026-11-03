@@ -26,8 +26,14 @@ stock, flocks, and the day-by-day eggs, sales, purchases, payments and grants.
 4. If the books already hold records in the same dates, or opening balances, the preview warns you.
    Tick the box only after checking that you are not entering the same records twice.
 
-The same records cannot be imported twice. To correct an import, undo it in **Import history**, fix the
-file and import it again.
+The same records cannot be imported twice, and neither can a second file with the same start date while
+the first import stands (its opening balances would be counted twice). To correct an import, undo it in
+**Import history**, fix the file and import it again. An import cannot be undone while a payment entered
+later settles one of its records; void that payment first if it is wrong.
+
+One file takes at most 5,000 rows. For a longer history, use one file per year: the first with the start
+balances, the next ones with a later start date and no opening figures. The preview briefly holds other
+saves, so check large files outside busy hours.
 
 ## How the books record it
 

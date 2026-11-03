@@ -207,7 +207,7 @@ function readDate(raw: Cell): string | null {
   let y: number, m: number, d: number;
   if (typeof raw === 'number') {
     if (raw < 20000 || raw > 80000) return null;
-    const dt = new Date(Date.UTC(1899, 11, 30) + Math.round(raw) * 86_400_000);
+    const dt = new Date(Date.UTC(1899, 11, 30) + Math.floor(raw) * 86_400_000);
     [y, m, d] = [dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate()];
   } else {
     const s = clean(raw);
@@ -250,7 +250,8 @@ function lastRow(sheet: Sheet) {
   return max;
 }
 
-const MAX_ROWS = 20_000;
+/** Rows per file. The preview holds the books' write lock while it runs, so keep it short. */
+const MAX_ROWS = 5_000;
 
 /** Read an uploaded template. Throws NOT_TEMPLATE for any other spreadsheet, so the caller can try the monthly workbook. */
 export function parseTemplate(buf: Buffer): ParsedTemplate {
@@ -271,13 +272,13 @@ export function parseTemplate(buf: Buffer): ParsedTemplate {
       const hit = h && def.cols.find(x => key(x.en) === h);
       if (hit && !cols.has(hit.key)) cols.set(hit.key, colLetter(c));
     }
-    const missing = def.cols.filter(c => c.required && !cols.has(c.key));
+    // Every heading must be there: a renamed "Received now" or "Paid now" would silently read as "all paid".
+    const missing = def.cols.filter(c => !cols.has(c.key));
     if (missing.length) {
       issues.push({ sheet: def.name, row: 1, column: missing.map(c => c.en).join(', '), message: 'This heading is missing from row 1. Download a fresh template and copy your rows into it.' });
       continue;
     }
-    const last = Math.min(lastRow(sheet), MAX_ROWS + 2);
-    if (lastRow(sheet) > MAX_ROWS + 2) issues.push({ sheet: def.name, row: null, column: null, message: `More than ${MAX_ROWS} rows. Split the file into two.` });
+    const last = lastRow(sheet);
     for (let r = 2; r <= last; r++) {
       const raw = (c: Col) => (cols.has(c.key) ? at(`${cols.get(c.key)}${r}`) : null);
       if (def.cols.every(c => clean(raw(c)) === '')) continue;
@@ -293,6 +294,9 @@ export function parseTemplate(buf: Buffer): ParsedTemplate {
       if (ok) records[def.key].push(rec);
     }
   }
+
+  const count = Object.values(records).reduce((a, x) => a + x.length, 0);
+  if (count > MAX_ROWS) issues.push({ sheet: 'Instructions', row: null, column: null, message: `The file has ${count} rows; at most ${MAX_ROWS} can be imported at once. Split it into files by year and import them one after another.` });
 
   // The Start sheet: exactly one row.
   const [start, ...extra] = records.start;
@@ -657,7 +661,8 @@ async function positionOf(db: Db) {
 
 /** Records already in the books in the template's dates, opening balances already posted, and an earlier import of the same records. */
 async function guardsOf(db: Db, p: ParsedTemplate) {
-  const duplicate = await db.importBatch.findFirst({ where: { fileHash: p.hash, status: 'POSTED' } });
+  // The same records, or another live import with the same start date (its opening balances would be counted twice).
+  const duplicate = await db.importBatch.findFirst({ where: { status: 'POSTED', kind: 'TEMPLATE', OR: [{ fileHash: p.hash }, ...(p.from ? [{ periodFrom: toDate(p.from) }] : [])] } });
   if (!p.from || !p.to) return { duplicateOf: duplicate?.number ?? null, overlap: null };
   const range = { gte: toDate(p.from), lte: toDate(p.to) };
   const [invoices, bills, payments, production, adjustments, journals, openings, batches] = await Promise.all([
@@ -703,7 +708,7 @@ export async function previewTemplate(actor: Actor | null, p: ParsedTemplate) {
 export async function importTemplate(db: Db, actor: Actor | null, p: ParsedTemplate, opts: { fileName?: string | null; confirmOverlap: boolean }) {
   if (p.issues.length) throw badRequest('Fix the problems shown in the preview, then upload the file again.');
   const guards = await guardsOf(db, p);
-  if (guards.duplicateOf) throw conflict(`These records were already imported as ${guards.duplicateOf}. Undo that import first if you want to import them again.`);
+  if (guards.duplicateOf) throw conflict(`These records, or another file with the same start date, were already imported as ${guards.duplicateOf}. Undo that import first if this file replaces it.`);
   if (guards.overlap && !opts.confirmOverlap) throw badRequest('The books already have records in these dates. Tick the box to confirm you are not entering them twice.');
   const r = await runTemplate(db, actor, p, { dryRun: false });
   const position = await positionOf(db);
