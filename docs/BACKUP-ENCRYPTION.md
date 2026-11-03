@@ -53,7 +53,8 @@ Use the farm's **official** Google account. rclone runs as the same user as Farm
    If `~/bin` is not on the service's PATH, set `BACKUP_RCLONE_BIN=/home/<user>/bin/rclone`.
 2. **Connect the Google account.** The server has no browser, so the sign-in is done on a PC:
    - On the server, run `rclone config` → `n` (new remote) → name `farmdrive` → storage `drive` → leave client ID
-     and secret empty → scope `1` (full access, needed to delete old copies) → leave the rest at the defaults →
+     and secret empty → scope **`drive.file`** (rclone sees only the files it made itself, not the rest of the farm's
+     Drive; that is enough to upload and remove old copies) → leave the rest at the defaults →
      answer **No** to "Use web browser to automatically authenticate".
    - rclone prints a command `rclone authorize "drive" "..."`. Run that on a Windows PC with rclone installed,
      sign in with the **farm's official Google account** in the browser that opens, and paste the code it prints
@@ -66,7 +67,12 @@ that are older than `BACKUP_KEEP_DAYS`. A failed upload is shown on the Backup c
 It never stops the local backup.
 
 The rclone sign-in token is kept in `~/.config/rclone/rclone.conf` on the server. Anyone with that file can reach
-the farm's Drive, but the backups there are still encrypted.
+the files rclone made (the FarmLedger folder), but not the farm's other Drive files, and the backups there are
+still encrypted. If the server is ever lost or stolen, remove FarmLedger's access in the Google account
+(Security → Third-party apps).
+
+FarmLedger keeps the newest 7 copies on Drive and removes older copies past `BACKUP_KEEP_DAYS`, the same rule as
+on the server. Only files named like `farmledger-<date>-<time>.db.enc` at the top of that folder are ever removed.
 
 ## 3. The USB drive
 
@@ -75,7 +81,13 @@ the farm's Drive, but the backups there are still encrypted.
    settings (Settings → USB).
 2. **Mount it** at a fixed folder that the FarmLedger user can write to, for example `/mnt/farm-backup`. Add an
    `/etc/fstab` line with the `nofail` option, so the server still starts without the drive.
-3. Set `BACKUP_COPY_DIR=/mnt/farm-backup/FarmLedger` in `apps/api/.env` and restart FarmLedger.
+3. With the drive mounted, **make the folder on the drive yourself**: `mkdir /mnt/farm-backup/FarmLedger`.
+   FarmLedger never creates it. When the drive is missing, the folder is missing too, so the problem shows.
+   (If FarmLedger made the folder, an unplugged drive would leave an empty `/mnt/farm-backup` and the copy would
+   quietly land on the server's own disk.)
+4. Set `BACKUP_COPY_DIR=/mnt/farm-backup/FarmLedger` in `apps/api/.env` and restart FarmLedger.
+
+On Windows, make the folder on the drive (for example `E:\FarmLedger`) and set `BACKUP_COPY_DIR=E:\FarmLedger`.
 
 Copies are written under a hidden `.part` name first and renamed when complete. A drive pulled out mid-copy never
 leaves a file that looks like a backup. An unplugged drive is shown as a problem; the local backup and the Google

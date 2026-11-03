@@ -12,13 +12,14 @@ import { prisma } from '../src/db.js';
 import { seed } from '../src/seed.js';
 import { checkBackup, restoreDatabase, runBackup } from '../src/services/backup.js';
 import { BackupKeyError, decryptFile, encryptFile, newPassphrase } from '../src/services/backup-crypto.js';
-import { decryptBackupToFile, openEncryptedForRestore, readOffsiteStatus, setRcloneRunner } from '../src/services/offsite.js';
+import { decryptBackupToFile, openEncryptedForRestore, readOffsiteStatus, sendOffsite, setRcloneRunner } from '../src/services/offsite.js';
 
 let root = '';
 let run = 0;
 let usb = '';
 let calls: string[][] = [];
 let rcloneAnswer = { ok: true, output: '' };
+let driveFiles = '';
 const key = newPassphrase();
 const quiet = { info: () => {}, error: () => {} };
 const ENV = ['BACKUP_DIR', 'BACKUP_COPY_DIR', 'BACKUP_RCLONE_REMOTE', 'BACKUP_ENCRYPTION_KEY', 'BACKUP_KEEP_DAYS'];
@@ -33,10 +34,12 @@ beforeEach(() => {
   process.env.BACKUP_DIR = join(root, `backups-${run}`);
   usb = join(root, `usb-${run}`);
   process.env.BACKUP_COPY_DIR = usb;
+  mkdirSync(usb, { recursive: true });
   process.env.BACKUP_ENCRYPTION_KEY = key;
   calls = [];
   rcloneAnswer = { ok: true, output: '' };
-  setRcloneRunner(async args => { calls.push(args); return rcloneAnswer; });
+  driveFiles = '';
+  setRcloneRunner(async args => { calls.push(args); return args[0] === 'lsf' ? { ok: true, output: driveFiles } : rcloneAnswer; });
 });
 afterEach(() => {
   for (const k of ENV) delete process.env[k];
@@ -77,8 +80,25 @@ describe('off-site backups', () => {
     const b = await runBackup('manual', quiet);
     expect(calls[0][0]).toBe('copyto');
     expect(calls[0][2]).toBe(`farmdrive:FarmLedger/${b.name}.enc`);
-    expect(calls[1]).toEqual(['delete', 'farmdrive:FarmLedger', '--min-age', '30d', '--include', 'farmledger-*.db.enc']);
+    expect(calls[1]).toEqual(['lsf', 'farmdrive:FarmLedger', '--files-only']);
     expect(b.offsite.drive.state).toBe('ok');
+  });
+
+  it('Drive keeps the newest 7 copies even after a long outage, and only backup files are deleted', async () => {
+    process.env.BACKUP_RCLONE_REMOTE = 'farmdrive:FarmLedger';
+    const old: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - 40 - i);
+      old.push(nameFor(d));
+    }
+    const recent = new Date();
+    recent.setDate(recent.getDate() - 2);
+    driveFiles = [...old, nameFor(recent), 'farmledger-notes.txt', 'farmledger-2020-01-01-0000.db'].join('\n');
+    await runBackup('manual', quiet);
+    const deleted = calls.filter(c => c[0] === 'deletefile').map(c => c[1]);
+    // Newest 7 on Drive: the recent copy and the 6 newest old ones; today's upload is not listed by the fake.
+    expect(deleted.sort()).toEqual(old.slice(6).map(n => `farmdrive:FarmLedger/${n}`).sort());
   });
 
   it('a Drive failure is recorded and does not stop the backup', async () => {
@@ -101,6 +121,26 @@ describe('off-site backups', () => {
     expect(b.offsite.usb.state).toBe('failed');
     expect(b.offsite.drive.state).toBe('ok');
     expect(readdirSync(root, { recursive: true }).map(String).filter(n => n.endsWith('.part'))).toEqual([]);
+  });
+
+  it('a missing USB folder is a problem and is never created on this computer\'s own disk', async () => {
+    process.env.BACKUP_COPY_DIR = join(root, `unmounted-${run}`, 'FarmLedger');
+    const b = await runBackup('manual', quiet);
+    expect(b.offsite.usb.state).toBe('failed');
+    expect(b.offsite.usb.detail).toMatch(/not found|plugged/i);
+    expect(existsSync(process.env.BACKUP_COPY_DIR)).toBe(false);
+  });
+
+  it('a backup that cannot be encrypted is reported, leaves no temporary file, and never throws', async () => {
+    process.env.BACKUP_RCLONE_REMOTE = 'farmdrive:FarmLedger';
+    mkdirSync(process.env.BACKUP_DIR!, { recursive: true });
+    const s = await sendOffsite(join(process.env.BACKUP_DIR!, 'farmledger-2026-11-03-0900.db'), quiet);
+    expect(s.usb.state).toBe('failed');
+    expect(s.drive.state).toBe('failed');
+    expect(s.usb.detail).toMatch(/could not be encrypted/);
+    expect(calls).toEqual([]);
+    expect(tmpLeft()).toEqual([]);
+    expect(readdirSync(usb)).toEqual([]);
   });
 
   it('leaves no temporary file in the backup folder', async () => {

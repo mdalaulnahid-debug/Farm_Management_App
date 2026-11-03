@@ -45,16 +45,21 @@ export function readOffsiteStatus(): OffsiteStatus | null {
 }
 
 /**
- * Delete encrypted copies older than BACKUP_KEEP_DAYS (by the date in the name) from the USB folder,
- * always keeping the newest 7. Plain .db files and anything else are never touched.
+ * Of these file names, the encrypted copies older than BACKUP_KEEP_DAYS (by the date in the name), always
+ * keeping the newest 7. Plain .db files and anything else are never chosen.
  */
-function pruneEncrypted(dir: string, log: Log) {
+function expiredCopies(names: string[]) {
   const cutoff = new Date();
   cutoff.setHours(0, 0, 0, 0);
   cutoff.setDate(cutoff.getDate() - keepDays());
-  for (const name of readdirSync(dir).filter(n => ENC_NAME.test(n)).sort().reverse().slice(7)) {
+  return names.filter(n => ENC_NAME.test(n)).sort().reverse().slice(7).filter(name => {
     const [, y, m, d] = ENC_NAME.exec(name)!;
-    if (new Date(Number(y), Number(m) - 1, Number(d)) >= cutoff) continue;
+    return new Date(Number(y), Number(m) - 1, Number(d)) < cutoff;
+  });
+}
+
+function pruneEncrypted(dir: string, log: Log) {
+  for (const name of expiredCopies(readdirSync(dir))) {
     try {
       rmSync(join(dir, name));
     } catch (e) {
@@ -66,8 +71,14 @@ function pruneEncrypted(dir: string, log: Log) {
 async function toUsb(temp: string, encName: string, log: Log): Promise<Outcome> {
   const dir = copyDir()!;
   const part = join(dir, `.${encName}.part`);
+  // Never created here: an unplugged drive leaves an empty mount folder, and creating the copy folder in it
+  // would quietly put the "off-site" copy on this computer's own disk.
+  if (!existsSync(dir)) {
+    const detail = `The USB folder ${dir} was not found. Is the drive plugged in (and passed through to this computer)?`;
+    log.error(detail);
+    return { state: 'failed', detail };
+  }
   try {
-    mkdirSync(dir, { recursive: true });
     // Written under a hidden name first, so a drive pulled out mid-copy never leaves a file that looks like a backup.
     copyFileSync(temp, part);
     renameSync(part, join(dir, encName));
@@ -91,9 +102,15 @@ async function toDrive(temp: string, encName: string, log: Log): Promise<Outcome
     return { state: 'failed', detail };
   }
   log.info(`Encrypted backup uploaded to ${remote}`);
-  const prune = await runRclone(['delete', remote, '--min-age', `${keepDays()}d`, '--include', 'farmledger-*.db.enc']);
-  if (!prune.ok) {
-    const detail = `Uploaded, but old copies on Google Drive could not be removed: ${prune.output}`;
+  // Same rule as the USB folder, so a long run of failed uploads never leaves Drive with only the latest copy.
+  const list = await runRclone(['lsf', remote, '--files-only']);
+  const failures: string[] = list.ok ? [] : [list.output];
+  for (const old of list.ok ? expiredCopies(list.output.split(/\r?\n/).map(n => n.trim())) : []) {
+    const r = await runRclone(['deletefile', `${remote}/${old}`]);
+    if (!r.ok) failures.push(`${old}: ${r.output}`);
+  }
+  if (failures.length) {
+    const detail = `Uploaded, but old copies on Google Drive could not be removed: ${failures.join('; ').slice(0, 400)}`;
     log.error(detail);
     return { state: 'ok', detail };
   }
