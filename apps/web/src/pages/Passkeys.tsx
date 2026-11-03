@@ -23,6 +23,9 @@ export function PasskeySignIn({ onError }: { onError: (message: string) => void 
   const { t } = usePrefs();
   const { refresh } = useAuth();
   const [busy, setBusy] = useState(false);
+  if (typeof window !== 'undefined' && !window.isSecureContext) {
+    return <p className="muted small" style={{ margin: 0 }}>{t('Fingerprint / face sign-in works only on FarmLedger’s https address.', 'আঙুলের ছাপ / মুখ দিয়ে সাইন ইন শুধু FarmLedger-এর https ঠিকানায় কাজ করে।')}</p>;
+  }
   if (!supported()) return null;
   const signIn = async () => {
     setBusy(true); onError('');
