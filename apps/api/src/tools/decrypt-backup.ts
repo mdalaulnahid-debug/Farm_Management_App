@@ -1,4 +1,5 @@
-// Turn an encrypted backup (.db.enc, from the USB drive or Google Drive) into a readable copy next to it.
+// Turn an encrypted backup (.db.enc, from the USB drive or Google Drive) into a readable copy in this computer's
+// backup folder (<name>.decrypted.db). The readable copy is never written next to the encrypted file.
 //   npm run backup:decrypt -w apps/api -- <file.db.enc>      (or double-click decrypt-backup.bat)
 // Uses BACKUP_ENCRYPTION_KEY from apps/api/.env, or asks for the key from the sealed paper.
 // It never touches the live database.

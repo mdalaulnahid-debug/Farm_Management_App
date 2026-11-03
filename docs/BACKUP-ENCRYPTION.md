@@ -118,7 +118,8 @@ npm run backup:decrypt -w apps/api -- /path/to/farmledger-2026-11-03-0300.db.enc
 
 On Windows, double-click `decrypt-backup.bat`.
 
-It writes `farmledger-2026-11-03-0300.db` next to the encrypted file, checks it, and never overwrites an existing
+It writes `farmledger-2026-11-03-0300.decrypted.db` in the server's backup folder (never next to the encrypted file,
+which may be on the USB drive), checks it, and never overwrites an existing
 file. That copy is **not** encrypted: delete it when you are done.
 
 ## 5. The file format (decrypting without FarmLedger)

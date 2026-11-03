@@ -10,7 +10,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/server.js';
 import { prisma } from '../src/db.js';
 import { seed } from '../src/seed.js';
-import { checkBackup, restoreDatabase, runBackup } from '../src/services/backup.js';
+import { checkBackup, listBackups, restoreDatabase, runBackup } from '../src/services/backup.js';
 import { BackupKeyError, decryptFile, encryptFile, newPassphrase } from '../src/services/backup-crypto.js';
 import { decryptBackupToFile, openEncryptedForRestore, readOffsiteStatus, sendOffsite, setRcloneRunner } from '../src/services/offsite.js';
 
@@ -179,17 +179,19 @@ describe('decrypting and restoring encrypted backups', () => {
     return { plain, enc, name: b.name };
   };
 
-  it('decrypts to a readable, checked copy next to the file', async () => {
-    const { enc } = await encryptedBackup();
+  it('decrypts into the backup folder on this computer, never next to the file on the USB drive', async () => {
+    const { enc, name } = await encryptedBackup();
     const r = await decryptBackupToFile(enc, key);
-    expect(r.file).toBe(enc.replace(/\.enc$/, ''));
-    expect(r.file.endsWith('.db')).toBe(true);
+    expect(r.file).toBe(join(process.env.BACKUP_DIR!, name.replace(/\.db$/, '.decrypted.db')));
+    expect(existsSync(enc.replace(/\.enc$/, ''))).toBe(false);
     expect(r.check.ok).toBe(true);
+    // Not named like a backup, so it is never listed, pruned or mistaken for today's backup.
+    expect(listBackups().map(x => x.name)).not.toContain(r.file.split(/[\\/]/).pop());
   });
 
   it('will not overwrite an existing file', async () => {
-    const { enc } = await encryptedBackup();
-    const out = enc.replace(/\.enc$/, '');
+    const { enc, name } = await encryptedBackup();
+    const out = join(process.env.BACKUP_DIR!, name.replace(/\.db$/, '.decrypted.db'));
     writeFileSync(out, 'already here');
     await expect(decryptBackupToFile(enc, key)).rejects.toThrow(/already exists/i);
     expect(readFileSync(out, 'utf8')).toBe('already here');

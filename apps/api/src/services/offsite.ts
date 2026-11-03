@@ -158,11 +158,15 @@ export async function sendOffsite(backupFile: string, log: Log, skipReason?: str
 }
 
 /**
- * Decrypt an encrypted backup into a plain, checked copy (by default next to it, without ".enc"), e.g. for an
- * auditor. Never overwrites a file and never touches the live database.
+ * Decrypt an encrypted backup into a plain, checked copy, e.g. for an auditor. By default it goes in this
+ * computer's backup folder as <name>.decrypted.db: never next to the encrypted file, which may be on the USB
+ * drive, and never named like a backup, so it is not listed, pruned or taken for today's backup.
+ * Never overwrites a file and never touches the live database.
  */
 export async function decryptBackupToFile(encFile: string, passphrase: string, outFile?: string): Promise<{ file: string; check: BackupCheck }> {
-  const file = outFile ?? (encFile.endsWith(ENC_SUFFIX) ? encFile.slice(0, -ENC_SUFFIX.length) : `${encFile}.db`);
+  const stem = basename(encFile).replace(/\.enc$/i, '').replace(/\.db$/i, '');
+  if (!outFile) mkdirSync(backupDir(), { recursive: true });
+  const file = outFile ?? join(backupDir(), `${stem}.decrypted.db`);
   if (existsSync(file)) throw new Error(`${file} already exists; move it away or name another output file. Nothing was written.`);
   await decryptFile(encFile, file, passphrase);
   return { file, check: await checkBackup(file) };
