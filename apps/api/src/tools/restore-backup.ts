@@ -1,11 +1,15 @@
 // Put a backup back as the farm's database, from the console of the computer that holds it.
 //   npm run db:restore -w apps/api                  lists the backups
 //   npm run db:restore -w apps/api -- <file name>   restores one (asks you to type RESTORE)
+// An encrypted copy (.db.enc, from the USB drive or Google Drive) can be given by its path; it is decrypted first.
 // (or double-click restore-backup.bat on the farm PC). FarmLedger must be stopped first.
 import { existsSync } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
+import { basename, isAbsolute, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
+import { isEncryptedFile } from '../services/backup-crypto.js';
+import { openEncryptedForRestore } from '../services/offsite.js';
+import { withBackupKey } from './decrypt-backup.js';
 import { backupDir, backupPath, checkBackup, isSqlite, listBackups, restoreDatabase, sqliteFile } from '../services/backup.js';
 
 /** Is a FarmLedger server answering on this computer's port? Restoring under a running server would be lost or corrupt. */
@@ -31,11 +35,22 @@ if (isMain) {
   } else if (await serverRunning()) {
     fail('FarmLedger is still running. Close its window (stop it) first, then run the restore again.');
   } else {
-    const file = backupPath(arg) ?? (existsSync(isAbsolute(arg) ? arg : resolve(arg)) ? resolve(arg) : null);
-    if (!file) fail(`No backup called ${arg}. Run without a name to see the list.`);
-    else {
+    const given = backupPath(arg) ?? (existsSync(isAbsolute(arg) ? arg : resolve(arg)) ? resolve(arg) : null);
+    let file = given;
+    let cleanup = () => {};
+    if (given && isEncryptedFile(given)) {
+      try {
+        ({ file, cleanup } = await withBackupKey(key => openEncryptedForRestore(given, key)));
+      } catch (e) {
+        file = null;
+        fail(`This encrypted backup could not be opened: ${(e as Error).message}`);
+      }
+    }
+    const label = given && file !== given ? basename(given) : undefined;
+    if (!given) fail(`No backup called ${arg}. Run without a name to see the list.`);
+    else if (file) try {
       const check = await checkBackup(file);
-      console.log(`\nBackup: ${file}`);
+      console.log(`\nBackup: ${given}`);
       if (!check.ok) fail(`This backup cannot be used: ${check.problems.join(' ')}`);
       else {
         console.log(`  Checked OK: not damaged, books balance. ${check.counts.journalEntries} journal entries, ${check.counts.invoices} invoices, ${check.counts.users} users.`);
@@ -47,7 +62,7 @@ if (isMain) {
         if (answer !== 'RESTORE') console.log('\nCancelled. Nothing was changed.\n');
         else {
           try {
-            const r = await restoreDatabase({ backupFile: file, dbFile: sqliteFile(), safetyDir: backupDir() });
+            const r = await restoreDatabase({ backupFile: file, dbFile: sqliteFile(), safetyDir: backupDir(), label });
             console.log('\nRestored. Start FarmLedger again (start-farmledger.bat) and check the latest records.');
             if (r.safetyCopy) console.log(`The database it replaced is kept as ${r.safetyCopy}\n`);
           } catch (e) {
@@ -55,6 +70,8 @@ if (isMain) {
           }
         }
       }
+    } finally {
+      cleanup();
     }
   }
 }

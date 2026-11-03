@@ -2,13 +2,14 @@
 // never readable, and a problem with either never stops the local backup.
 // rclone is replaced by a recording fake; every folder is a throwaway temp folder.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { PrismaClient } from '@prisma/client';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { seed } from '../src/seed.js';
-import { checkBackup, runBackup } from '../src/services/backup.js';
-import { decryptFile, newPassphrase } from '../src/services/backup-crypto.js';
-import { readOffsiteStatus, setRcloneRunner } from '../src/services/offsite.js';
+import { checkBackup, restoreDatabase, runBackup } from '../src/services/backup.js';
+import { BackupKeyError, decryptFile, encryptFile, newPassphrase } from '../src/services/backup-crypto.js';
+import { decryptBackupToFile, openEncryptedForRestore, readOffsiteStatus, setRcloneRunner } from '../src/services/offsite.js';
 
 let root = '';
 let run = 0;
@@ -121,5 +122,57 @@ describe('off-site backups', () => {
     writeFileSync(join(usb, plain), 'old plain copy');
     const b = await runBackup('manual', quiet);
     expect(readdirSync(usb).sort()).toEqual([...old.slice(0, 6), plain, `${b.name}.enc`].sort());
+  });
+});
+
+describe('decrypting and restoring encrypted backups', () => {
+  /** A fresh backup and its encrypted copy, in this test's own folder. */
+  const encryptedBackup = async () => {
+    const b = await runBackup('manual', quiet);
+    const plain = join(process.env.BACKUP_DIR!, b.name);
+    const enc = join(root, `restore-${run}`, `${b.name}.enc`);
+    mkdirSync(join(root, `restore-${run}`), { recursive: true });
+    await encryptFile(plain, enc, key);
+    return { plain, enc, name: b.name };
+  };
+
+  it('decrypts to a readable, checked copy next to the file', async () => {
+    const { enc } = await encryptedBackup();
+    const r = await decryptBackupToFile(enc, key);
+    expect(r.file).toBe(enc.replace(/\.enc$/, ''));
+    expect(r.file.endsWith('.db')).toBe(true);
+    expect(r.check.ok).toBe(true);
+  });
+
+  it('will not overwrite an existing file', async () => {
+    const { enc } = await encryptedBackup();
+    const out = enc.replace(/\.enc$/, '');
+    writeFileSync(out, 'already here');
+    await expect(decryptBackupToFile(enc, key)).rejects.toThrow(/already exists/i);
+    expect(readFileSync(out, 'utf8')).toBe('already here');
+  });
+
+  it('restores from an encrypted backup with the label in the audit trail', async () => {
+    const { plain, enc, name } = await encryptedBackup();
+    const live = join(root, `live-${run}.db`);
+    copyFileSync(plain, live);
+    const opened = await openEncryptedForRestore(enc, key);
+    expect(opened.file.startsWith(process.env.BACKUP_DIR!)).toBe(true);
+    await restoreDatabase({ backupFile: opened.file, dbFile: live, safetyDir: join(root, `safety-${run}`), label: `${name}.enc` });
+    opened.cleanup();
+    expect(existsSync(opened.file)).toBe(false);
+    const db = new PrismaClient({ datasources: { db: { url: `file:${live.replace(/\\/g, '/')}` } } });
+    try {
+      const row = await db.auditLog.findFirst({ where: { action: 'restore' }, orderBy: { createdAt: 'desc' } });
+      expect(row?.summary).toContain(`${name}.enc`);
+    } finally { await db.$disconnect(); }
+  });
+
+  it('a different key is reported as such', async () => {
+    const { enc } = await encryptedBackup();
+    const e = await openEncryptedForRestore(enc, newPassphrase()).catch(x => x);
+    expect(e).toBeInstanceOf(BackupKeyError);
+    expect((e as BackupKeyError).kind).toBe('different-key');
+    expect(readdirSync(process.env.BACKUP_DIR!).filter(n => n.startsWith('.restore-'))).toEqual([]);
   });
 });

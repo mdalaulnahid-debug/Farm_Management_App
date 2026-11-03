@@ -5,8 +5,9 @@ import { execFile } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { backupDir, copyDir, keepDays } from './backup.js';
-import { ENC_SUFFIX, encryptFile, keyProblem } from './backup-crypto.js';
+import { backupDir, checkBackup, copyDir, keepDays } from './backup.js';
+import type { BackupCheck } from './backup.js';
+import { ENC_SUFFIX, decryptFile, encryptFile, keyProblem } from './backup-crypto.js';
 
 export const ENC_NAME = /^farmledger-(\d{4})-(\d{2})-(\d{2})-\d{4}\.db\.enc$/;
 
@@ -137,4 +138,23 @@ export async function sendOffsite(backupFile: string, log: Log, skipReason?: str
     log.error(`Could not record the off-site backup result: ${(e as Error).message}`);
   }
   return status;
+}
+
+/**
+ * Decrypt an encrypted backup into a plain, checked copy (by default next to it, without ".enc"), e.g. for an
+ * auditor. Never overwrites a file and never touches the live database.
+ */
+export async function decryptBackupToFile(encFile: string, passphrase: string, outFile?: string): Promise<{ file: string; check: BackupCheck }> {
+  const file = outFile ?? (encFile.endsWith(ENC_SUFFIX) ? encFile.slice(0, -ENC_SUFFIX.length) : `${encFile}.db`);
+  if (existsSync(file)) throw new Error(`${file} already exists; move it away or name another output file. Nothing was written.`);
+  await decryptFile(encFile, file, passphrase);
+  return { file, check: await checkBackup(file) };
+}
+
+/** Decrypt an encrypted backup into a temporary file in the backup folder, ready for restoreDatabase. */
+export async function openEncryptedForRestore(encFile: string, passphrase: string): Promise<{ file: string; cleanup: () => void }> {
+  mkdirSync(backupDir(), { recursive: true });
+  const file = join(backupDir(), `.restore-${randomBytes(6).toString('hex')}.db`);
+  await decryptFile(encFile, file, passphrase);
+  return { file, cleanup: () => rmSync(file, { force: true }) };
 }

@@ -127,8 +127,9 @@ export async function checkBackup(file: string): Promise<BackupCheck> {
  * Replace the database file with a backup. FarmLedger must be stopped first. The backup is checked
  * before anything changes; the database being replaced is first saved as
  * farmledger-before-restore-<date>.db in `safetyDir`, which automatic pruning never deletes.
+ * `label` names the backup in the audit trail when `backupFile` is a temporary decrypted copy.
  */
-export async function restoreDatabase(opts: { backupFile: string; dbFile: string; safetyDir: string }) {
+export async function restoreDatabase(opts: { backupFile: string; dbFile: string; safetyDir: string; label?: string }) {
   const check = await checkBackup(opts.backupFile);
   if (!check.ok) throw new Error(`Backup not restored: ${check.problems.join(' ')}`);
   let safetyCopy: string | null = null;
@@ -156,8 +157,8 @@ export async function restoreDatabase(opts: { backupFile: string; dbFile: string
   const db = openFile(opts.dbFile);
   try {
     await db.auditLog.create({ select: { id: true }, data: {
-      action: 'restore', entity: 'settings', entityId: basename(opts.backupFile),
-      summary: `Database restored from ${basename(opts.backupFile)}${safetyCopy ? `; the database it replaced was saved as ${basename(safetyCopy)}` : ''}`,
+      action: 'restore', entity: 'settings', entityId: opts.label ?? basename(opts.backupFile),
+      summary: `Database restored from ${opts.label ?? basename(opts.backupFile)}${safetyCopy ? `; the database it replaced was saved as ${basename(safetyCopy)}` : ''}`,
     } });
   } finally {
     await db.$disconnect();
