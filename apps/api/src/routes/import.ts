@@ -1,4 +1,5 @@
-// Backlog import (owner/admin only): preview a workbook, import it, list and undo imports.
+// Backlog import (owner/admin only): the past records template (download, preview, import), the monthly
+// workbook (preview, import), and the list of imports with one-step undo.
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma, tx } from '../db.js';
@@ -6,6 +7,7 @@ import { badRequest } from '../lib/errors.js';
 import { parse, zReason } from '../lib/validate.js';
 import { actorOf, can } from '../auth/auth.js';
 import { importWorkbook, parseWorkbook, previewWorkbook, undoBatch } from '../services/importer.js';
+import { buildTemplate, importTemplate, parseTemplate, previewTemplate } from '../services/past-records.js';
 
 const upload = z.object({
   fileName: z.string().max(200).optional(),
@@ -19,8 +21,26 @@ const decode = (b64: string) => {
   return buf;
 };
 const big = { bodyLimit: 15 * 1024 * 1024 };
+const templateUpload = upload.pick({ fileName: true, fileBase64: true }).extend({ confirmOverlap: z.boolean().default(false) });
 
 export default async function importRoutes(app: FastifyInstance) {
+  app.get('/import/template', { preHandler: can('settings.manage') }, async (_req, reply) => {
+    reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    reply.header('Content-Disposition', 'attachment; filename="FarmLedger-past-records-template.xlsx"');
+    return reply.send(buildTemplate());
+  });
+
+  app.post('/import/template/preview', { ...big, preHandler: can('settings.manage') }, async req => {
+    const body = parse(templateUpload, req.body);
+    return previewTemplate(actorOf(req), parseTemplate(decode(body.fileBase64)));
+  });
+
+  app.post('/import/template', { ...big, preHandler: can('settings.manage') }, async req => {
+    const body = parse(templateUpload, req.body);
+    const parsed = parseTemplate(decode(body.fileBase64));
+    return tx(db => importTemplate(db, actorOf(req), parsed, { fileName: body.fileName, confirmOverlap: body.confirmOverlap }), 180_000);
+  });
+
   app.post('/import/workbook/preview', { ...big, preHandler: can('settings.manage') }, async req => {
     const body = parse(upload, req.body);
     return previewWorkbook(parseWorkbook(decode(body.fileBase64)));

@@ -1,12 +1,14 @@
-// Admin → Import past data. Upload a monthly workbook, check the preview, then post it as one undoable batch.
+// Admin → Import past data. Upload the past records template (or a monthly workbook), check the preview, then
+// post it as one undoable batch.
 import { useRef, useState } from 'react';
-import { CheckCircle2, FileSpreadsheet, History, Undo2, Upload, XCircle } from 'lucide-react';
+import { CheckCircle2, Download, FileSpreadsheet, History, Undo2, Upload, XCircle } from 'lucide-react';
 import { usePrefs } from '../lib/i18n';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { useApi, useFlocks, useSave } from '../lib/hooks';
 import { fmtDate, fmtDateTime, fmtMoney, fmtNum } from '../lib/format';
 import { Alert, Badge, Card, DataTable, Dialog, Field, Kpi, Loading, Select, StatusBadge, type Column } from '../components/ui';
 import { Money } from '../components/forms';
+import { TemplatePreview, type TemplatePreviewData } from './PastRecords';
 
 interface Row { date: string; sourceDate: string; produced: number; cashEggs: number; creditEggs: number; discount: number; feed: number; snails: number; other: number; medicine: number; donated: number; waste: number; note?: string }
 interface Preview {
@@ -30,6 +32,7 @@ export default function ImportData() {
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<{ name: string; b64: string } | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [template, setTemplate] = useState<TemplatePreviewData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [replace, setReplace] = useState(false);
@@ -38,11 +41,15 @@ export default function ImportData() {
 
   const choose = async (f: File | undefined) => {
     if (!f) return;
-    setLoading(true); setError(''); setPreview(null); setReplace(false);
+    setLoading(true); setError(''); setPreview(null); setTemplate(null); setReplace(false);
     try {
       const b64 = await toBase64(f);
       setFile({ name: f.name, b64 });
-      setPreview(await api.post<Preview>('/import/workbook/preview', { fileName: f.name, fileBase64: b64 }));
+      // The past records template first; any other spreadsheet is read as a monthly workbook.
+      const asTemplate = await api.post<TemplatePreviewData>('/import/template/preview', { fileName: f.name, fileBase64: b64 })
+        .catch(e => { if (e instanceof ApiError && e.code === 'NOT_TEMPLATE') return null; throw e; });
+      if (asTemplate) setTemplate(asTemplate);
+      else setPreview(await api.post<Preview>('/import/workbook/preview', { fileName: f.name, fileBase64: b64 }));
     } catch (e: any) { setError(e.message); } finally { setLoading(false); if (input.current) input.current.value = ''; }
   };
   const run = () => file && doImport.mutate({ fileName: file.name, fileBase64: file.b64, replaceExisting: replace, flockId: flockId || null }, {
@@ -68,21 +75,24 @@ export default function ImportData() {
   return (
     <>
       <Card title={<span className="row" style={{ gap: 8 }}><FileSpreadsheet size={18} />{t('Import past data (backlog)', 'পুরোনো হিসাব ইমপোর্ট (ব্যাকলগ)')}</span>}
-        subtitle={t('Upload a monthly workbook in the same layout as the October sheet. One month per file.', 'অক্টোবরের শিটের মতো একই ছকের মাসিক ওয়ার্কবুক আপলোড করুন। প্রতি ফাইলে এক মাস।')}
+        subtitle={t('Bring the farm’s records from before FarmLedger into the books: download the template, fill it, upload it here. A monthly workbook in the October layout works too.', 'FarmLedger-এর আগের খামারের হিসাব খাতায় আনুন: টেমপ্লেট ডাউনলোড করুন, পূরণ করুন, এখানে আপলোড করুন। অক্টোবরের ছকের মাসিক ওয়ার্কবুকও চলবে।')}
         actions={<>
+          <a className="btn" href="/api/v1/import/template" download><Download size={16} />{t('Download template', 'টেমপ্লেট ডাউনলোড')}</a>
           <input ref={input} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={e => choose(e.target.files?.[0])} />
           <button className="btn primary" disabled={loading} onClick={() => input.current?.click()}><Upload size={16} />{file ? t('Choose another file', 'অন্য ফাইল বাছুন') : t('Choose .xlsx file', '.xlsx ফাইল বাছুন')}</button>
         </>}>
         <div className="card-body stack">
-          {!p && !loading && !error && (
+          {!p && !template && !loading && !error && (
             <ol className="muted" style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
-              <li>{t('Fill the month in your usual workbook: monthly figures at the top (last month’s balance, egg price, previous dues, grant, other monthly cost, dues collected) and one row per day.', 'নিয়মিত ওয়ার্কবুকে মাসটি পূরণ করুন: উপরে মাসিক তথ্য (গত মাসের ব্যালেন্স, ডিমের দাম, গত মাসের বকেয়া, অনুদান, অন্যান্য মাসিক খরচ, বকেয়া আদায়) এবং প্রতিদিনের জন্য একটি সারি।')}</li>
+              <li>{t('Past records: press Download template. Its first sheet explains every column. Fill the start date and opening balances, customers and suppliers, stock, flocks, and the daily, purchase, payment and grant records you have.', 'পুরোনো হিসাব: টেমপ্লেট ডাউনলোড চাপুন। এর প্রথম শিটে প্রতিটি কলামের ব্যাখ্যা আছে। শুরুর তারিখ ও প্রারম্ভিক স্থিতি, ক্রেতা ও সরবরাহকারী, মজুদ, ঝাঁক, এবং আপনার কাছে থাকা দৈনিক, ক্রয়, পরিশোধ ও অনুদানের হিসাব লিখুন।')}</li>
+              <li>{t('Or a monthly workbook: ', 'অথবা মাসিক ওয়ার্কবুক: ')}{t('Fill the month in your usual workbook: monthly figures at the top (last month’s balance, egg price, previous dues, grant, other monthly cost, dues collected) and one row per day.', 'নিয়মিত ওয়ার্কবুকে মাসটি পূরণ করুন: উপরে মাসিক তথ্য (গত মাসের ব্যালেন্স, ডিমের দাম, গত মাসের বকেয়া, অনুদান, অন্যান্য মাসিক খরচ, বকেয়া আদায়) এবং প্রতিদিনের জন্য একটি সারি।')}</li>
               <li>{t('Upload it here. Nothing is saved until you press Import — first you see a preview and a cash check against the sheet.', 'এখানে আপলোড করুন। ইমপোর্ট চাপার আগে কিছুই সংরক্ষণ হবে না — আগে প্রিভিউ ও শিটের সাথে নগদ মিলিয়ে দেখাবে।')}</li>
               <li>{t('Each day becomes production, sales, collections and expenses in the books. An import can be undone in one step.', 'প্রতিটি দিন খাতায় উৎপাদন, বিক্রয়, আদায় ও খরচ হিসেবে বসবে। একটি ইমপোর্ট এক ক্লিকে ফেরত নেওয়া যায়।')}</li>
             </ol>
           )}
           {loading && <Loading />}
           {error && <Alert tone="error">{error}</Alert>}
+          {template && file && <TemplatePreview p={template} file={file} onDone={() => { setTemplate(null); setFile(null); }} />}
           {p && <>
             <div className="row between">
               <div><b>{file?.name}</b><div className="muted small">{t('Sheet', 'শিট')}: {p.sheetName} · {t('Period', 'সময়কাল')}: {fmtDate(p.period.from, lang)} – {fmtDate(p.period.to, lang)} · {t(`${p.totals.days} days`, `${p.totals.days} দিন`)}</div></div>

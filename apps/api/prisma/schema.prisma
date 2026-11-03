@@ -454,8 +454,9 @@ model ProductionLog {
 model ImportBatch {
   id          String   @id @default(cuid())
   number      String   @unique
-  kind        String   // WORKBOOK
+  kind        String   // WORKBOOK | TEMPLATE
   fileName    String?
+  fileHash    String?  // TEMPLATE: fingerprint of the imported records, so the same records are not imported twice
   periodFrom  DateTime
   periodTo    DateTime
   status      String   @default("POSTED") // POSTED | VOID
@@ -463,4 +464,6 @@ model ImportBatch {
   documents   String   // JSON: ids of everything this import created, so it can be undone
   createdById String?
   createdAt   DateTime @default(now())
+
+  @@index([fileHash])
 }
