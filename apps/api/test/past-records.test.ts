@@ -13,6 +13,7 @@ import { SHEETS, TEMPLATE_MARK, buildTemplate, parseTemplate } from '../src/serv
 
 let app: FastifyInstance;
 let cookie = '';
+let handPaymentId = '';
 const PASSWORD = 'PastRecords2026';
 
 const call = async (method: string, url: string, payload?: unknown, c = cookie) => {
@@ -70,10 +71,15 @@ beforeAll(async () => {
   app = await buildApp();
   const res = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email: 'owner@past-records.test.local', password: PASSWORD } });
   cookie = String(res.headers['set-cookie']).split(';')[0];
+  // A record typed in by hand inside the template's dates, so the overlap guard has something to find.
+  const typed = await call('POST', '/payments', { direction: 'IN', date: '2025-03-05', cashAccountId: await accountId(prisma, SYS.CASH), counterAccountId: await accountId(prisma, SYS.OTHER_INCOME), amount: 1, notes: 'Typed in by hand' });
+  expect(typed.status).toBe(200);
+  handPaymentId = typed.body.id;
 });
 afterAll(async () => {
   // Leave the shared test database as it was: undo anything still imported here.
   for (const b of await prisma.importBatch.findMany({ where: { kind: 'TEMPLATE', status: 'POSTED' } })) await call('POST', `/import/batches/${b.id}/undo`, { reason: 'test cleanup' });
+  await call('POST', `/payments/${handPaymentId}/void`, { reason: 'test cleanup, typed by hand' });
   await prisma.user.updateMany({ where: { email: 'owner@past-records.test.local' }, data: { active: false } });
   await app?.close();
 });
@@ -201,7 +207,7 @@ describe('preview', () => {
     });
     expect(r.body.position.cash).toBe(before.cash + 3600);
     expect(r.body.duplicateOf).toBeNull();
-    expect(r.body.overlap?.openingBalances).toBeGreaterThan(0); // the seeded sample month has opening balances
+    expect(r.body.overlap?.existing.payments).toBeGreaterThanOrEqual(1); // the payment typed in by hand
     expect({ invoices: await prisma.salesInvoice.count(), parties: await prisma.party.count(), batches: await prisma.importBatch.count(), cash: await bal(SYS.CASH) }).toEqual(before);
   });
 
