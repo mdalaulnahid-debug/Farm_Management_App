@@ -323,7 +323,33 @@ function CheckBackupButton({ name }: { name: string }) {
     : <span title={r.problems.join(' ')}><Badge tone="red">{t('Failed', 'ব্যর্থ')}: {r.problems[0]}</Badge></span>;
   return <button className="btn ghost sm" disabled={check.isPending} onClick={() => check.mutate()}>{check.isPending ? t('Checking…', 'পরীক্ষা হচ্ছে…') : t('Check', 'পরীক্ষা')}</button>;
 }
-interface BackupList { data: BackupFile[]; dir: string; keepDays: number; copyDir: string | null }
+type OffsiteOutcome = { state: 'ok' | 'off' | 'skipped-no-key' | 'failed'; detail?: string };
+interface Offsite { usbDir: string | null; driveRemote: string | null; keyProblem: string | null; last: { at: string; name: string; usb: OffsiteOutcome; drive: OffsiteOutcome } | null }
+interface BackupList { data: BackupFile[]; dir: string; keepDays: number; copyDir: string | null; offsite: Offsite }
+
+/** Where encrypted copies leave this computer, and how the last backup's copies went. */
+function OffsiteLine({ o }: { o: Offsite }) {
+  const { t, lang } = usePrefs();
+  if (!o.usbDir && !o.driveRemote) return null;
+  const badge = (label: string, out?: OffsiteOutcome) => {
+    if (!out || out.state === 'off') return <Badge>{label}</Badge>;
+    const [tone, word] = out.state === 'ok' ? ['green', t('ok', 'ঠিক আছে')] as const
+      : out.state === 'failed' ? ['red', t('failed', 'ব্যর্থ')] as const
+      : ['red', t('not sent', 'পাঠানো হয়নি')] as const;
+    return <span title={out.detail}><Badge tone={tone}>{label}: {word}</Badge></span>;
+  };
+  const problems = o.last ? [o.last.usb, o.last.drive].filter(x => x.state === 'failed' && x.detail) : [];
+  return <>
+    {o.keyProblem && <Alert tone="error">{t(`No backup copies leave this computer: ${o.keyProblem} Make a key with new-backup-key.bat, seal the printed key in the office safe, put it in apps/api/.env as BACKUP_ENCRYPTION_KEY, and restart FarmLedger.`, 'কোনো ব্যাকআপ কপি এই কম্পিউটারের বাইরে যাচ্ছে না: এনক্রিপশন কী নেই বা খুব ছোট। new-backup-key.bat দিয়ে কী বানান, ছাপানো কী অফিসের সিন্দুকে সিল করে রাখুন, apps/api/.env-এ BACKUP_ENCRYPTION_KEY হিসেবে দিন এবং FarmLedger আবার চালু করুন।')}</Alert>}
+    {problems.map(p => <Alert key={p.detail} tone="warn">{p.detail}</Alert>)}
+    <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+      <span className="muted">{t('Copies leaving this computer: encrypted to', 'এই কম্পিউটারের বাইরে যাওয়া কপি: এনক্রিপ্ট করে পাঠানো হয়')}</span>
+      {o.usbDir && badge(t('USB', 'ইউএসবি'), o.last?.usb)}
+      {o.driveRemote && badge('Google Drive', o.last?.drive)}
+      {o.last && <span className="muted small">{fmtDateTime(o.last.at, lang)}</span>}
+    </div>
+  </>;
+}
 
 function BackupCard() {
   const { t, lang } = usePrefs();
@@ -353,6 +379,7 @@ function BackupCard() {
           {stale && <Alert tone="warn">{newest
             ? t('The last backup is more than 2 days old. Make sure FarmLedger is running, or click “Back up now”.', 'শেষ ব্যাকআপ ২ দিনের বেশি পুরোনো। FarmLedger চালু আছে কিনা দেখুন, অথবা “এখনই ব্যাকআপ নিন” চাপুন।')
             : t('No backup has been taken yet. Click “Back up now”.', 'এখনো কোনো ব্যাকআপ নেওয়া হয়নি। “এখনই ব্যাকআপ নিন” চাপুন।')}</Alert>}
+          <OffsiteLine o={q.data.offsite} />
           {newest && <div className="row">
             <span className="muted">{t('Last backup', 'শেষ ব্যাকআপ')}</span>
             <strong>{fmtDateTime(newest.createdAt, lang)}</strong>
@@ -362,8 +389,12 @@ function BackupCard() {
             <div className="muted">{t('Backup folder', 'ব্যাকআপ ফোল্ডার')}</div>
             <div className="mono" style={{ overflowWrap: 'anywhere' }}>{q.data.dir}</div>
             {q.data.copyDir && <>
-              <div className="muted">{t('Also copied to', 'কপি রাখা হয় এখানেও')}</div>
+              <div className="muted">{t('Encrypted copies also go to', 'এনক্রিপ্ট করা কপি যায় এখানেও')}</div>
               <div className="mono" style={{ overflowWrap: 'anywhere' }}>{q.data.copyDir}</div>
+            </>}
+            {q.data.offsite.driveRemote && <>
+              <div className="muted">Google Drive</div>
+              <div className="mono" style={{ overflowWrap: 'anywhere' }}>{q.data.offsite.driveRemote}</div>
             </>}
             <div className="muted">{t(`Backups older than ${q.data.keepDays} days are removed; the newest 7 are always kept.`, `${fmtNum(q.data.keepDays, lang, 0)} দিনের পুরোনো ব্যাকআপ মুছে ফেলা হয়; সবচেয়ে নতুন ৭টি সবসময় থাকে।`)}</div>
           </div>
@@ -377,6 +408,7 @@ function BackupCard() {
           <li>{t('Close FarmLedger on the farm computer.', 'খামারের কম্পিউটারে FarmLedger বন্ধ করুন।')}</li>
           <li>{t('Double-click restore-backup.bat in the FarmLedger folder, type the backup’s file name, then type RESTORE. The current database is kept as a copy first.', 'FarmLedger ফোল্ডারে restore-backup.bat ডাবল-ক্লিক করুন, ব্যাকআপ ফাইলের নাম লিখুন, তারপর RESTORE লিখুন। আগে বর্তমান ডাটাবেসের একটি কপি রাখা হয়।')}</li>
           <li>{t('Start FarmLedger again and check the latest records.', 'আবার FarmLedger চালু করুন এবং সর্বশেষ হিসাবগুলো দেখে নিন।')}</li>
+          <li>{t('An encrypted copy from the USB drive or Google Drive (.db.enc) can be restored the same way: give its full path. It needs the backup key from the sealed paper if it is not in apps/api/.env.', 'ইউএসবি বা Google Drive-এর এনক্রিপ্ট করা কপিও (.db.enc) একইভাবে পুনরুদ্ধার করা যায়: পুরো পাথ দিন। কী apps/api/.env-এ না থাকলে সিল করা কাগজের ব্যাকআপ কী লাগবে।')}</li>
         </ol>
       </div>
     </Card>
