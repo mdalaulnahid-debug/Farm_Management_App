@@ -94,6 +94,10 @@
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
+/* iPhone Safari: no automatic text enlarging when turned sideways, and nothing may push the page wider
+   than the screen (clip, unlike hidden, keeps sticky headers working). */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { overflow-x: clip; }
 body { margin: 0; font-family: var(--font); font-size: var(--fs); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; line-height: 1.45; }
 button, input, select, textarea { font: inherit; color: inherit; }
 a { color: var(--brand-2); text-decoration: none; }
@@ -521,6 +525,12 @@ table.table { width: 100%; border-collapse: collapse; }
   .btn.sm.icon { width: 40px; }
   .segmented button { min-height: 36px; padding: 8px 14px; }
   .tabs button { min-height: 44px; }
+  /* iPhone Safari zooms into any field under 16 px when it is tapped and stays zoomed, leaving the page
+     scrolling sideways. 16 px stops that without blocking pinch-zoom. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']), select, textarea { font-size: 16px; }
+  /* Safari gives date fields a built-in minimum width that can overflow a narrow row. */
+  input[type='date'] { min-width: 0; }
+  input[type='date']::-webkit-date-and-time-value { text-align: left; }
 }
 
 /* ───────── Print (statements, invoices) ───────── */
