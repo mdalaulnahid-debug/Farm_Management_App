@@ -3,7 +3,7 @@
 // except the backup folder, which points at a temp folder.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildApp } from '../src/server.js';
@@ -11,6 +11,7 @@ import { seed } from '../src/seed.js';
 import { prisma } from '../src/db.js';
 import { hashPassword } from '../src/auth/auth.js';
 import { runBackup } from '../src/services/backup.js';
+import { newPassphrase } from '../src/services/backup-crypto.js';
 import { EXAMPLE_ADMIN_PASSWORD, isTailscaleAddress, securityCheck } from '../src/services/security-check.js';
 
 let app: FastifyInstance;
@@ -92,6 +93,8 @@ describe('passwords and owner accounts', () => {
   });
 
   it('a single owner is a warning; a spare owner clears it', async () => {
+    // Other test files may leave owners on a temporary password, which is a warning of its own; set them aside.
+    await prisma.user.updateMany({ where: { active: true, mustChangePassword: true, role: { key: 'owner' } }, data: { active: false } });
     const owners = () => prisma.user.count({ where: { active: true, mustChangePassword: false, role: { key: 'owner' } } });
     if ((await owners()) < 2) {
       expect(await level('owners', {})).toBe('warn');
@@ -125,6 +128,37 @@ describe('backups', () => {
   it('a second backup folder that is missing is a problem; one that exists passes', async () => {
     expect(await level('backup_copy', { BACKUP_COPY_DIR: join(dir, 'unplugged-usb') })).toBe('fail');
     expect(await level('backup_copy', { BACKUP_COPY_DIR: dir })).toBe('ok');
+  });
+
+  it('a copy folder without a key is a problem', async () => {
+    expect(await level('backup_encryption', { BACKUP_COPY_DIR: dir })).toBe('fail');
+    expect(await level('backup_encryption', { BACKUP_COPY_DIR: dir, BACKUP_ENCRYPTION_KEY: 'short' })).toBe('fail');
+    expect(await level('backup_encryption', { BACKUP_RCLONE_REMOTE: 'x:y' })).toBe('fail');
+    expect(await level('backup_encryption', { BACKUP_COPY_DIR: dir, BACKUP_ENCRYPTION_KEY: newPassphrase() })).toBe('ok');
+    expect(await level('backup_encryption', {})).toBeUndefined();
+  });
+
+  it('a failed Drive upload is a warning', async () => {
+    const k = newPassphrase();
+    const status = (state: string) => {
+      mkdirSync(process.env.BACKUP_DIR!, { recursive: true });
+      writeFileSync(join(process.env.BACKUP_DIR!, '.offsite-status.json'), JSON.stringify({
+        at: new Date().toISOString(), name: 'farmledger-2026-11-03-0900.db', usb: { state: 'off' }, drive: { state, detail: 'Google Drive upload failed: rclone not found' },
+      }));
+    };
+    status('failed');
+    const report = await securityCheck(prisma, { BACKUP_RCLONE_REMOTE: 'x:y', BACKUP_ENCRYPTION_KEY: k });
+    const drive = report.checks.find(c => c.key === 'backup_drive');
+    expect(drive?.level).toBe('warn');
+    expect(drive?.title.en).toContain('rclone not found');
+    status('ok');
+    expect(await level('backup_drive', { BACKUP_RCLONE_REMOTE: 'x:y', BACKUP_ENCRYPTION_KEY: k })).toBe('ok');
+    expect(await level('backup_drive', {})).toBeUndefined();
+    rmSync(join(process.env.BACKUP_DIR!, '.offsite-status.json'));
+  });
+
+  it('Google Drive alone counts as a copy off this computer', async () => {
+    expect(await level('backup_copy', { BACKUP_RCLONE_REMOTE: 'x:y' })).not.toBe('warn');
   });
 
   it('a fresh backup passes', async () => {
