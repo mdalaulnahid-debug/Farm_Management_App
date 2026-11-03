@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { nameOf, usePrefs } from '../lib/i18n';
 import { Alert, Field, Input } from '../components/ui';
+import { PasskeySignIn } from './Passkeys';
 
 export default function Login() {
   const { t, lang, set } = usePrefs();
@@ -67,6 +68,7 @@ export default function Login() {
             </Field>
           </>}
           <button className="btn primary auth-submit" disabled={busy}>{busy ? t('Signing in…', 'সাইন ইন হচ্ছে…') : ticket ? t('Verify', 'যাচাই করুন') : t('Sign in', 'সাইন ইন')}</button>
+          {!ticket && <PasskeySignIn onError={setError} />}
           {ticket && <button type="button" className="btn ghost" onClick={() => { setTicket(''); setCode(''); setError(''); }}>{t('Back', 'ফিরে যান')}</button>}
         </form>
       </section>

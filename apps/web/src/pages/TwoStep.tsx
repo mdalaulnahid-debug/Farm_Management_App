@@ -7,7 +7,7 @@ import { usePrefs } from '../lib/i18n';
 import { fmtDateTime, fmtNum } from '../lib/format';
 import { Alert, Badge, Card, Field, Input, Loading, useToast } from '../components/ui';
 
-interface Status { enabled: boolean; enabledAt: string | null; required: boolean; recoveryCodesLeft: number }
+interface Status { enabled: boolean; enabledAt: string | null; required: boolean; recoveryCodesLeft: number; passkeys: number }
 
 /** The one-time recovery codes, shown once right after they are made. */
 function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void }) {
@@ -120,6 +120,7 @@ export function TwoStepCard() {
           )}
           {s.enabled && !codes && (mode === 'codes' || mode === 'off') && (
             <form onSubmit={submit} className="stack" style={{ maxWidth: 380 }}>
+              {mode === 'off' && s.passkeys > 0 && <Alert tone="warn">{t(`Turning off 2-step sign-in also removes your ${s.passkeys} passkey(s).`, `২-ধাপ সাইন-ইন বন্ধ করলে আপনার ${fmtNum(s.passkeys, lang, 0)}টি পাসকিও সরে যাবে।`)}</Alert>}
               {mode === 'off' && <Field label={t('Your password', 'আপনার পাসওয়ার্ড')}><Input type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></Field>}
               <Field label={t('Code from the app (or a recovery code)', 'অ্যাপের কোড (বা একটি রিকভারি কোড)')}><Input autoComplete="one-time-code" required value={code} onChange={e => setCode(e.target.value)} /></Field>
               <div className="row">

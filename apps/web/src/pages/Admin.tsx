@@ -118,7 +118,7 @@ function UserDrawer({ user, roles, onClose }: { user: User | null; roles: Role[]
   const [resetPw, setResetPw] = useState(isNew);
   const save = useSave<any>(isNew ? 'post' : 'put', isNew ? '/users' : `/users/${user!.id}`, isNew ? t('User created. They will be asked to set a new password at first sign-in.', 'ব্যবহারকারী তৈরি হয়েছে। প্রথম সাইন ইনে নতুন পাসওয়ার্ড দিতে বলা হবে।') : t('User updated.', 'ব্যবহারকারী হালনাগাদ হয়েছে।'));
   const signOut = useSave<void>('post', `/users/${user?.id}/sign-out`, t('Signed out on every device.', 'সব ডিভাইস থেকে সাইন আউট হয়েছে।'));
-  const resetTwoStep = useSave<void>('post', `/users/${user?.id}/reset-two-step`, t('2-step sign-in reset. They sign in with their password and set it up again.', '২-ধাপ সাইন-ইন রিসেট হয়েছে। তারা পাসওয়ার্ড দিয়ে সাইন ইন করে আবার সেট আপ করবেন।'));
+  const resetTwoStep = useSave<void>('post', `/users/${user?.id}/reset-two-step`, t('2-step sign-in reset, and their passkeys removed. They sign in with their password and set it up again.', '২-ধাপ সাইন-ইন রিসেট হয়েছে এবং তাদের পাসকি সরানো হয়েছে। তারা পাসওয়ার্ড দিয়ে সাইন ইন করে আবার সেট আপ করবেন।'));
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim());
   const pwProblem = resetPw ? passwordProblem(t, f.password) : null;
@@ -149,7 +149,7 @@ function UserDrawer({ user, roles, onClose }: { user: User | null; roles: Role[]
       )}
       {!isNew && !self && user!.twoStepEnabled && (
         <div className="row" style={{ gap: 10, justifyContent: 'space-between' }}>
-          <span className="muted small">{t('2-step sign-in is on. Lost their phone and their recovery codes?', '২-ধাপ সাইন-ইন চালু। ফোন ও রিকভারি কোড দুটোই হারিয়েছেন?')}</span>
+          <span className="muted small">{t('2-step sign-in is on. Lost their phone and their recovery codes? Resetting also removes their passkeys.', '২-ধাপ সাইন-ইন চালু। ফোন ও রিকভারি কোড দুটোই হারিয়েছেন? রিসেট করলে তাদের পাসকিও সরে যাবে।')}</span>
           <button className="btn sm" disabled={resetTwoStep.isPending} onClick={() => resetTwoStep.mutate(undefined, { onSuccess: onClose })}><ShieldCheck size={14} />{t('Reset 2-step sign-in', '২-ধাপ সাইন-ইন রিসেট')}</button>
         </div>
       )}
