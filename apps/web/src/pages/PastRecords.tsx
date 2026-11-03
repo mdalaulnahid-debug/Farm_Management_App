@@ -94,7 +94,7 @@ export function TemplatePreview({ p, file, onDone }: { p: TemplatePreviewData; f
         <Alert tone="warn">
           {p.overlap.total > 0 && t(`The books already have ${p.overlap.total} record(s) between ${fmtDate(p.overlap.from, lang)} and ${fmtDate(p.overlap.to, lang)}.`, `${fmtDate(p.overlap.from, lang)} থেকে ${fmtDate(p.overlap.to, lang)} এর মধ্যে খাতায় ইতিমধ্যে ${p.overlap.total}টি রেকর্ড আছে।`)}{' '}
           {p.overlap.openingBalances > 0 && t('Opening balances are already in the books, so cash and dues could be counted twice.', 'খাতায় প্রারম্ভিক স্থিতি আগেই আছে, তাই নগদ ও বকেয়া দুবার গণনা হতে পারে।')}{' '}
-          {p.overlap.imports.length > 0 && t(`Earlier imports in these dates: ${p.overlap.imports.join(', ')}. Undo them below if this file replaces them.`, `এই সময়ের আগের ইমপোর্ট: ${p.overlap.imports.join(', ')}। এই ফাইল সেগুলোর বদলে হলে নিচে ফেরত নিন।`)}
+          {p.overlap.imports.length > 0 && t(`Earlier imports in these dates: ${p.overlap.imports.join(', ')}.`, `এই সময়ের আগের ইমপোর্ট: ${p.overlap.imports.join(', ')}।`)}
         </Alert>
         <label className="check"><input type="checkbox" checked={confirm} onChange={e => setConfirm(e.target.checked)} />{t('I have checked: these records are not already in the books.', 'আমি দেখেছি: এই হিসাব খাতায় আগে থেকে নেই।')}</label>
       </>}
