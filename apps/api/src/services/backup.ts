@@ -10,6 +10,8 @@ import { prisma } from '../db.js';
 import { isZero, num, round2 } from '../lib/money.js';
 import { audit } from './common.js';
 import { sealAudit } from './audit-chain.js';
+import { sendOffsite } from './offsite.js';
+import type { OffsiteStatus } from './offsite.js';
 
 export const BACKUP_NAME = /^farmledger-(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})\.db$/;
 
@@ -180,8 +182,11 @@ async function safeCopy(file: string, to: string) {
   if (!existsSync(to) || statSync(to).size === 0) throw new Error(`Backup not restored: the safety copy ${to} could not be made.`);
 }
 
-/** Take a consistent copy of the database now, then check it. A second backup in the same minute replaces the first. */
-export async function runBackup(kind: 'auto' | 'manual', log: Log = consoleLog): Promise<BackupItem & { check: BackupCheck }> {
+/**
+ * Take a consistent copy of the database now, check it, and send encrypted copies off this computer.
+ * A second backup in the same minute replaces the first.
+ */
+export async function runBackup(kind: 'auto' | 'manual', log: Log = consoleLog): Promise<BackupItem & { check: BackupCheck; offsite: OffsiteStatus }> {
   if (!isSqlite()) throw new Error('Backups are only taken for SQLite installs.');
   const dir = backupDir();
   mkdirSync(dir, { recursive: true });
@@ -199,17 +204,9 @@ export async function runBackup(kind: 'auto' | 'manual', log: Log = consoleLog):
   log.info(`Database backup (${kind}) saved: ${join(dir, name)}`);
   const check = await checkBackup(join(dir, name));
   if (!check.ok) log.error(`Backup ${name} FAILED its check: ${check.problems.join(' ')}`);
-  const extra = copyDir();
-  if (extra) {
-    try {
-      mkdirSync(extra, { recursive: true });
-      copyFileSync(join(dir, name), join(extra, name));
-      log.info(`Backup copied to ${extra}`);
-    } catch (e) {
-      log.error(`Could not copy the backup to BACKUP_COPY_DIR (${extra}): ${(e as Error).message}`);
-    }
-  }
-  return { ...item(dir, name), check };
+  // Copies that leave this computer are always encrypted; see services/offsite.ts.
+  const offsite = await sendOffsite(join(dir, name), log, check.ok ? undefined : 'The backup failed its check, so no copy was sent off this computer.');
+  return { ...item(dir, name), check, offsite };
 }
 
 /**
