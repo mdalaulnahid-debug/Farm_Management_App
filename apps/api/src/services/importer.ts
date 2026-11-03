@@ -245,7 +245,11 @@ export async function voidPeriod(db: Db, actor: Actor | null, from: Date, to: Da
   await db.importBatch.updateMany({ where: { periodFrom: { lte: to }, periodTo: { gte: from }, status: 'POSTED' }, data: { status: 'VOID' } });
 }
 
-interface Docs { invoices: string[]; bills: string[]; payments: string[]; production: string[]; adjustments: string[]; journals: string[] }
+export interface Docs {
+  invoices: string[]; bills: string[]; payments: string[]; production: string[]; adjustments: string[]; journals: string[];
+  /** Added by a past-records import; set inactive (flocks closed) on undo once nothing live uses them. */
+  parties?: string[]; items?: string[]; flocks?: string[];
+}
 
 export async function undoBatch(db: Db, actor: Actor | null, id: string, reason: string) {
   const batch = await db.importBatch.findUnique({ where: { id } });
@@ -260,6 +264,13 @@ export async function undoBatch(db: Db, actor: Actor | null, id: string, reason:
   for (const l of d.production) { const x = await db.productionLog.findUnique({ where: { id: l } }); if (x?.status === 'POSTED') await voidProduction(db, actor, l, reason); }
   for (const a of d.adjustments) await voidAdjustment(db, actor, a, reason);
   for (const j of d.journals) { const x = await db.journalEntry.findUnique({ where: { id: j } }); if (x?.status === 'POSTED') await reverseEntry(db, actor, j, reason); }
+  const live = { status: { not: 'VOID' } };
+  for (const p of d.parties ?? []) {
+    const used = await db.salesInvoice.count({ where: { customerId: p, ...live } }) + await db.bill.count({ where: { supplierId: p, ...live } }) + await db.payment.count({ where: { partyId: p, ...live } });
+    if (!used) await db.party.update({ where: { id: p }, data: { active: false } });
+  }
+  for (const i of d.items ?? []) if (!(await db.stockMove.count({ where: { itemId: i, voided: false } }))) await db.item.update({ where: { id: i }, data: { active: false } });
+  for (const f of d.flocks ?? []) if (!(await db.productionLog.count({ where: { flockId: f, status: 'POSTED' } }))) await db.flock.update({ where: { id: f }, data: { status: 'CLOSED' } });
   await db.importBatch.update({ where: { id }, data: { status: 'VOID' } });
   await audit(db, actor, 'void', 'import', id, `Undid import ${batch.number}: ${reason}`);
 }
