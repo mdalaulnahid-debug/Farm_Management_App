@@ -8,6 +8,8 @@ import { resolve } from 'node:path';
 import type { Db } from '../db.js';
 import { verifyPassword } from '../auth/auth.js';
 import { isSqlite, listBackups } from './backup.js';
+import { keyProblem } from './backup-crypto.js';
+import { readOffsiteStatus } from './offsite.js';
 import { verifyAuditChain } from './audit-chain.js';
 
 /** The starting password in .env.example; nobody may still be using it. */
@@ -112,15 +114,32 @@ export async function securityCheck(db: Db, env: Env = process.env): Promise<Sec
     else add('backup_recent', 'ok', text('A backup was taken in the last 2 days.', 'গত ২ দিনে একটি ব্যাকআপ নেওয়া হয়েছে।'));
 
     const extra = env.BACKUP_COPY_DIR ? resolve(env.BACKUP_COPY_DIR) : null;
+    const remote = env.BACKUP_RCLONE_REMOTE?.trim() || null;
     let writable = false;
     if (extra && existsSync(extra)) try { accessSync(extra, constants.W_OK); writable = true; } catch { /* reported below */ }
-    if (!extra) add('backup_copy', 'warn',
+    if (!extra && !remote) add('backup_copy', 'warn',
       text('Backups stay only on this computer.', 'ব্যাকআপ শুধু এই কম্পিউটারেই থাকে।'),
-      text('If this computer dies or is stolen, the books go with it. Set BACKUP_COPY_DIR in apps/api/.env to a USB drive or a Google Drive folder (e.g. E:\\FarmLedger on Windows, or a mounted drive such as /mnt/farm-backup on Linux).', 'এই কম্পিউটার নষ্ট বা চুরি হলে হিসাবও যাবে। apps/api/.env-এ BACKUP_COPY_DIR-এ একটি ইউএসবি ড্রাইভ বা Google Drive ফোল্ডার দিন।'));
+      text('If this computer dies or is stolen, the books go with it. Set BACKUP_COPY_DIR in apps/api/.env to a USB drive (e.g. E:\\FarmLedger on Windows, or a mounted drive such as /mnt/farm-backup on Linux), or BACKUP_RCLONE_REMOTE to upload to Google Drive. See docs/BACKUP-ENCRYPTION.md.', 'এই কম্পিউটার নষ্ট বা চুরি হলে হিসাবও যাবে। apps/api/.env-এ BACKUP_COPY_DIR-এ একটি ইউএসবি ড্রাইভ দিন, অথবা Google Drive-এ পাঠাতে BACKUP_RCLONE_REMOTE দিন।'));
+    else if (!extra) { /* Google Drive only: reported by backup_drive below. */ }
     else if (!writable) add('backup_copy', 'fail',
       text(`The second backup folder ${extra} is missing or cannot be written to.`, `দ্বিতীয় ব্যাকআপ ফোল্ডার ${extra} নেই বা এতে লেখা যায় না।`),
       text('Plug in the drive or start Google Drive, or correct BACKUP_COPY_DIR in apps/api/.env.', 'ড্রাইভটি লাগান বা Google Drive চালু করুন, অথবা apps/api/.env-এ BACKUP_COPY_DIR ঠিক করুন।'));
     else add('backup_copy', 'ok', text(`Every backup is also copied to ${extra}.`, `প্রতিটি ব্যাকআপ ${extra}-এও কপি হয়।`));
+
+    // Copies leaving this computer must be encrypted; without a usable key none are sent.
+    const problem = keyProblem(env.BACKUP_ENCRYPTION_KEY);
+    if ((extra || remote) && problem) add('backup_encryption', 'fail',
+      text(`No backup copies leave this computer: ${problem}`, 'কোনো ব্যাকআপ কপি এই কম্পিউটারের বাইরে যাচ্ছে না: এনক্রিপশন কী নেই বা খুব ছোট।'),
+      text('Make a key with new-backup-key.bat (npm run backup:new-key), seal the printed key in the office safe, put it in apps/api/.env as BACKUP_ENCRYPTION_KEY and restart FarmLedger.', 'new-backup-key.bat (npm run backup:new-key) দিয়ে একটি কী বানান, ছাপানো কী অফিসের সিন্দুকে সিল করে রাখুন, apps/api/.env-এ BACKUP_ENCRYPTION_KEY হিসেবে দিন এবং FarmLedger আবার চালু করুন।'));
+    else if (extra || remote) add('backup_encryption', 'ok', text('Copies leaving this computer are encrypted.', 'এই কম্পিউটারের বাইরে যাওয়া কপিগুলো এনক্রিপ্ট করা।'));
+
+    if (remote) {
+      const drive = readOffsiteStatus()?.drive;
+      if (drive?.state === 'ok') add('backup_drive', 'ok', text('The last backup was uploaded to Google Drive.', 'সর্বশেষ ব্যাকআপ Google Drive-এ আপলোড হয়েছে।'));
+      else add('backup_drive', 'warn',
+        text(drive?.detail ?? 'No backup has been uploaded to Google Drive yet.', drive?.detail ? 'সর্বশেষ Google Drive আপলোড ব্যর্থ হয়েছে।' : 'এখনো কোনো ব্যাকআপ Google Drive-এ আপলোড হয়নি।'),
+        text('Check that rclone is installed for the FarmLedger user and signed in to the farm Google account (docs/BACKUP-ENCRYPTION.md), then click “Back up now”.', 'FarmLedger ব্যবহারকারীর জন্য rclone ইনস্টল ও খামারের Google অ্যাকাউন্টে সাইন-ইন আছে কিনা দেখুন, তারপর “এখনই ব্যাকআপ নিন” চাপুন।'));
+    }
   }
 
   // 8. The audit trail has not been edited behind the app's back.

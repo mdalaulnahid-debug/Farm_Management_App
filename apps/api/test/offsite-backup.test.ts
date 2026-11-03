@@ -6,6 +6,9 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdir
 import { PrismaClient } from '@prisma/client';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { FastifyInstance } from 'fastify';
+import { buildApp } from '../src/server.js';
+import { prisma } from '../src/db.js';
 import { seed } from '../src/seed.js';
 import { checkBackup, restoreDatabase, runBackup } from '../src/services/backup.js';
 import { BackupKeyError, decryptFile, encryptFile, newPassphrase } from '../src/services/backup-crypto.js';
@@ -174,5 +177,33 @@ describe('decrypting and restoring encrypted backups', () => {
     expect(e).toBeInstanceOf(BackupKeyError);
     expect((e as BackupKeyError).kind).toBe('different-key');
     expect(readdirSync(process.env.BACKUP_DIR!).filter(n => n.startsWith('.restore-'))).toEqual([]);
+  });
+});
+
+describe('the Backup card', () => {
+  it('the Backup card data says where encrypted copies go', async () => {
+    await prisma.user.update({ where: { email: 'owner@test.local' }, data: { mustChangePassword: false } });
+    process.env.BACKUP_RCLONE_REMOTE = 'farmdrive:FarmLedger';
+    const app: FastifyInstance = await buildApp();
+    try {
+      const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email: 'owner@test.local', password: 'TestOwner2026' } });
+      const cookie = String(login.headers['set-cookie']).split(';')[0];
+      await app.inject({ method: 'POST', url: '/api/v1/admin/backups', headers: { cookie } });
+      const res = await app.inject({ method: 'GET', url: '/api/v1/admin/backups', headers: { cookie } });
+      expect(res.statusCode).toBe(200);
+      const { offsite } = res.json();
+      expect(offsite.keyProblem).toBeNull();
+      expect(offsite.usbDir).toBe(usb);
+      expect(offsite.driveRemote).toBe('farmdrive:FarmLedger');
+      expect(offsite.last.usb.state).toBe('ok');
+      expect(offsite.last.drive.state).toBe('ok');
+      expect(res.body).not.toContain(key);
+
+      delete process.env.BACKUP_ENCRYPTION_KEY;
+      const off = (await app.inject({ method: 'GET', url: '/api/v1/admin/backups', headers: { cookie } })).json().offsite;
+      expect(off.keyProblem).toMatch(/no encryption key/i);
+    } finally {
+      await app.close();
+    }
   });
 });

@@ -10,6 +10,8 @@ import { today } from '../lib/dates.js';
 import { actorOf, can } from '../auth/auth.js';
 import { securityCheck } from '../services/security-check.js';
 import { BACKUP_NAME, backupDir, backupPath, checkBackup, copyDir, isSqlite, keepDays, listBackups, runBackup } from '../services/backup.js';
+import { keyProblem } from '../services/backup-crypto.js';
+import { rcloneRemote, readOffsiteStatus } from '../services/offsite.js';
 
 const sqliteOnly = () => {
   if (!isSqlite()) throw badRequest('Backups for PostgreSQL are taken with pg_dump / your hosting provider.');
@@ -36,7 +38,9 @@ export default async function backupRoutes(app: FastifyInstance) {
   // Backups kept on this computer (automatic daily ones and "Back up now").
   app.get('/admin/backups', { preHandler: can('settings.manage') }, async () => {
     sqliteOnly();
-    return { data: listBackups(), dir: backupDir(), keepDays: keepDays(), copyDir: copyDir() };
+    // Where copies leaving this computer go, and how the last run went. Never the key itself.
+    const offsite = { usbDir: copyDir(), driveRemote: rcloneRemote(), keyProblem: keyProblem(process.env.BACKUP_ENCRYPTION_KEY), last: readOffsiteStatus() };
+    return { data: listBackups(), dir: backupDir(), keepDays: keepDays(), copyDir: copyDir(), offsite };
   });
 
   app.post('/admin/backups', { preHandler: can('settings.manage') }, async req => {
