@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Copy, Printer, ShieldCheck, Smartphone } from 'lucide-react';
 import { api } from '../lib/api';
 import { useApi } from '../lib/hooks';
@@ -90,7 +91,9 @@ export function TwoStepCard() {
   const [codes, setCodes] = useState<string[] | null>(null);
   const [error, setError] = useState('');
   const s = q.data;
-  const reset = () => { setMode('idle'); setCode(''); setPassword(''); setCodes(null); setError(''); q.refetch(); refresh(); };
+  const qc = useQueryClient();
+  // Turning 2-step on or off changes the Passkeys card too (it can add passkeys, or they were removed).
+  const reset = () => { setMode('idle'); setCode(''); setPassword(''); setCodes(null); setError(''); q.refetch(); refresh(); qc.invalidateQueries({ queryKey: ['/auth/passkeys'] }); };
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setError('');
     try {

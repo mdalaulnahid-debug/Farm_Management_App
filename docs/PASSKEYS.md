@@ -36,8 +36,16 @@ note instead. (`http://localhost` also works, for development on the server itse
 4. In **Passkeys (fingerprint, face, PIN)**, choose **Add a passkey on this device**, type the password, and
    touch the fingerprint reader, look at the camera or type the device PIN when the device asks.
 
-Add one on each device the person uses: their phone, the office PC, a laptop. The list shows each one's name
-(guessed from the device, and it can be renamed), when it was added and when it was last used.
+Add one on each device the person uses: their own phone, their own laptop, and the office PC **only if
+they sign in to Windows with their own account**.
+
+> **Never add a passkey on a shared login.** The device only checks that whoever is unlocking it knows its
+> fingerprint, face or PIN. On a Windows account several staff share, anyone who knows that PIN could sign in to
+> FarmLedger as the person who added the passkey, with no password and no code. On a shared office PC, use the
+> password and the 2-step code instead.
+
+The list shows each passkey's name (guessed from the device, and it can be renamed), when it was added and when
+it was last used.
 
 Next time, on the sign-in page, choose **Sign in with fingerprint / face**.
 

@@ -116,6 +116,7 @@ export function PasskeyCard() {
             </div>
           ))}
           {blocked && <Alert tone="warn">{blocked}</Alert>}
+          <p className="small" style={{ margin: 0 }}>{t('Add a passkey only on a phone or computer login that only you unlock. On a shared office computer login, anyone who knows its PIN could sign in as you.', 'শুধু এমন ফোন বা কম্পিউটার লগইনে পাসকি যোগ করুন যা শুধু আপনি খোলেন। অফিসের শেয়ার করা কম্পিউটার লগইনে, যে কেউ তার পিন জানলে আপনার নামে সাইন ইন করতে পারবে।')}</p>
           {adding && !blocked ? (
             <form onSubmit={add} className="stack" style={{ maxWidth: 380 }}>
               <Field label={t('Your password', 'আপনার পাসওয়ার্ড')}><Input type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} autoFocus /></Field>
