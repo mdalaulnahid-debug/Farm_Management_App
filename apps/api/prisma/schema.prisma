@@ -69,8 +69,26 @@ model User {
   recoveryCodes      String?
   sessions           Session[]
   auditLogs          AuditLog[]
+  passkeys           Passkey[]
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
+}
+
+// A passkey (fingerprint, face, Windows Hello or device PIN) for one-touch sign-in. Only kept while the person
+// has 2-step sign-in on; turning that off or an admin reset removes them.
+model Passkey {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId String    @unique // base64url, as the browser sends it
+  publicKey    Bytes
+  counter      Int       @default(0)
+  transports   String?   // JSON array
+  name         String
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+
+  @@index([userId])
 }
 
 model Session {
