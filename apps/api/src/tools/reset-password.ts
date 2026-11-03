@@ -37,7 +37,8 @@ export async function resetPasswordFromConsole(email: string) {
   await tx(async db => {
     await db.user.update({ where: { id: user.id }, data: { passwordHash, mustChangePassword: true, failedLogins: 0, lockedUntil: null, active: true, totpSecret: null, totpEnabledAt: null, totpLastStep: null, recoveryCodes: null } });
     await db.session.deleteMany({ where: { userId: user.id } });
-    await audit(db, null, 'update', 'user', user.id, `Password reset from the server console for ${user.email} (by ${by})${user.totpEnabledAt ? '; 2-step sign-in was turned off' : ''}`);
+    const { count: passkeys } = await db.passkey.deleteMany({ where: { userId: user.id } });
+    await audit(db, null, 'update', 'user', user.id, `Password reset from the server console for ${user.email} (by ${by})${user.totpEnabledAt ? '; 2-step sign-in was turned off' : ''}${passkeys ? `; removed ${passkeys} passkey${passkeys === 1 ? '' : 's'}` : ''}`);
   });
   return { user, temporary };
 }

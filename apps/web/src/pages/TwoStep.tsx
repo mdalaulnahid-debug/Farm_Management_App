@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Copy, Printer, ShieldCheck, Smartphone } from 'lucide-react';
 import { api } from '../lib/api';
 import { useApi } from '../lib/hooks';
@@ -7,7 +8,7 @@ import { usePrefs } from '../lib/i18n';
 import { fmtDateTime, fmtNum } from '../lib/format';
 import { Alert, Badge, Card, Field, Input, Loading, useToast } from '../components/ui';
 
-interface Status { enabled: boolean; enabledAt: string | null; required: boolean; recoveryCodesLeft: number }
+interface Status { enabled: boolean; enabledAt: string | null; required: boolean; recoveryCodesLeft: number; passkeys: number }
 
 /** The one-time recovery codes, shown once right after they are made. */
 function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void }) {
@@ -90,7 +91,9 @@ export function TwoStepCard() {
   const [codes, setCodes] = useState<string[] | null>(null);
   const [error, setError] = useState('');
   const s = q.data;
-  const reset = () => { setMode('idle'); setCode(''); setPassword(''); setCodes(null); setError(''); q.refetch(); refresh(); };
+  const qc = useQueryClient();
+  // Turning 2-step on or off changes the Passkeys card too (it can add passkeys, or they were removed).
+  const reset = () => { setMode('idle'); setCode(''); setPassword(''); setCodes(null); setError(''); q.refetch(); refresh(); qc.invalidateQueries({ queryKey: ['/auth/passkeys'] }); };
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setError('');
     try {
@@ -120,6 +123,7 @@ export function TwoStepCard() {
           )}
           {s.enabled && !codes && (mode === 'codes' || mode === 'off') && (
             <form onSubmit={submit} className="stack" style={{ maxWidth: 380 }}>
+              {mode === 'off' && s.passkeys > 0 && <Alert tone="warn">{t(`Turning off 2-step sign-in also removes your ${s.passkeys} passkey(s).`, `২-ধাপ সাইন-ইন বন্ধ করলে আপনার ${fmtNum(s.passkeys, lang, 0)}টি পাসকিও সরে যাবে।`)}</Alert>}
               {mode === 'off' && <Field label={t('Your password', 'আপনার পাসওয়ার্ড')}><Input type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></Field>}
               <Field label={t('Code from the app (or a recovery code)', 'অ্যাপের কোড (বা একটি রিকভারি কোড)')}><Input autoComplete="one-time-code" required value={code} onChange={e => setCode(e.target.value)} /></Field>
               <div className="row">

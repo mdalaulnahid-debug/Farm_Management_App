@@ -9,6 +9,7 @@ import { fmtDate, fmtDateTime, fmtLongDate, fmtMoney, ymd } from '../lib/format'
 import { Badge, Card, Kpi, Loading, PageHeader, Segmented, Select, Switch, useToast } from '../components/ui';
 import { ChangePassword } from './Login';
 import { TwoStepCard } from './TwoStep';
+import { PasskeyCard } from './Passkeys';
 
 type Section = 'profile' | 'appearance' | 'language' | 'startup' | 'security' | 'about';
 
@@ -173,6 +174,7 @@ export default function MyAccount() {
               <ChangePassword />
             </Card>
             <TwoStepCard />
+            <PasskeyCard />
             <SignedInDevices />
             <Card title={t('Staying safe', 'নিরাপদ থাকুন')} pad>
               <ul className="tips">

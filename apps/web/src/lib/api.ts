@@ -26,7 +26,7 @@ async function request<T>(method: string, path: string, body?: unknown, query?: 
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
-    if (res.status === 401 && path !== '/auth/login' && path !== '/auth/me') window.dispatchEvent(new Event('fl:unauthorized'));
+    if (res.status === 401 && path !== '/auth/login' && path !== '/auth/passkey/login' && path !== '/auth/me') window.dispatchEvent(new Event('fl:unauthorized'));
     if (res.status === 403 && (data?.error === 'TWO_STEP_REQUIRED' || data?.error === 'PASSWORD_CHANGE_REQUIRED')) window.dispatchEvent(new Event('fl:me-stale'));
     throw new ApiError(res.status, data?.message || res.statusText, data?.error, data?.details);
   }
@@ -38,6 +38,7 @@ export const api = {
   post: <T = any>(path: string, body?: unknown) => request<T>('POST', path, body ?? {}),
   put: <T = any>(path: string, body?: unknown) => request<T>('PUT', path, body ?? {}),
   patch: <T = any>(path: string, body?: unknown) => request<T>('PATCH', path, body ?? {}),
+  del: <T = any>(path: string) => request<T>('DELETE', path),
 };
 
 export interface List<T> { data: T[]; total?: number; totals?: Record<string, number> }

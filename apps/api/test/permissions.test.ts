@@ -13,7 +13,7 @@ import { prisma } from '../src/db.js';
 import { today } from '../src/lib/dates.js';
 import { DEFAULT_ROLES, type Permission } from '../src/lib/constants.js';
 
-type Method = 'GET' | 'POST' | 'PUT' | 'PATCH';
+type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 /** 'public' = no sign-in needed; 'signed-in' = any signed-in user; otherwise alternatives, each a list of permissions that are ALL needed. */
 type Rule = 'public' | 'signed-in' | Permission[][];
 interface Row { method: Method; pattern: string; url: string; rule: Rule; label: string; payload?: unknown }
@@ -35,6 +35,8 @@ const ROUTES: Row[] = [
   row('GET', '/health', 'public'),
   row('POST', '/auth/login', 'public'),
   row('POST', '/auth/login/two-step', 'public'),
+  row('POST', '/auth/passkey/login/options', 'public'),
+  row('POST', '/auth/passkey/login', 'public'),
   row('POST', '/auth/logout', 'public'),
   row('GET', '/auth/brand', 'public'),
   // Any signed-in person, even on a temporary password
@@ -58,6 +60,11 @@ const ROUTES: Row[] = [
   row('POST', '/auth/two-step/confirm', 'signed-in'),
   row('POST', '/auth/two-step/disable', 'signed-in'),
   row('POST', '/auth/two-step/recovery-codes', 'signed-in'),
+  row('GET', '/auth/passkeys', 'signed-in'),
+  row('POST', '/auth/passkeys/options', 'signed-in'),
+  row('POST', '/auth/passkeys', 'signed-in'),
+  row('PATCH', '/auth/passkeys/:id', 'signed-in'),
+  row('DELETE', '/auth/passkeys/:id', 'signed-in'),
   row('POST', '/auth/sessions/:id/end', 'signed-in'),
   // Users and roles
   row('GET', '/roles', need('users.manage')),
