@@ -11,6 +11,7 @@ import { prisma } from './db.js';
 import { AppError } from './lib/errors.js';
 import { loadUser } from './auth/auth.js';
 import authRoutes from './routes/auth.js';
+import passkeyRoutes from './routes/passkeys.js';
 import masterRoutes from './routes/master.js';
 import transactionRoutes from './routes/transactions.js';
 import reportRoutes from './routes/reports.js';
@@ -83,6 +84,7 @@ export async function buildApp() {
     api.addHook('onRequest', async req => loadUser(req));
     api.get('/health', async () => ({ ok: true, time: new Date().toISOString() }));
     await api.register(authRoutes);
+    await api.register(passkeyRoutes);
     await api.register(masterRoutes);
     await api.register(transactionRoutes);
     await api.register(reportRoutes);

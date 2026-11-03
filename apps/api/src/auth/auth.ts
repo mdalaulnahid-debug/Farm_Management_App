@@ -5,6 +5,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { prisma } from '../db.js';
 import { AppError, forbidden, unauthorized } from '../lib/errors.js';
 import type { Permission } from '../lib/constants.js';
+import { audit } from '../services/common.js';
 
 const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number, opts: object) => Promise<Buffer>;
 const PARAMS = { N: 16384, r: 8, p: 1 };
@@ -41,6 +42,26 @@ export async function createSession(userId: string, ip?: string, userAgent?: str
 }
 
 export const destroySession = (token: string) => prisma.session.deleteMany({ where: { id: hashToken(token) } });
+
+/** Secure whenever the browser reached us over HTTPS (directly or via the trusted proxy, see TRUST_PROXY). */
+export const cookieOpts = (req: FastifyRequest) => ({
+  path: '/', httpOnly: true, sameSite: 'lax' as const, secure: process.env.NODE_ENV === 'production' || req.protocol === 'https',
+});
+
+/**
+ * A successful sign-in (password, 2-step code or passkey): clear failed tries, open a session, record it as
+ * "<name> signed in<how>" and set the cookie.
+ */
+export async function startSession(req: FastifyRequest, reply: FastifyReply, user: { id: string; name: string }, how: string, extra: Record<string, unknown> = {}) {
+  await prisma.user.update({ where: { id: user.id }, data: { failedLogins: 0, lockedUntil: null, lastLoginAt: new Date(), ...extra } });
+  await prisma.session.deleteMany({ where: { expiresAt: { lt: new Date() } } }); // housekeeping
+  const { token, expiresAt } = await createSession(user.id, req.ip, req.headers['user-agent']);
+  await audit(prisma, { id: user.id, ip: req.ip }, 'login', 'user', user.id, `${user.name} signed in${how}`);
+  reply.setCookie(SESSION_COOKIE, token, { ...cookieOpts(req), expires: expiresAt });
+  return { ok: true as const };
+}
+
+export const lockedMessage = (until: Date) => `Too many failed attempts. Try again after ${until.toLocaleTimeString()}.`;
 
 export interface AuthUser {
   id: string; name: string; email: string; locale: string; mustChangePassword: boolean;

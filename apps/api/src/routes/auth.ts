@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import QRCode from 'qrcode';
 import { z } from 'zod';
 import { prisma } from '../db.js';
@@ -6,19 +6,20 @@ import { badRequest, conflict, forbidden, notFound, unauthorized } from '../lib/
 import { parse, zOptText } from '../lib/validate.js';
 import { PERMISSIONS } from '../lib/constants.js';
 import { audit } from '../services/common.js';
-import { actorOf, can, createSession, destroySession, hashPassword, passwordProblem, passwordSet, SESSION_COOKIE, signedIn, verifyPassword } from '../auth/auth.js';
+import { actorOf, can, destroySession, hashPassword, lockedMessage, passwordProblem, passwordSet, SESSION_COOKIE, signedIn, startSession, verifyPassword } from '../auth/auth.js';
 import { hashRecovery, newRecoveryCodes, newSecret, otpauthUrl, useRecoveryCode, verifyCode } from '../auth/totp.js';
 import { endTicket, issueTicket, useTicketAttempt } from '../auth/two-step.js';
 
 const MAX_FAILED = 5;
 const LOCK_MINUTES = 15;
 
-export default async function authRoutes(app: FastifyInstance) {
-  // Secure whenever the browser reached us over HTTPS (directly or via the trusted proxy, see TRUST_PROXY).
-  const cookieOpts = (req: FastifyRequest) => ({
-    path: '/', httpOnly: true, sameSite: 'lax' as const, secure: process.env.NODE_ENV === 'production' || req.protocol === 'https',
-  });
+/** 2-step sign-in is going away for this person, so their passkeys go too. Returns the audit suffix. */
+const removePasskeys = async (userId: string) => {
+  const { count } = await prisma.passkey.deleteMany({ where: { userId } });
+  return count ? ` and removed ${count} passkey${count === 1 ? '' : 's'}` : '';
+};
 
+export default async function authRoutes(app: FastifyInstance) {
   // A wrong password or a wrong 2-step code counts the same: after MAX_FAILED the account waits LOCK_MINUTES.
   // The count goes up in the database itself, so attempts sent in parallel each count.
   const recordFailure = async (req: FastifyRequest, user: { id: string; email: string }, what: string) => {
@@ -43,15 +44,6 @@ export default async function authRoutes(app: FastifyInstance) {
       return won.count ? { how: ` with a recovery code (${remaining.length} left)` } : null;
     }
     return null;
-  };
-  const lockedMessage = (until: Date) => `Too many failed attempts. Try again after ${until.toLocaleTimeString()}.`;
-  const startSession = async (req: FastifyRequest, reply: FastifyReply, user: { id: string; name: string }, how: string, extra: Record<string, unknown> = {}) => {
-    await prisma.user.update({ where: { id: user.id }, data: { failedLogins: 0, lockedUntil: null, lastLoginAt: new Date(), ...extra } });
-    await prisma.session.deleteMany({ where: { expiresAt: { lt: new Date() } } }); // housekeeping
-    const { token, expiresAt } = await createSession(user.id, req.ip, req.headers['user-agent']);
-    await audit(prisma, { id: user.id, ip: req.ip }, 'login', 'user', user.id, `${user.name} signed in${how}`);
-    reply.setCookie(SESSION_COOKIE, token, { ...cookieOpts(req), expires: expiresAt });
-    return { ok: true };
   };
 
   app.post('/auth/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -143,12 +135,13 @@ export default async function authRoutes(app: FastifyInstance) {
 
   // ───── 2-step sign-in (authenticator app) ─────
   const twoStepStatus = async (userId: string) => {
-    const [user, org] = await Promise.all([
+    const [user, org, passkeys] = await Promise.all([
       prisma.user.findUniqueOrThrow({ where: { id: userId } }),
       prisma.organization.findUnique({ where: { id: 'org' }, select: { requireTwoStep: true } }),
+      prisma.passkey.count({ where: { userId } }),
     ]);
     const left: string[] = user.recoveryCodes ? JSON.parse(user.recoveryCodes) : [];
-    return { enabled: !!user.totpEnabledAt, enabledAt: user.totpEnabledAt, required: !!org?.requireTwoStep, recoveryCodesLeft: user.totpEnabledAt ? left.length : 0 };
+    return { enabled: !!user.totpEnabledAt, enabledAt: user.totpEnabledAt, required: !!org?.requireTwoStep, recoveryCodesLeft: user.totpEnabledAt ? left.length : 0, passkeys };
   };
   const newCodes = () => {
     const codes = newRecoveryCodes();
@@ -200,7 +193,7 @@ export default async function authRoutes(app: FastifyInstance) {
     if (!(await verifyPassword(body.password, user.passwordHash))) throw badRequest('Password is incorrect.');
     await checkSecondFactor(user.id, body.code);
     await prisma.user.update({ where: { id: user.id }, data: { totpSecret: null, totpEnabledAt: null, totpLastStep: null, recoveryCodes: null } });
-    await audit(prisma, actorOf(req), 'update', 'user', user.id, 'Turned off 2-step sign-in');
+    await audit(prisma, actorOf(req), 'update', 'user', user.id, `Turned off 2-step sign-in${await removePasskeys(user.id)}`);
     return { ok: true };
   });
 
@@ -274,8 +267,9 @@ export default async function authRoutes(app: FastifyInstance) {
     if (user.role.key === 'owner' && !isOwner(req)) throw forbidden('Only the owner can change an owner account.');
     if (id === req.user!.id) throw conflict('Use My settings → Password & security to change your own 2-step sign-in.');
     await prisma.user.update({ where: { id }, data: { totpSecret: null, totpEnabledAt: null, totpLastStep: null, recoveryCodes: null } });
+    const removed = await removePasskeys(id);
     const ended = await prisma.session.deleteMany({ where: { userId: id } });
-    await audit(prisma, actorOf(req), 'update', 'user', id, `Reset 2-step sign-in for ${user.email} (signed out ${ended.count} device${ended.count === 1 ? '' : 's'})`);
+    await audit(prisma, actorOf(req), 'update', 'user', id, `Reset 2-step sign-in for ${user.email} (signed out ${ended.count} device${ended.count === 1 ? '' : 's'}${removed})`);
     return { ok: true };
   });
 
