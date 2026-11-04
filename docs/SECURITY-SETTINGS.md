@@ -20,6 +20,10 @@ Run the check after each restart.
 2. **HTTPS only.** Set `HOST=127.0.0.1` and `TRUST_PROXY=127.0.0.1`, then restart the service.
    - Check that the HTTPS address still signs in. The `:4000` addresses now stop answering. That is intended.
    - If a deploy script health-checks the app, it must call `127.0.0.1:4000`.
+   - Optional: send plain `http://` visits on to HTTPS. The Tailscale console copies the name without
+     `https://`, and some browsers then try `http://` and show "refused to connect". Set `HTTPS_REDIRECT_PORT=4080`,
+     restart, and run `tailscale serve --bg --http=80 http://127.0.0.1:4080`. That port only answers "go to
+     https://" (to `PASSKEY_ORIGIN` when set). It never shows a page or takes a password.
 3. **Secure cookie.** Set `NODE_ENV=production`, restart, and sign in again over HTTPS.
    - Never do this before step 2. Over plain HTTP nobody could sign in, and the check reports that as a problem.
 4. **A backup copy off the host PC.** A VM's disk lives on its host PC, so a copy inside the VM, or on that PC,

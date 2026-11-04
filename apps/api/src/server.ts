@@ -22,6 +22,7 @@ import { ensureReferenceData } from './services/reference.js';
 import { startBackupScheduler } from './services/backup.js';
 import { sealAudit } from './services/audit-chain.js';
 import { securityCheck } from './services/security-check.js';
+import { buildRedirectApp } from './lib/https-redirect.js';
 
 /**
  * Which proxy may tell us the client's address and whether the browser used HTTPS (X-Forwarded-*).
@@ -119,6 +120,12 @@ if (isMain) {
   const app = await buildApp();
   const port = Number(process.env.PORT || 4000);
   await app.listen({ port, host: process.env.HOST || '0.0.0.0' });
+  // Plain-http visits behind `tailscale serve --http=80` are sent on to https. Never serves the app itself.
+  const redirectPort = Number(process.env.HTTPS_REDIRECT_PORT || 0);
+  if (redirectPort) {
+    await buildRedirectApp().listen({ port: redirectPort, host: '127.0.0.1' });
+    app.log.info(`Plain http on 127.0.0.1:${redirectPort} redirects to https.`);
+  }
   // Daily automatic database copy (SQLite only). Never started by tests.
   startBackupScheduler(app.log);
   // Seal new audit-trail rows into the hash chain every few minutes.
