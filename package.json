@@ -14,7 +14,8 @@
     "build": "npm run build -w apps/web && npm run build -w apps/api",
     "start": "npm run start -w apps/api",
     "test": "npm run test -w apps/api && npm run test -w packages/design-system",
-    "typecheck": "npm run typecheck -w apps/api && npm run typecheck -w apps/web"
+    "typecheck": "npm run typecheck -w apps/api && npm run typecheck -w apps/web",
+    "budget": "node scripts/check-budget.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.5"
