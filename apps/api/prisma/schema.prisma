@@ -58,6 +58,7 @@ model User {
   active             Boolean    @default(true)
   mustChangePassword Boolean    @default(false)
   locale             String     @default("en")
+  preferences        String?    // JSON: personal display settings (theme, font set, simple workspace…), see routes/auth.ts
   failedLogins       Int        @default(0)
   lockedUntil        DateTime?
   lastLoginAt        DateTime?

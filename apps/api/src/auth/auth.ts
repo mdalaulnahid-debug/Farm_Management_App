@@ -70,6 +70,8 @@ export interface AuthUser {
   /** The farm requires 2-step sign-in and this account has not set it up yet. */
   mustSetUpTwoStep: boolean;
   role: { key: string; name: string }; permissions: Permission[];
+  /** Personal display settings saved with the account (null until first saved). */
+  preferences: Record<string, unknown> | null;
 }
 
 declare module 'fastify' {
@@ -96,6 +98,7 @@ export async function loadUser(req: FastifyRequest) {
     id: u.id, name: u.name, email: u.email, locale: u.locale, mustChangePassword: u.mustChangePassword,
     twoStepEnabled, mustSetUpTwoStep: required,
     role: { key: u.role.key, name: u.role.name }, permissions: JSON.parse(u.role.permissions),
+    preferences: u.preferences ? JSON.parse(u.preferences) : null,
   };
 }
 
