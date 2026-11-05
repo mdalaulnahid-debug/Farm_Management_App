@@ -1,0 +1,80 @@
+/* BDP Agrofarm theme: deep paddy green, harvest gold, Anek Bangla headings. Light first, then dark and the accent options. */
+:root {
+  /* Inter for Latin text, Hind Siliguri for Bangla; Anek Bangla is the display face for headings and big figures. */
+  --font: 'Inter', 'Hind Siliguri', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Anek Bangla Variable', 'Hind Siliguri', 'Inter', sans-serif;
+
+  --bg: #edf1eb;
+  --surface: #ffffff;
+  --surface-2: #f6f8f4;
+  --surface-3: #e5ebe2;
+  --border: #dce3d8;
+  --border-strong: #c4cebf;
+  --text: #13201a;
+  --text-2: #3f4f45;
+  --text-3: #5f6c63;
+  --brand: #0e3b2c;
+  --brand-2: #17573f;
+  --brand-soft: #dfece3;
+  --brand-ink: #ffffff;
+  --accent: #8a6100;
+  --accent-soft: #fbf0d2;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  --warning: #b54708;
+  --warning-soft: #fef4e6;
+  --info: #175cd3;
+  --info-soft: #eaf1fd;
+  --success: #067647;
+  --success-soft: #e6f5ed;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 16, .06);
+  --shadow: 0 1px 3px rgba(16, 24, 16, .08), 0 8px 24px -12px rgba(16, 24, 16, .12);
+  --shadow-lg: 0 24px 60px -20px rgba(16, 24, 16, .35);
+  --focus: 0 0 0 3px rgba(23, 87, 63, .28);
+  --gold: #e3a81b;
+  /* Sidebar: a deep panel in the brand hue; text and states are mixed from it so every accent works. */
+  --side-bg: #0e3b2c;
+  --chart-1: #157347; --chart-2: #d97706; --chart-3: #2563eb; --chart-4: #9333ea; --chart-5: #dc2626; --chart-6: #0891b2;
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --bg: #0d1511;
+  --surface: #142019;
+  --surface-2: #19211b;
+  --surface-3: #202a22;
+  --border: #263127;
+  --border-strong: #354236;
+  --text: #e8eee9;
+  --text-2: #b3c0b6;
+  --text-3: #8f9d92;
+  --gold: #f0b351;
+  --side-bg: #0a1712;
+  --brand: #3fb27a;
+  --brand-2: #56c48d;
+  --brand-soft: #173525;
+  --brand-ink: #06140c;
+  --accent: #f0b351;
+  --accent-soft: #3a2c12;
+  --danger: #f97066;
+  --danger-soft: #3b1714;
+  --warning: #fdb022;
+  --warning-soft: #3a2a0d;
+  --info: #84adff;
+  --info-soft: #14244a;
+  --success: #47cd89;
+  --success-soft: #11301f;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow: 0 1px 3px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .6);
+  --chart-1: #47cd89; --chart-2: #f0b351; --chart-3: #84adff; --chart-4: #c084fc; --chart-5: #f97066; --chart-6: #22d3ee;
+  color-scheme: dark;
+}
+
+:root[data-accent='blue'] { --side-bg: #10244a; --brand: #1d4ed8; --brand-2: #2563eb; --brand-soft: #e6eefc; --focus: 0 0 0 3px rgba(37, 99, 235, .25); }
+:root[data-accent='purple'] { --side-bg: #241347; --brand: #6d28d9; --brand-2: #7c3aed; --brand-soft: #f0e9fd; --focus: 0 0 0 3px rgba(124, 58, 237, .25); }
+:root[data-accent='amber'] { --side-bg: #3b2405; --brand: #b45309; --brand-2: #d97706; --brand-soft: #fdf1df; --focus: 0 0 0 3px rgba(217, 119, 6, .25); }
+:root[data-theme='dark'][data-accent] { --side-bg: #0a1712; }
+:root[data-theme='dark'][data-accent='blue'] { --brand: #6b9cff; --brand-2: #8fb3ff; --brand-soft: #16264a; --brand-ink: #050d1f; }
+:root[data-theme='dark'][data-accent='purple'] { --brand: #b18cff; --brand-2: #c4a8ff; --brand-soft: #2a1a4a; --brand-ink: #12071f; }
+:root[data-theme='dark'][data-accent='amber'] { --brand: #f0b351; --brand-2: #f5c473; --brand-soft: #3a2a0d; --brand-ink: #1f1405; }
+:root { --swatch-green: #157347; --swatch-blue: #2563eb; --swatch-purple: #7c3aed; --swatch-amber: #d97706; }

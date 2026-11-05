@@ -10,6 +10,8 @@ import '@fontsource/hind-siliguri/400.css';
 import '@fontsource/hind-siliguri/500.css';
 import '@fontsource/hind-siliguri/600.css';
 import '@fontsource-variable/anek-bangla/wght.css';
+import '@farmledger/design-system/tokens.css';
+import '@farmledger/design-system/themes/bdp.css';
 import './styles.css';
 import { PrefsProvider } from './lib/i18n';
 import { AuthProvider } from './lib/auth';

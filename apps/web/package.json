@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@farmledger/design-system": "*",
     "@fontsource-variable/anek-bangla": "^5.3.0",
     "@fontsource/hind-siliguri": "^5.3.0",
     "@fontsource/inter": "^5.2.8",
