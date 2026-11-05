@@ -18,6 +18,7 @@ import reportRoutes from './routes/reports.js';
 import importRoutes from './routes/import.js';
 import projectRoutes from './routes/projects.js';
 import backupRoutes from './routes/backup.js';
+import myDayRoutes from './routes/my-day.js';
 import { ensureReferenceData } from './services/reference.js';
 import { startBackupScheduler } from './services/backup.js';
 import { sealAudit } from './services/audit-chain.js';
@@ -92,6 +93,7 @@ export async function buildApp() {
     await api.register(importRoutes);
     await api.register(projectRoutes);
     await api.register(backupRoutes);
+    await api.register(myDayRoutes);
   }, { prefix: '/api/v1' });
 
   // In production the API also serves the built web app.

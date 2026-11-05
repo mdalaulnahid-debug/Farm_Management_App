@@ -146,6 +146,10 @@ const ROUTES: Row[] = [
   row('GET', '/production', need('production.view')),
   row('POST', '/production', need('production.manage')),
   row('POST', '/production/:id/void', need('production.manage')),
+  // Data-entry staff may also void their OWN entries made the same farm day (same-day-fix.test.ts); with a
+  // record that does not exist that exception never applies, so these rows still hold.
+  row('POST', '/stock-adjustments/:sourceId/void', need('inventory.manage')),
+  row('GET', '/me/today', 'signed-in'),
   row('GET', '/reports/production', need('production.view')),
   // Dashboard, reports, audit trail
   row('GET', '/dashboard', need('dashboard.view')),

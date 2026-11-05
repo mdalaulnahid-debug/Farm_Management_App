@@ -150,6 +150,19 @@ export async function adjustStock(db: Db, actor: Actor | null, input: Adjustment
   return { sourceId, value, difference: quantity };
 }
 
+/** Cancel a stock adjustment (e.g. medicine or feed recorded as used by mistake): its stock moves and
+ *  journal entry are reversed, so quantity, average cost and the books return to before. */
+export async function voidAdjustment(db: Db, actor: Actor | null, sourceId: string, reason: string) {
+  const moves = await db.stockMove.findMany({ where: { sourceType: 'ADJUSTMENT', sourceId } });
+  if (!moves.length) throw notFound('Stock adjustment');
+  if (moves.every(m => m.voided)) throw conflict('This stock adjustment is already cancelled.');
+  assertRecentDate(actor, moves[0].date);
+  await reverseStockForSource(db, 'ADJUSTMENT', sourceId);
+  const je = await db.journalEntry.findFirst({ where: { sourceType: 'ADJUSTMENT', sourceId, status: { not: 'VOID' } } });
+  if (je) await reverseEntry(db, actor, je.id, reason);
+  await audit(db, actor, 'void', 'stock_adjustment', sourceId, `Cancelled stock adjustment: ${reason}`);
+}
+
 // ───────────── Cash & bank ─────────────
 
 export async function transfer(db: Db, actor: Actor | null, input: { date: Date; fromAccountId: string; toAccountId: string; amount: number; memo?: string }) {
