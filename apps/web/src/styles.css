@@ -209,3 +209,8 @@
 .letterhead h2 { margin: 0; }
 .letterhead-en { font-weight: 600; color: var(--text-2); margin-top: 2px; }
 .statement-org { font-weight: 700; font-size: 1.05em; }
+
+/* Design reference page (/system) */
+.ref-swatches { display: grid; gap: 8px; }
+.ref-swatch { display: grid; gap: 2px; width: 150px; }
+.ref-swatch i { height: 44px; border-radius: var(--radius-sm); border: 1px solid var(--border); }

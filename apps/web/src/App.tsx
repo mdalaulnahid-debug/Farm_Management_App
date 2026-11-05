@@ -18,6 +18,7 @@ const Accounting = lazy(() => import('./pages/Accounting'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Admin = lazy(() => import('./pages/Admin'));
 const MyAccount = lazy(() => import('./pages/MyAccount'));
+const SystemReference = lazy(() => import('./pages/SystemReference'));
 
 function Guard({ perm, children }: { perm: string | string[]; children: ReactNode }) {
   const { can } = useAuth();
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="/reports" element={<Guard perm="reports.view"><Reports /></Guard>} />
           <Route path="/admin" element={<Guard perm={['settings.manage', 'users.manage', 'audit.view']}><Admin /></Guard>} />
           <Route path="/account" element={<MyAccount />} />
+          <Route path="/system" element={<Guard perm="settings.manage"><SystemReference /></Guard>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
