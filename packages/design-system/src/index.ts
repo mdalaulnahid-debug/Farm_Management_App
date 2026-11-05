@@ -8,3 +8,4 @@ export { Drawer, Dialog } from './overlays';
 export { DataTable, type Column } from './data-table';
 export { Skeleton, EmptyState, ErrorState, ErrorBoundary } from './states';
 export { Wizard, NumberPad, ChoiceButtons, type WizardStep } from './wizard';
+export { ComboChart, type ChartSeries } from './chart';

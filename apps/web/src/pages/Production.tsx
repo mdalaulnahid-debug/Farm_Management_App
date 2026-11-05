@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Bird, Download, Egg, HeartPulse, Pencil, Plus, Wheat, Percent, Ban } from 'lucide-react';
-import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi, useFlocks, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtMoney, fmtNum, fmtPct, iso10, ymd } from '../lib/format';
 import type { Flock } from '../lib/api';
-import { Alert, Badge, Card, DataTable, Dialog, Drawer, Empty, Field, Input, Kpi, Loading, PageHeader, RangePicker, Segmented, Select, StatusBadge, Tabs, thisMonth, VoidDialog, type Column } from '../components/ui';
+import { Alert, Badge, Card, DataTable, Dialog, Drawer, Empty, Field, Input, Kpi, Loading, PageHeader, RangePicker, Segmented, Select, StatusBadge, Tabs, thisMonth, VoidDialog, type Column, ComboChart } from '../components/ui';
 import { Money, ProductionDrawer } from '../components/forms';
 import duckPath from '../assets/photos/duck-path.webp';
 
@@ -120,18 +119,12 @@ function DailyLog() {
         actions={<div className="legend"><span><i style={{ background: 'var(--chart-1)' }} />{t('Eggs', 'ডিম')}</span><span><i style={{ background: 'var(--chart-2)' }} />{t('Laying rate %', 'পাড়ার হার %')}</span></div>}>
         {!r ? <Loading /> : !chartData.length ? <Empty>{t('No production recorded in this period.', 'এই সময়ে কোনো উৎপাদন লেখা হয়নি।')}</Empty> : (
           <div className="chart-box">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData} margin={{ top: 10, right: 4, left: 4, bottom: 0 }}>
-                <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="label" tick={{ fill: 'var(--text-3)', fontSize: 12 }} tickLine={false} axisLine={{ stroke: 'var(--border)' }} minTickGap={16} />
-                <YAxis yAxisId="eggs" tick={{ fill: 'var(--text-3)', fontSize: 12 }} tickLine={false} axisLine={false} width={48} allowDecimals={false} />
-                <YAxis yAxisId="rate" orientation="right" domain={[0, 100]} unit="%" tick={{ fill: 'var(--text-3)', fontSize: 12 }} tickLine={false} axisLine={false} width={44} />
-                <Tooltip cursor={{ fill: 'var(--surface-3)' }} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)' }}
-                  formatter={(v: any, name: any) => (name === 'layingRate' ? [fmtPct(v, lang), t('Laying rate', 'পাড়ার হার')] : [fmtNum(v, lang, 0), t('Eggs', 'ডিম')])} />
-                <Bar yAxisId="eggs" dataKey="eggs" fill="var(--chart-1)" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                <Line yAxisId="rate" dataKey="layingRate" stroke="var(--chart-2)" strokeWidth={2} dot={false} connectNulls type="monotone" />
-              </ComposedChart>
-            </ResponsiveContainer>
+            <ComboChart data={chartData} xKey="label" leftWidth={48} rightDomain={[0, 100]}
+              formatLeft={v => fmtNum(v, lang, 0)} formatRight={v => `${v}%`}
+              format={(v, s) => (s.key === 'layingRate' ? fmtPct(v, lang) : fmtNum(v, lang, 0))} series={[
+                { key: 'eggs', name: t('Eggs', 'ডিম'), kind: 'bar', color: 'var(--chart-1)' },
+                { key: 'layingRate', name: t('Laying rate', 'পাড়ার হার'), kind: 'line', color: 'var(--chart-2)', axis: 'right' },
+              ]} />
           </div>
         )}
       </Card>
