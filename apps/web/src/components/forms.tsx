@@ -6,6 +6,7 @@ import { nameOf, unitLabel, usePrefs } from '../lib/i18n';
 import { fmtDate, fmtMoney, fmtNum, fmtPct, round2, ymd } from '../lib/format';
 import { useAccounts, useApi, useCashAccounts, useFlocks, useItems, useParties, useSave } from '../lib/hooks';
 import type { Account } from '../lib/api';
+import { LogoMark } from '../brand/Logo';
 import { Alert, Drawer, Field, Input, Segmented, Select, StatusBadge } from './ui';
 
 /** Farm name at the top of a printed document: Bangla and English together, like a letterhead. */
@@ -15,9 +16,12 @@ export function OrgLetterhead({ sub }: { sub?: string }) {
   if (!org) return null;
   return (
     <div className="letterhead">
-      <h2>{org.nameBn || org.name}</h2>
-      {org.nameBn && <div className="letterhead-en">{org.name}</div>}
-      {sub && <div className="muted small">{sub}</div>}
+      <LogoMark size={44} />
+      <div>
+        <h2>{org.nameBn || org.name}</h2>
+        {org.nameBn && <div className="letterhead-en">{org.name}</div>}
+        {sub && <div className="muted small">{sub}</div>}
+      </div>
     </div>
   );
 }

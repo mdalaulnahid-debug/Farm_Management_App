@@ -10,7 +10,7 @@
 .sidebar { --side-text: color-mix(in srgb, #fff 86%, var(--side-bg)); --side-muted: color-mix(in srgb, #fff 60%, var(--side-bg)); --side-line: color-mix(in srgb, #fff 12%, var(--side-bg));
   position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--side-bg); color: var(--side-text); border-right: 1px solid var(--side-line); display: flex; flex-direction: column; padding: 14px 10px; gap: 4px; }
 .brand { display: flex; gap: 10px; align-items: center; padding: 6px 10px 14px; }
-.brand-mark { width: 36px; height: 36px; border-radius: 10px; background: var(--gold); display: grid; place-items: center; color: #0e3b2c; flex: none; }
+.brand-mark { width: 36px; height: 36px; display: grid; place-items: center; flex: none; }
 .brand b { display: block; font-family: var(--font-display); font-size: 1.08em; font-weight: 600; line-height: 1.25; }
 .brand small { color: var(--text-3); font-size: .78em; display: block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-group { margin-top: 10px; }
@@ -66,7 +66,7 @@
 /* Sign-in hero: farm name and headline over a dawn photograph of the delta (assets/signin-dawn.webp, generated locally with ComfyUI). */
 .auth-hero { position: relative; overflow: hidden; background: var(--side-bg); color: #fff; padding: 44px 48px; display: flex; flex-direction: column; min-height: 100vh; }
 .auth-crest { position: relative; z-index: 1; display: flex; gap: 14px; align-items: center; }
-.auth-crest .brand-mark { width: 46px; height: 46px; border-radius: 13px; }
+.auth-crest .brand-mark { width: 46px; height: 46px; }
 .auth-crest small { display: block; font-size: .8em; color: color-mix(in srgb, #fff 70%, var(--side-bg)); }
 .auth-crest b { display: block; font-family: var(--font-display); font-weight: 600; font-size: 1.25em; line-height: 1.25; }
 .auth-title { position: relative; z-index: 1; margin-top: clamp(28px, 7vh, 72px); max-width: 560px; }
@@ -206,6 +206,7 @@
 
 /* Farm name: sidebar, sign-in page and printed letterheads */
 .brand b.brand-org { line-height: 1.25; }
+.letterhead { display: flex; gap: 12px; align-items: center; }
 .letterhead h2 { margin: 0; }
 .letterhead-en { font-weight: 600; color: var(--text-2); margin-top: 2px; }
 .statement-org { font-weight: 700; font-size: 1.05em; }
