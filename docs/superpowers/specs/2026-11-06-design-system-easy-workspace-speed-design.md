@@ -139,6 +139,31 @@ This is three projects, done in this order. Each later project builds on the ear
 - Until the backend change is approved, **Fix** is hidden for operators.
 - **"What I recorded today"** comes from a new read-only endpoint: "my entries created today". *(My call: read-only, so no accounting logic changes.)*
 
+### Daily reminders and "Today" checklist (decided)
+Staff shouldn't have to remember to open the app. The app asks them at the right time.
+
+- **Who:** everyone with the Data Entry Operator role. The owner gets only the "not done" notices.
+- **How:** a **phone notification** (Web Push) that arrives even when the app is closed, and opens straight into the right step-by-step questions.
+  - This needs FarmLedger added to the home screen once. On iPhone that is required (iOS 16.4+); on Android it is recommended.
+  - The app shows a plain-words "Turn on reminders" step with pictures.
+  - Requires the installable-app service worker (moved forward from Project 3) and https, which the VM already has.
+- **10:00 (Asia/Dhaka), morning reminder:** "How many eggs were collected today?". It opens eggs collected → broken eggs → any ducks died, saved to today's production record.
+- **Sales get no reminder.** They are recorded through the website as they happen, so they add up on their own.
+- **17:00, evening reminder:** "Please record today's expenses, feed and medicine used." It opens feed used, medicine used and expenses. Each step offers a big **"None today"** answer, so a day with nothing to record can still be completed.
+- **If missed:**
+  - the staff are reminded again one hour later (11:00 and 18:00);
+  - if a reminder is still not done by **12:00** (morning) or **19:00** (evening, *my call*), the owner gets a notice such as "Morning eggs not recorded yet".
+- **"Done" means**, *my call*:
+  - **morning:** every active flock has today's eggs recorded;
+  - **evening:** feed used is recorded for every active flock (or answered "None"), and expenses and medicine are recorded or answered "None today".
+- **"Today" checklist** on the easy home screen, above the four big buttons. It lists morning eggs and evening feed/medicine/expenses, each ticking green when done, so anyone can see at a glance what's left.
+- *(My call: the times are fixed for now; the owner can't change them yet. A setting can come later.)*
+- **Backend (chief approval, part of the backend PR):**
+  - storing each phone's notification subscription;
+  - a small scheduler inside the API that runs at those times and checks "done";
+  - sending the notifications, using a standard Web Push library, which is one new dependency.
+- **Non-goals:** SMS or WhatsApp reminders. That waits for the SMS automation project.
+
 ### Sign-in (decided)
 - Fingerprint or face sign-in uses the **passkeys** feature that already exists.
 - After a password sign-in on a phone, offer to set up fingerprint or face sign-in once, in plain words.
@@ -162,9 +187,9 @@ This is three projects, done in this order. Each later project builds on the ear
 - Separate PRs, in order, each with before/after screenshots and a plain-English summary for the owner:
   1. design-system package (no visual change);
   2. brand and logo, plus loading, empty and error states;
-  3. **backend, for the chief:** settings saved with the person; "add to today's production record"; "my entries today"; same-day Fix permissions; the stock-adjustment void;
+  3. **backend, for the chief:** settings saved with the person; "add to today's production record"; "my entries today"; same-day Fix permissions; the stock-adjustment void; daily reminders (subscriptions, scheduler, push sending);
   4. font setting, and settings that follow the person;
-  5. easy workspace;
+  5. easy workspace, including the "Today" checklist, the installable-app service worker and turning on reminders;
   6. speed.
 - The backend PR is opened with a clear note that the chief must approve it, and may hand it to the backend engineer.
 - The frontend PRs work whether or not it is merged yet. Anything that depends on it stays hidden, or shows a plain message, until it is merged.
