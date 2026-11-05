@@ -203,6 +203,7 @@ export default async function transactionRoutes(app: FastifyInstance) {
       date: zDate, flockId: zId, eggItemId: zOptText(40), eggsCollected: z.coerce.number().int().min(0), eggsBroken: z.coerce.number().int().min(0).default(0),
       mortality: z.coerce.number().int().min(0).default(0), culled: z.coerce.number().int().min(0).default(0), feedItemId: zOptText(40),
       feedQty: z.coerce.number().min(0).default(0), waterLitres: z.coerce.number().min(0).nullish(), notes: zOptText(300),
+      addToDay: z.boolean().optional(),
     }), req.body);
     return tx(db => recordProduction(db, actorOf(req), body));
   });
