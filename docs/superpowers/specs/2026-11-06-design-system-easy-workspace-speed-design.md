@@ -157,7 +157,13 @@ Staff shouldn't have to remember to open the app. The app asks them at the right
   - **morning:** every active flock has today's eggs recorded;
   - **evening:** feed used is recorded for every active flock (or answered "None"), and expenses and medicine are recorded or answered "None today".
 - **"Today" checklist** on the easy home screen, above the four big buttons. It lists morning eggs and evening feed/medicine/expenses, each ticking green when done, so anyone can see at a glance what's left.
-- *(My call: the times are fixed for now; the owner can't change them yet. A setting can come later.)*
+- **Reminder times are a setting that only the owner or an admin can change (owner's decision).**
+  - "Admin" means anyone with the `settings.manage` permission.
+  - It lives in Users & settings › Organization, as "Daily reminders".
+  - It covers the morning time (default 10:00) and the evening time (default 17:00).
+  - The follow-up reminder is always one hour later, and the owner's "not done" notice two hours later. *(My call.)*
+  - It also has an on/off switch for the whole farm.
+  - The times are saved on the server for the whole farm and apply to everyone. Staff cannot change them.
 - **Backend (chief approval, part of the backend PR):**
   - storing each phone's notification subscription;
   - a small scheduler inside the API that runs at those times and checks "done";
