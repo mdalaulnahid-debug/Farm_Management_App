@@ -99,6 +99,8 @@ export async function buildApp() {
   if (existsSync(webDist)) {
     await app.register(fastifyStatic, {
       root: webDist,
+      // The web build writes .br/.gz copies (apps/web/scripts/compress.mjs); send those to browsers that accept them.
+      preCompressed: true,
       cacheControl: false,
       // Hashed bundles never change; index.html must always be revalidated so new releases load.
       setHeaders: (res, path) => res.setHeader('Cache-Control', /[\\/]assets[\\/]/.test(path) ? 'public, max-age=31536000, immutable' : 'no-cache'),

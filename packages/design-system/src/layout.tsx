@@ -1,9 +1,10 @@
 // Page structure: page header (optionally a photo band), cards and KPI tiles.
 import type { CSSProperties, ReactNode } from 'react';
 
-/** `photo` turns the header into a photo band (components.css › .page-head.photo); `tall` is a larger banner. */
-export function PageHeader({ title, subtitle, crumb, actions, photo, photoPos, tall }: { title: string; subtitle?: string; crumb?: string; actions?: ReactNode; photo?: string; photoPos?: string; tall?: boolean }) {
-  const style = photo ? ({ '--photo': `url(${photo})`, '--photo-pos': photoPos ?? 'center' } as CSSProperties) : undefined;
+/** `photo` turns the header into a photo band (components.css › .page-head.photo); phones load `photoSmall`
+ *  instead when given. `tall` is a larger banner. */
+export function PageHeader({ title, subtitle, crumb, actions, photo, photoSmall, photoPos, tall }: { title: string; subtitle?: string; crumb?: string; actions?: ReactNode; photo?: string; photoSmall?: string; photoPos?: string; tall?: boolean }) {
+  const style = photo ? ({ '--photo': `url(${photo})`, '--photo-sm': `url(${photoSmall ?? photo})`, '--photo-pos': photoPos ?? 'center' } as CSSProperties) : undefined;
   return (
     <div className={`page-head${photo ? ' photo' : ''}${tall ? ' tall' : ''}`} style={style}>
       <div>{crumb && <div className="crumb">{crumb}</div>}<h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>

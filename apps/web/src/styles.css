@@ -274,3 +274,9 @@
   .check-actions { width: 100%; padding-left: 42px; justify-content: flex-start; }
   .recorded li { flex-wrap: wrap; }
 }
+
+/* Lite mode: the sign-in band keeps its colour, without the photo. */
+:root[data-lite='true'] .auth-photo { display: none; }
+
+/* The "বাংলা" switch on English pages uses the phone's own Bangla font, so it costs no font download. */
+:root[lang='en'] .lang-switch { font-family: system-ui, 'Nirmala UI', 'Noto Sans Bengali', sans-serif; }

@@ -6,8 +6,8 @@ import { useAccounts, useApi, useItems, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtMoney, fmtNum, iso10, ymd } from '../lib/format';
 import type { Item } from '../lib/api';
 import { Alert, Badge, Card, DataTable, Drawer, Field, Input, Kpi, PageHeader, RangePicker, SearchBox, Segmented, Select, Tabs, thisMonth, type Column } from '../components/ui';
+import { feedStack } from '../assets/photos';
 import { Money, accountOptions } from '../components/forms';
-import feedStack from '../assets/photos/feed-stack.webp';
 
 interface StockRow { id: string; sku: string; name: string; nameBn?: string | null; category: string; unit: string; valued: boolean; qtyOnHand: number; avgCost: number; value: number; reorderLevel: number; low: boolean }
 interface StockMove { id: string; date: string; type: string; quantity: number; unitCost: number; value: number; notes?: string | null; voided: boolean; item: { name: string; unit: string; sku: string } }
@@ -26,7 +26,7 @@ export default function Inventory() {
 
   return (
     <>
-      <PageHeader photo={feedStack} photoPos="center 55%" crumb={t('Inventory', 'মজুদ')} title={t('Inventory', 'মজুদ')}
+      <PageHeader photo={feedStack.full} photoSmall={feedStack.small} photoPos="center 55%" crumb={t('Inventory', 'মজুদ')} title={t('Inventory', 'মজুদ')}
         subtitle={t('Stock is moved automatically by sales, purchases and production. Use adjustments only for counts, gifts, waste and opening balances.', 'বিক্রয়, ক্রয় ও উৎপাদনে মজুদ নিজে থেকেই হালনাগাদ হয়। শুধু গণনা, উপহার, নষ্ট ও প্রারম্ভিক মজুদের জন্য সমন্বয় ব্যবহার করুন।')}
         actions={<>
           {manage && <button className="btn" onClick={() => setEditing('new')}><Plus size={16} />{t('New item', 'নতুন পণ্য')}</button>}

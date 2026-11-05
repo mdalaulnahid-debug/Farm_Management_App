@@ -6,8 +6,8 @@ import { useApi, useFlocks, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtMoney, fmtNum, fmtPct, iso10, ymd } from '../lib/format';
 import type { Flock } from '../lib/api';
 import { Alert, Badge, Card, DataTable, Dialog, Drawer, Empty, Field, Input, Kpi, Loading, PageHeader, RangePicker, Segmented, Select, StatusBadge, Tabs, thisMonth, VoidDialog, type Column, ComboChart } from '../components/ui';
+import { duckPath } from '../assets/photos';
 import { Money, ProductionDrawer } from '../components/forms';
-import duckPath from '../assets/photos/duck-path.webp';
 
 interface ProductionLog {
   id: string; date: string; flock: { code: string; name: string }; eggsCollected: number; eggsBroken: number; mortality: number; culled: number;
@@ -34,7 +34,7 @@ export default function Production() {
 
   return (
     <>
-      <PageHeader photo={duckPath} photoPos="center 70%" crumb={t('Farm', 'খামার')} title={t('Production', 'উৎপাদন')}
+      <PageHeader photo={duckPath.full} photoSmall={duckPath.small} photoPos="center 70%" crumb={t('Farm', 'খামার')} title={t('Production', 'উৎপাদন')}
         subtitle={t('Daily egg collection, mortality and feed use per flock. Eggs go into stock and feed is expensed at average cost.', 'ঝাঁকভিত্তিক দৈনিক ডিম সংগ্রহ, মৃত্যু ও খাদ্য ব্যবহার। ডিম মজুদে যোগ হয় এবং খাদ্য গড় মূল্যে খরচ হয়।')}
         actions={<>
           {manage && tab === 'flocks' && <button className="btn" onClick={() => setEditing('new')}><Plus size={16} />{t('New flock', 'নতুন ঝাঁক')}</button>}

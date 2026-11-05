@@ -256,6 +256,10 @@ table.table { width: 100%; border-collapse: collapse; }
 .ds-tip span b { margin-left: auto; padding-left: 10px; font-variant-numeric: tabular-nums; }
 .ds-tip i { width: 8px; height: 8px; border-radius: 2px; }
 
+/* Lite mode (slow internet / old phones): no photos and no movement. The brand colour band stays. */
+:root[data-lite='true'] .page-head.photo { background-image: none; animation: none; }
+:root[data-lite='true'] *, :root[data-lite='true'] *::before, :root[data-lite='true'] *::after { animation: none !important; transition: none !important; }
+
 /* ───────── Responsive ───────── */
 @media (max-width: 1180px) { .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 920px) {
@@ -286,6 +290,7 @@ table.table { width: 100%; border-collapse: collapse; }
   .page-actions { width: 100%; }
   .page-actions .btn { flex: 1 1 auto; }
   .page-head.photo, .page-head.photo.tall { min-height: 0; padding: 18px 16px; }
+  .page-head.photo { background-image: var(--photo-sm, var(--photo)); }
   .page-head.photo::before { background: linear-gradient(180deg, color-mix(in srgb, var(--side-bg) 82%, transparent), color-mix(in srgb, var(--side-bg) 38%, transparent)); }
   .drawer-head, .drawer-body, .drawer-foot { padding-left: 16px; padding-right: 16px; }
   .drawer-foot { flex-wrap: wrap; }

@@ -5,8 +5,8 @@ import { nameOf, unitLabel, usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi } from '../lib/hooks';
 import { fmtDate, fmtDateTime, fmtLongDate, fmtMoney, fmtNum, fmtPct } from '../lib/format';
-import dashRiver from '../assets/photos/dash-river.webp';
 import { Alert, Card, Empty, Kpi, Loading, PageHeader, RangePicker, thisMonth, ComboChart } from '../components/ui';
+import { dashRiver } from '../assets/photos';
 import { Money } from '../components/forms';
 
 
@@ -25,7 +25,7 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageHeader photo={dashRiver} photoPos="center 60%" tall crumb={fmtLongDate(new Date(), lang, banglaCalendar)} title={t(`Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ${me?.user.name.split(' ')[0]}`, `স্বাগতম, ${me?.user.name.split(' ')[0]}`)}
+      <PageHeader photo={dashRiver.full} photoSmall={dashRiver.small} photoPos="center 60%" tall crumb={fmtLongDate(new Date(), lang, banglaCalendar)} title={t(`Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ${me?.user.name.split(' ')[0]}`, `স্বাগতম, ${me?.user.name.split(' ')[0]}`)}
         subtitle={t(`${me?.organization.name} — business overview from the posted ledger.`, `${me?.organization.nameBn || me?.organization.name} — পোস্ট করা খাতা থেকে ব্যবসার সারসংক্ষেপ।`)}
         actions={<RangePicker value={range} onChange={setRange} />} />
 

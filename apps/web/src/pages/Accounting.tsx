@@ -6,8 +6,8 @@ import { useAccounts, useApi, useParties, useSave } from '../lib/hooks';
 import type { Account, List } from '../lib/api';
 import { downloadCsv, fmtDate, fmtMoney, round2, ymd } from '../lib/format';
 import { Alert, Badge, Card, Drawer, Empty, Field, Input, Loading, PageHeader, RangePicker, SearchBox, Segmented, Select, StatusBadge, Tabs, thisMonth, VoidDialog, type Range } from '../components/ui';
+import { ledgerWindow } from '../assets/photos';
 import { accountOptions, Money } from '../components/forms';
-import ledgerWindow from '../assets/photos/ledger-window.webp';
 
 type T = (en: string, bn: string) => string;
 
@@ -52,7 +52,7 @@ export default function Accounting() {
 
   return (
     <>
-      <PageHeader photo={ledgerWindow} photoPos="center 60%" crumb={t('Accounting', 'হিসাবরক্ষণ')} title={t('Ledger & journals', 'খতিয়ান ও জার্নাল')}
+      <PageHeader photo={ledgerWindow.full} photoSmall={ledgerWindow.small} photoPos="center 60%" crumb={t('Accounting', 'হিসাবরক্ষণ')} title={t('Ledger & journals', 'খতিয়ান ও জার্নাল')}
         subtitle={t('The chart of accounts and every double-entry posting behind your reports.', 'হিসাবের তালিকা এবং আপনার রিপোর্টের পেছনের প্রতিটি দ্বৈত-দাখিলা এন্ট্রি।')}
         actions={manage && <>
           <button className="btn" onClick={() => setEditing('new')}><Plus size={16} />{t('New account', 'নতুন হিসাব')}</button>
