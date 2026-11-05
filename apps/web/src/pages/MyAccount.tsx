@@ -1,10 +1,11 @@
-import { Fragment, type ComponentType, type ReactNode } from 'react';
+import { Fragment, useEffect, type ComponentType, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { CircleDollarSign, Info, KeyRound, Languages, LogOut, Monitor, MonitorSmartphone, Palette, Rocket, RotateCcw, ShieldCheck, Smartphone, UserRound } from 'lucide-react';
 import { api } from '../lib/api';
 import { useApi, useSave } from '../lib/hooks';
 import { useAuth } from '../lib/auth';
-import { nameOf, usePrefs, type Accent, type Lang } from '../lib/i18n';
+import { nameOf, usePrefs, type Accent, type FontSet, type Lang } from '../lib/i18n';
+import { loadFontSet } from '../lib/fonts';
 import { fmtDate, fmtDateTime, fmtLongDate, fmtMoney, ymd } from '../lib/format';
 import { Badge, Card, Kpi, Loading, PageHeader, Segmented, Select, Switch, useToast } from '../components/ui';
 import { ChangePassword } from './Login';
@@ -30,12 +31,14 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
 }
 
 export default function MyAccount() {
-  const { t, lang, theme, density, fontSize, accent, motion, banglaCalendar, home, set, reset } = usePrefs();
+  const { t, lang, theme, density, fontSize, accent, motion, banglaCalendar, home, fontSet, set, reset } = usePrefs();
   const { me, can, logout } = useAuth();
   const toast = useToast();
   const setLang = useSetLanguage();
   const loc = useLocation();
   const nav = useNavigate();
+  // Appearance shows each reading font in its own face, so fetch those files while it is open.
+  useEffect(() => { if (loc.hash === '#appearance') { void loadFontSet('easy'); void loadFontSet('friendly'); } }, [loc.hash]);
   if (!me) return <Loading />;
   const u = me.user;
   const initials = u.name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]!.toUpperCase()).join('');
@@ -64,6 +67,12 @@ export default function MyAccount() {
   const actionLabel = (a: string) => ({ view: t('View', 'দেখা'), create: t('Create', 'তৈরি'), void: t('Void', 'বাতিল'), manage: t('Manage', 'পরিচালনা') } as Record<string, string>)[a] ?? a;
   const granted = areas.map(a => ({ ...a, actions: u.permissions.filter(p => p.startsWith(`${a.key}.`)).map(p => p.split('.')[1]) })).filter(a => a.actions.length);
 
+  // Each sample is drawn in its own font, so people see what they pick (the files load on first choice).
+  const fontSets: [FontSet, string, string][] = [
+    ['clean', t('Clean', 'পরিচ্ছন্ন'), "'Inter', 'Hind Siliguri', sans-serif"],
+    ['easy', t('Easy to read', 'সহজপাঠ্য'), "'Atkinson Hyperlegible', 'Noto Sans Bengali', sans-serif"],
+    ['friendly', t('Friendly', 'বন্ধুসুলভ'), "'Nunito', 'Baloo Da 2', sans-serif"],
+  ];
   const accents: [Accent, string, string][] = [['green', 'var(--swatch-green)', t('Farm green', 'খামার সবুজ')], ['blue', 'var(--swatch-blue)', t('Blue', 'নীল')], ['purple', 'var(--swatch-purple)', t('Purple', 'বেগুনি')], ['amber', 'var(--swatch-amber)', t('Amber', 'কমলা')]];
   const startPages = [
     { value: '/', label: t('Dashboard', 'ড্যাশবোর্ড'), perm: 'dashboard.view' },
@@ -109,9 +118,19 @@ export default function MyAccount() {
           </>}
 
           {section === 'appearance' && <>
-            <Card title={t('Appearance', 'প্রদর্শন')} subtitle={t('Saved in this browser. Each device can look different.', 'এই ব্রাউজারে সংরক্ষিত। প্রতিটি ডিভাইসে আলাদা হতে পারে।')} pad>
+            <Card title={t('Appearance', 'প্রদর্শন')} subtitle={t('Saved to your account, so the shared office PC and your phone both look the way you chose.', 'আপনার অ্যাকাউন্টে সংরক্ষিত, তাই অফিসের কম্পিউটার ও আপনার ফোন দুটোতেই আপনার পছন্দমতো দেখাবে।')} pad>
               <Row label={t('Theme', 'থিম')} hint={t('“Match device” follows your phone or computer’s light/dark setting.', '“ডিভাইসের মতো” আপনার ফোন বা কম্পিউটারের আলো/অন্ধকার সেটিং অনুসরণ করে।')}>
                 <Segmented value={theme} onChange={v => set({ theme: v })} options={[{ value: 'light', label: t('Light', 'উজ্জ্বল') }, { value: 'dark', label: t('Dark', 'গাঢ়') }, { value: 'system', label: t('Match device', 'ডিভাইসের মতো') }]} />
+              </Row>
+              <Row label={t('Reading font', 'পড়ার ফন্ট')} hint={t('“Easy to read” is made for weaker eyesight: every letter and number looks different.', '“সহজপাঠ্য” দুর্বল দৃষ্টির জন্য তৈরি: প্রতিটি অক্ষর ও সংখ্যা আলাদা দেখায়।')}>
+                <div className="font-sets" role="radiogroup" aria-label={t('Reading font', 'পড়ার ফন্ট')}>
+                  {fontSets.map(([k, label, family]) => (
+                    <button key={k} type="button" role="radio" aria-checked={fontSet === k} className={`font-set ${fontSet === k ? 'on' : ''}`} onClick={() => set({ fontSet: k })}>
+                      <span className="font-set-sample" style={{ fontFamily: family }}>Aa অআ 0O 1l</span>
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
               </Row>
               <Row label={t('Accent colour', 'মূল রং')} hint={t('Colours the menu panel, buttons and highlights.', 'মেনু প্যানেল, বোতাম ও হাইলাইটের রং।')}>
                 <div className="swatches">
@@ -189,7 +208,7 @@ export default function MyAccount() {
           {section === 'about' && (
             <Card title={t('About', 'সম্পর্কে')} pad>
               <Row label="FarmLedger ERP" hint={t('Version 1.0', 'সংস্করণ ১.০')}><span className="sample">{nameOf(me.organization, lang)}</span></Row>
-              <Row label={t('Where settings are saved', 'সেটিংস কোথায় থাকে')} hint={t('Language is saved to your account. Everything else on this page is saved in this browser only.', 'ভাষা আপনার অ্যাকাউন্টে সংরক্ষিত। এই পাতার বাকি সব শুধু এই ব্রাউজারে।')}><span /></Row>
+              <Row label={t('Where settings are saved', 'সেটিংস কোথায় থাকে')} hint={t('Language and display settings are saved to your account, so they follow you to any phone or computer you sign in on.', 'ভাষা ও প্রদর্শন সেটিংস আপনার অ্যাকাউন্টে সংরক্ষিত, তাই যে ফোন বা কম্পিউটারেই সাইন ইন করুন, একই থাকবে।')}><span /></Row>
               {can('settings.manage') && (
                 <Row label={t('Design reference', 'ডিজাইন রেফারেন্স')} hint={t('Every colour and building block of the shared design system, for checking the look.', 'শেয়ার করা ডিজাইন সিস্টেমের প্রতিটি রং ও অংশ, চেহারা যাচাইয়ের জন্য।')}>
                   <Link className="btn" to="/system"><Palette size={16} />{t('Open', 'খুলুন')}</Link>

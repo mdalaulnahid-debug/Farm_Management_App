@@ -121,6 +121,10 @@
 .sample { font-weight: 600; font-variant-numeric: tabular-nums; }
 .range { width: 160px; accent-color: var(--brand); }
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.font-sets { display: flex; flex-wrap: wrap; gap: 8px; }
+.font-set { display: grid; gap: 4px; justify-items: start; min-width: 132px; padding: 10px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text-2); font-weight: 550; cursor: pointer; text-align: left; }
+.font-set-sample { font-size: 1.35em; color: var(--text); font-weight: 500; }
+.font-set.on { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); color: var(--text); }
 .swatch-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 12px 4px 6px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--text); font-weight: 550; cursor: pointer; }
 .swatch-btn .swatch { width: 26px; height: 26px; cursor: inherit; }
 .swatch-btn.on { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }

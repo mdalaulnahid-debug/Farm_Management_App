@@ -1,9 +1,10 @@
-import { createContext, useContext, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from './api';
+import { setRemoteSaver, usePrefs, type Prefs } from './i18n';
 
 export interface Me {
-  user: { id: string; name: string; email: string; locale: string; mustChangePassword: boolean; twoStepEnabled: boolean; mustSetUpTwoStep: boolean; role: { key: string; name: string }; permissions: string[] };
+  user: { id: string; name: string; email: string; locale: string; mustChangePassword: boolean; twoStepEnabled: boolean; mustSetUpTwoStep: boolean; role: { key: string; name: string }; permissions: string[]; preferences?: Partial<Prefs> | null };
   organization: { name: string; nameBn?: string | null; currency: string; lockDate: string | null; fiscalYearStart: number; address?: string | null; phone?: string | null; email?: string | null; taxId?: string | null; legalName?: string | null; invoiceFooter?: string | null; requireTwoStep?: boolean };
 }
 
@@ -28,6 +29,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { window.removeEventListener('fl:unauthorized', onUnauthorized); window.removeEventListener('fl:me-stale', onStale); };
   }, [qc]);
   const me = q.data ?? null;
+  // Display settings follow the person: take on the account's saved settings once per sign-in, then save
+  // changes back. Data-entry staff start in the simple workspace until they choose otherwise.
+  const { adopt } = usePrefs();
+  const adoptedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!me) { adoptedFor.current = null; setRemoteSaver(null); return; }
+    if (adoptedFor.current !== me.user.id) {
+      adoptedFor.current = me.user.id;
+      const saved = me.user.preferences ?? {};
+      adopt({ ...(me.user.role.key === 'operator' && saved.simple === undefined ? { simple: true } : {}), ...saved });
+    }
+    setRemoteSaver(prefs => { api.patch('/auth/preferences', { prefs }).catch(() => undefined); });
+  }, [me, adopt]);
   const value: Ctx = {
     me, loading: q.isLoading,
     can: p => !!me?.user.permissions.includes(p),
