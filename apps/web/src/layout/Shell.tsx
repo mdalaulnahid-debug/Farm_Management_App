@@ -15,7 +15,7 @@ import { GrantDrawer } from '../pages/BankingProjects';
 type Quick = 'invoice' | 'receipt' | 'bill' | 'expense' | 'payment' | 'production' | 'usage' | 'grant' | null;
 
 export default function Shell({ children }: { children: ReactNode }) {
-  const { t, lang, theme, dark, fontSize, home, set } = usePrefs();
+  const { t, lang, theme, dark, fontSize, home, simple, set } = usePrefs();
   const setLang = useSetLanguage();
   const navigate = useNavigate();
   const { me, can, logout } = useAuth();
@@ -106,7 +106,8 @@ export default function Shell({ children }: { children: ReactNode }) {
         <header className="topbar" ref={menuRef}>
           <button className="btn ghost icon menu-btn" onClick={() => setNavOpen(o => !o)} aria-label="Menu"><Menu size={18} /></button>
           <div className="spacer" />
-          {allowedQuick.length > 0 && (
+          {/* In the simple workspace the big buttons on the start page replace this menu. */}
+          {allowedQuick.length > 0 && !simple && (
             <div className="relative">
               <button className="btn primary" onClick={() => setMenu(m => (m === 'new' ? null : 'new'))}><Plus size={16} /><span className="hide-sm">{t('New', 'নতুন')}</span><ChevronDown size={14} /></button>
               {menu === 'new' && <div className="menu">{allowedQuick.map(q => <button key={q.key} onClick={() => { setQuick(q.key); setMenu(null); }}><q.icon size={16} />{q.label}</button>)}</div>}

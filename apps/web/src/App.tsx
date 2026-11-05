@@ -1,7 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './lib/auth';
-import { useT } from './lib/i18n';
+import { usePrefs, useT } from './lib/i18n';
 import { Empty, ErrorBoundary, Loading } from './components/ui';
 import { OfflineBanner } from './components/OfflineBanner';
 import Shell from './layout/Shell';
@@ -21,6 +21,7 @@ const Admin = lazy(() => import('./pages/Admin'));
 const MyAccount = lazy(() => import('./pages/MyAccount'));
 const SystemReference = lazy(() => import('./pages/SystemReference'));
 const NotFound = lazy(() => import('./pages/NotFound'));
+const EasyHome = lazy(() => import('./easy/EasyHome'));
 
 function Guard({ perm, children }: { perm: string | string[]; children: ReactNode }) {
   const { can } = useAuth();
@@ -33,6 +34,7 @@ function Guard({ perm, children }: { perm: string | string[]; children: ReactNod
 export default function App() {
   const { me, loading } = useAuth();
   const { pathname } = useLocation();
+  const { simple } = usePrefs();
   if (loading) return <Loading />;
   if (!me) return <Login />;
   if (me.user.mustChangePassword) return <ChangePassword forced />;
@@ -43,7 +45,8 @@ export default function App() {
       <ErrorBoundary resetKey={pathname}>
         <Suspense fallback={<Loading />}>
           <Routes>
-            <Route path="/" element={<Guard perm="dashboard.view"><Dashboard /></Guard>} />
+            {/* The simple workspace (big task buttons) replaces the dashboard as the start page when switched on. */}
+          <Route path="/" element={simple ? <EasyHome /> : <Guard perm="dashboard.view"><Dashboard /></Guard>} />
             <Route path="/sales" element={<Guard perm="sales.view"><Sales /></Guard>} />
             <Route path="/customers" element={<Guard perm="sales.view"><Parties kind="CUSTOMER" /></Guard>} />
             <Route path="/purchases" element={<Guard perm="purchases.view"><Purchases /></Guard>} />

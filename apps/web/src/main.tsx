@@ -18,6 +18,9 @@ import { PrefsProvider, useT } from './lib/i18n';
 import { AuthProvider } from './lib/auth';
 import { DSTextProvider, ToastProvider } from '@farmledger/design-system';
 import App from './App';
+import { registerSW } from './lib/push';
+
+registerSW();
 
 /** Lets the design-system components speak the language chosen in My settings. */
 function DSText({ children }: { children: ReactNode }) {
