@@ -3,7 +3,7 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../db.js';
 import { can } from '../auth/auth.js';
-import { farmDayStart } from '../lib/farm-time.js';
+import { farmDayStart, farmYmd } from '../lib/farm-time.js';
 
 type Kind = 'production' | 'invoice' | 'receipt' | 'bill' | 'payment' | 'adjustment';
 interface Entry { kind: Kind; id: string; summary: string; amount?: number; createdAt: Date; canFix: boolean }
@@ -35,6 +35,8 @@ export default async function myDayRoutes(app: FastifyInstance) {
       ...moves.map(m => ({ kind: 'adjustment' as const, id: m.sourceId!, createdAt: m.createdAt, summary: `${m.item.name}: ${Math.abs(Number(m.quantity))} ${m.item.unit}` })),
     ].map(e => ({ ...e, canFix: me.role.key === 'operator' || me.permissions.includes(VOID_PERM[e.kind] as never) }));
     entries.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    return { entries };
+    // Farm-wide "none today" answers (feed, medicine, expenses), so the Today checklist can tick them.
+    const none = (await prisma.reminderLog.findMany({ where: { day: farmYmd(), kind: 'none' }, select: { slot: true } })).map(r => r.slot.replace('none-', ''));
+    return { entries, none };
   });
 }

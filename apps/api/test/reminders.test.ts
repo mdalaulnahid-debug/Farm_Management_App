@@ -124,5 +124,6 @@ describe('settings and subscriptions', () => {
     expect(await prisma.reminderLog.count({ where: { day: farmYmd(), slot: 'none-feed' } })).toBe(1);
     expect((await call('POST', '/me/today/none', operator, { what: 'feed' })).status).toBe(200); // twice is fine
     expect((await call('POST', '/me/today/none', operator, { what: 'eggs' })).status).toBe(400);
+    expect((await call('GET', '/me/today', owner)).body.none).toContain('feed');
   });
 });
