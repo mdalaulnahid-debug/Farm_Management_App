@@ -215,3 +215,7 @@
 .ref-swatches { display: grid; gap: 8px; }
 .ref-swatch { display: grid; gap: 2px; width: 150px; }
 .ref-swatch i { height: 44px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+
+/* No-internet notice at the top of the page */
+.offline-banner { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: var(--radius); background: var(--warning-soft); color: var(--text); border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent); }
+.offline-banner svg { color: var(--warning); flex: none; }

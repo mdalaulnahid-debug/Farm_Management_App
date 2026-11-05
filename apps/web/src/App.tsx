@@ -1,8 +1,9 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './lib/auth';
 import { useT } from './lib/i18n';
-import { Empty, Loading } from './components/ui';
+import { Empty, ErrorBoundary, Loading } from './components/ui';
+import { OfflineBanner } from './components/OfflineBanner';
 import Shell from './layout/Shell';
 import Login, { ChangePassword } from './pages/Login';
 import { TwoStepSetup } from './pages/TwoStep';
@@ -19,6 +20,7 @@ const Reports = lazy(() => import('./pages/Reports'));
 const Admin = lazy(() => import('./pages/Admin'));
 const MyAccount = lazy(() => import('./pages/MyAccount'));
 const SystemReference = lazy(() => import('./pages/SystemReference'));
+const NotFound = lazy(() => import('./pages/NotFound'));
 
 function Guard({ perm, children }: { perm: string | string[]; children: ReactNode }) {
   const { can } = useAuth();
@@ -30,30 +32,34 @@ function Guard({ perm, children }: { perm: string | string[]; children: ReactNod
 
 export default function App() {
   const { me, loading } = useAuth();
+  const { pathname } = useLocation();
   if (loading) return <Loading />;
   if (!me) return <Login />;
   if (me.user.mustChangePassword) return <ChangePassword forced />;
   if (me.user.mustSetUpTwoStep) return <TwoStepSetup forced />;
   return (
     <Shell>
-      <Suspense fallback={<Loading />}>
-        <Routes>
-          <Route path="/" element={<Guard perm="dashboard.view"><Dashboard /></Guard>} />
-          <Route path="/sales" element={<Guard perm="sales.view"><Sales /></Guard>} />
-          <Route path="/customers" element={<Guard perm="sales.view"><Parties kind="CUSTOMER" /></Guard>} />
-          <Route path="/purchases" element={<Guard perm="purchases.view"><Purchases /></Guard>} />
-          <Route path="/suppliers" element={<Guard perm="purchases.view"><Parties kind="SUPPLIER" /></Guard>} />
-          <Route path="/banking" element={<Guard perm="banking.view"><Banking /></Guard>} />
-          <Route path="/production" element={<Guard perm="production.view"><Production /></Guard>} />
-          <Route path="/inventory" element={<Guard perm="inventory.view"><Inventory /></Guard>} />
-          <Route path="/accounting" element={<Guard perm="accounting.view"><Accounting /></Guard>} />
-          <Route path="/reports" element={<Guard perm="reports.view"><Reports /></Guard>} />
-          <Route path="/admin" element={<Guard perm={['settings.manage', 'users.manage', 'audit.view']}><Admin /></Guard>} />
-          <Route path="/account" element={<MyAccount />} />
-          <Route path="/system" element={<Guard perm="settings.manage"><SystemReference /></Guard>} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
+      <OfflineBanner />
+      <ErrorBoundary resetKey={pathname}>
+        <Suspense fallback={<Loading />}>
+          <Routes>
+            <Route path="/" element={<Guard perm="dashboard.view"><Dashboard /></Guard>} />
+            <Route path="/sales" element={<Guard perm="sales.view"><Sales /></Guard>} />
+            <Route path="/customers" element={<Guard perm="sales.view"><Parties kind="CUSTOMER" /></Guard>} />
+            <Route path="/purchases" element={<Guard perm="purchases.view"><Purchases /></Guard>} />
+            <Route path="/suppliers" element={<Guard perm="purchases.view"><Parties kind="SUPPLIER" /></Guard>} />
+            <Route path="/banking" element={<Guard perm="banking.view"><Banking /></Guard>} />
+            <Route path="/production" element={<Guard perm="production.view"><Production /></Guard>} />
+            <Route path="/inventory" element={<Guard perm="inventory.view"><Inventory /></Guard>} />
+            <Route path="/accounting" element={<Guard perm="accounting.view"><Accounting /></Guard>} />
+            <Route path="/reports" element={<Guard perm="reports.view"><Reports /></Guard>} />
+            <Route path="/admin" element={<Guard perm={['settings.manage', 'users.manage', 'audit.view']}><Admin /></Guard>} />
+            <Route path="/account" element={<MyAccount />} />
+            <Route path="/system" element={<Guard perm="settings.manage"><SystemReference /></Guard>} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
     </Shell>
   );
 }
