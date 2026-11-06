@@ -5,8 +5,8 @@ import { useAuth } from '../lib/auth';
 import { useApi, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtMoney } from '../lib/format';
 import { Card, DataTable, Drawer, Kpi, Loading, PageHeader, RangePicker, SearchBox, Segmented, StatusBadge, thisMonth, VoidDialog, type Column } from '../components/ui';
+import { feedStore } from '../assets/photos';
 import { AllocationsTable, BillDrawer, DocLinesTable, Money, OrgLetterhead, PaymentDrawer } from '../components/forms';
-import feedStore from '../assets/photos/feed-store.webp';
 
 interface Bill {
   id: string; number: string; date: string; dueDate: string | null; status: string; total: number; amountPaid: number;
@@ -49,7 +49,7 @@ export default function Purchases() {
 
   return (
     <>
-      <PageHeader photo={feedStore} photoPos="center 60%" crumb={t('Purchases', 'ক্রয়')} title={t('Bills & expenses', 'বিল ও খরচ')}
+      <PageHeader photo={feedStore.full} photoSmall={feedStore.small} photoPos="center 60%" crumb={t('Purchases', 'ক্রয়')} title={t('Bills & expenses', 'বিল ও খরচ')}
         subtitle={t('Supplier bills and day-to-day expenses. Stocked items go to inventory; everything else is expensed and payables are tracked.', 'সরবরাহকারীর বিল ও দৈনন্দিন খরচ। মজুদযোগ্য পণ্য মজুদে যায়; বাকি সব খরচ হিসেবে লেখা হয় এবং দেনা ট্র্যাক হয়।')}
         actions={<>
           <button className="btn" onClick={exportCsv} disabled={!list.data?.data.length}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>

@@ -67,7 +67,9 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     root.dataset.motion = prefs.motion;
     root.dataset.density = prefs.density;
     root.dataset.accent = prefs.accent;
-    root.dataset.lite = String(prefs.lite);
+    // Lite mode: chosen in My settings, or automatic when the phone's data saver is on.
+    const saveData = !!(navigator as any).connection?.saveData || !!window.matchMedia?.('(prefers-reduced-data: reduce)').matches;
+    root.dataset.lite = String(prefs.lite || saveData);
     // The new font is applied once its files are in, so text never flashes in a fallback face.
     loadFontSet(prefs.fontSet).then(() => { root.dataset.font = prefs.fontSet; }, () => { root.dataset.font = 'clean'; });
     root.lang = prefs.lang;

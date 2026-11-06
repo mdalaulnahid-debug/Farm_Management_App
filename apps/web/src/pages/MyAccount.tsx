@@ -31,7 +31,7 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
 }
 
 export default function MyAccount() {
-  const { t, lang, theme, density, fontSize, accent, motion, banglaCalendar, home, fontSet, simple, set, reset } = usePrefs();
+  const { t, lang, theme, density, fontSize, accent, motion, banglaCalendar, home, fontSet, simple, lite, set, reset } = usePrefs();
   const { me, can, logout } = useAuth();
   const toast = useToast();
   const setLang = useSetLanguage();
@@ -69,7 +69,7 @@ export default function MyAccount() {
 
   // Each sample is drawn in its own font, so people see what they pick (the files load on first choice).
   const fontSets: [FontSet, string, string][] = [
-    ['clean', t('Clean', 'পরিচ্ছন্ন'), "'Inter', 'Hind Siliguri', sans-serif"],
+    ['clean', t('Clean', 'পরিচ্ছন্ন'), "'Inter Variable', 'Hind Siliguri', sans-serif"],
     ['easy', t('Easy to read', 'সহজপাঠ্য'), "'Atkinson Hyperlegible', 'Noto Sans Bengali', sans-serif"],
     ['friendly', t('Friendly', 'বন্ধুসুলভ'), "'Nunito', 'Baloo Da 2', sans-serif"],
   ];
@@ -150,6 +150,9 @@ export default function MyAccount() {
                   <input type="range" className="range" min={12} max={20} step={1} value={fontSize} onChange={e => set({ fontSize: Number(e.target.value) })} aria-label={t('Text size', 'লেখার আকার')} />
                   <button type="button" className="btn sm" disabled={fontSize >= 20} onClick={() => set({ fontSize: fontSize + 1 })} aria-label={t('Larger text', 'বড় লেখা')}>A+</button>
                 </div>
+              </Row>
+              <Row label={t('Lite mode', 'লাইট মোড')} hint={t('For slow internet or older phones: no photos and no movement. Turns on by itself when the phone’s data saver is on.', 'ধীর ইন্টারনেট বা পুরোনো ফোনের জন্য: ছবি ও নড়াচড়া নেই। ফোনের ডেটা সেভার চালু থাকলে নিজে থেকেই চালু হয়।')}>
+                <Switch checked={lite} onChange={v => set({ lite: v })} label={lite ? t('On', 'চালু') : t('Off', 'বন্ধ')} />
               </Row>
               <Row label={t('Motion', 'অ্যানিমেশন')} hint={t('“Reduced” turns off fades and movement, e.g. for slower phones.', '“কম” বেছে নিলে নড়াচড়া ও ফেড বন্ধ থাকে, যেমন ধীর ফোনের জন্য।')}>
                 <Segmented value={motion} onChange={v => set({ motion: v })} options={[{ value: 'full', label: t('Full', 'পূর্ণ') }, { value: 'reduce', label: t('Reduced', 'কম') }]} />

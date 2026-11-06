@@ -5,8 +5,8 @@ import { useAuth } from '../lib/auth';
 import { useApi, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate } from '../lib/format';
 import { Card, DataTable, Drawer, Kpi, PageHeader, RangePicker, SearchBox, Segmented, StatusBadge, thisMonth, VoidDialog, type Column } from '../components/ui';
+import { salesMarket } from '../assets/photos';
 import { AllocationsTable, DocLinesTable, InvoiceDrawer, Money, OrgLetterhead, PaymentDrawer } from '../components/forms';
-import salesMarket from '../assets/photos/sales-market.webp';
 
 
 interface Invoice { id: string; number: string; date: string; dueDate: string; status: string; subtotal: number; discount: number; total: number; amountPaid: number; reference?: string; notes?: string; customer: { id: string; name: string } }
@@ -41,7 +41,7 @@ export default function Sales() {
 
   return (
     <>
-      <PageHeader photo={salesMarket} photoPos="center 55%" crumb={t('Sales', 'বিক্রয়')} title={t('Sales invoices', 'বিক্রয় চালান')} subtitle={t('Every sale posts revenue, updates receivables and reduces stock automatically.', 'প্রতিটি বিক্রয় স্বয়ংক্রিয়ভাবে আয় পোস্ট করে, পাওনা হালনাগাদ করে এবং মজুদ কমায়।')}
+      <PageHeader photo={salesMarket.full} photoSmall={salesMarket.small} photoPos="center 55%" crumb={t('Sales', 'বিক্রয়')} title={t('Sales invoices', 'বিক্রয় চালান')} subtitle={t('Every sale posts revenue, updates receivables and reduces stock automatically.', 'প্রতিটি বিক্রয় স্বয়ংক্রিয়ভাবে আয় পোস্ট করে, পাওনা হালনাগাদ করে এবং মজুদ কমায়।')}
         actions={<>
           <button className="btn" onClick={exportCsv}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>
           {can('sales.create') && <button className="btn" onClick={() => setReceiving(true)}><Receipt size={16} />{t('Receive payment', 'টাকা আদায়')}</button>}

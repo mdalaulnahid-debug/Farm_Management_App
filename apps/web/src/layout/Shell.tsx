@@ -113,7 +113,7 @@ export default function Shell({ children }: { children: ReactNode }) {
               {menu === 'new' && <div className="menu">{allowedQuick.map(q => <button key={q.key} onClick={() => { setQuick(q.key); setMenu(null); }}><q.icon size={16} />{q.label}</button>)}</div>}
             </div>
           )}
-          <button className="btn ghost sm" title={t('Language', 'ভাষা')} onClick={() => set({ lang: lang === 'en' ? 'bn' : 'en' })}>{lang === 'en' ? 'বাংলা' : 'EN'}</button>
+          <button className="btn ghost sm lang-switch" title={t('Language', 'ভাষা')} onClick={() => set({ lang: lang === 'en' ? 'bn' : 'en' })}>{lang === 'en' ? 'বাংলা' : 'EN'}</button>
           <button className="btn ghost icon" title={t('Theme', 'থিম')} onClick={() => set({ theme: dark ? 'light' : 'dark' })}>{dark ? <Sun size={17} /> : <Moon size={17} />}</button>
           <div className="relative">
             <button className="btn ghost user-btn" aria-haspopup="menu" aria-expanded={menu === 'user'} onClick={() => setMenu(m => (m === 'user' ? null : 'user'))}><span className="avatar">{initials}</span><span className="hide-sm">{me?.user.name}</span><ChevronDown size={14} /></button>

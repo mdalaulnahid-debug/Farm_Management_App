@@ -43,3 +43,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: First-visit size budget (170 kB of JS + CSS)
+        run: npm run budget

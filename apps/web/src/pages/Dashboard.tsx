@@ -1,26 +1,14 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Area, Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Bird, CircleDollarSign, Egg, Landmark, Package, Receipt, TrendingUp, Truck, Wallet } from 'lucide-react';
 import { nameOf, unitLabel, usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi } from '../lib/hooks';
 import { fmtDate, fmtDateTime, fmtLongDate, fmtMoney, fmtNum, fmtPct } from '../lib/format';
-import dashRiver from '../assets/photos/dash-river.webp';
-import { Alert, Card, Empty, Kpi, Loading, PageHeader, RangePicker, thisMonth } from '../components/ui';
+import { Alert, Card, Empty, Kpi, Loading, PageHeader, RangePicker, thisMonth, ComboChart } from '../components/ui';
+import { dashRiver } from '../assets/photos';
 import { Money } from '../components/forms';
 
-const axis = { fontSize: 12, fill: 'var(--text-3)' };
-
-function ChartTip({ active, payload, label, lang, money = true }: any) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="card" style={{ padding: '8px 12px', boxShadow: 'var(--shadow)' }}>
-      <div className="small muted" style={{ marginBottom: 4 }}>{label}</div>
-      {payload.map((p: any) => <div key={p.dataKey} className="small"><i style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: p.color, marginRight: 6 }} />{p.name}: <b>{money ? fmtMoney(p.value, lang) : fmtNum(p.value, lang, 1)}</b></div>)}
-    </div>
-  );
-}
 
 export default function Dashboard() {
   const { t, lang, banglaCalendar } = usePrefs();
@@ -37,7 +25,7 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageHeader photo={dashRiver} photoPos="center 60%" tall crumb={fmtLongDate(new Date(), lang, banglaCalendar)} title={t(`Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ${me?.user.name.split(' ')[0]}`, `স্বাগতম, ${me?.user.name.split(' ')[0]}`)}
+      <PageHeader photo={dashRiver.full} photoSmall={dashRiver.small} photoPos="center 60%" tall crumb={fmtLongDate(new Date(), lang, banglaCalendar)} title={t(`Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ${me?.user.name.split(' ')[0]}`, `স্বাগতম, ${me?.user.name.split(' ')[0]}`)}
         subtitle={t(`${me?.organization.name} — business overview from the posted ledger.`, `${me?.organization.nameBn || me?.organization.name} — পোস্ট করা খাতা থেকে ব্যবসার সারসংক্ষেপ।`)}
         actions={<RangePicker value={range} onChange={setRange} />} />
 
@@ -71,17 +59,12 @@ export default function Dashboard() {
           <div className="grid g3">
             <Card className="span2" title={t('Income vs expenses — last 12 months', 'আয় বনাম খরচ — গত ১২ মাস')} actions={<div className="legend"><span><i style={{ background: 'var(--chart-1)' }} />{t('Income', 'আয়')}</span><span><i style={{ background: 'var(--chart-2)' }} />{t('Expenses', 'খরচ')}</span><span><i style={{ background: 'var(--chart-3)' }} />{t('Profit', 'মুনাফা')}</span></div>}>
               <div className="chart-box">
-                <ResponsiveContainer>
-                  <ComposedChart data={d.trend.map((m: any) => ({ ...m, label: monthLabel(m.month) }))} margin={{ left: 8, right: 8, top: 12 }}>
-                    <CartesianGrid stroke="var(--border)" vertical={false} />
-                    <XAxis dataKey="label" tick={axis} axisLine={false} tickLine={false} />
-                    <YAxis tick={axis} axisLine={false} tickLine={false} width={64} tickFormatter={v => fmtMoney(v, lang).replace('৳', '')} />
-                    <Tooltip content={<ChartTip lang={lang} />} cursor={{ fill: 'var(--surface-3)' }} />
-                    <Bar dataKey="income" name={t('Income', 'আয়')} fill="var(--chart-1)" radius={[4, 4, 0, 0]} maxBarSize={26} />
-                    <Bar dataKey="expenses" name={t('Expenses', 'খরচ')} fill="var(--chart-2)" radius={[4, 4, 0, 0]} maxBarSize={26} />
-                    <Line dataKey="profit" name={t('Profit', 'মুনাফা')} stroke="var(--chart-3)" strokeWidth={2} dot={{ r: 3 }} />
-                  </ComposedChart>
-                </ResponsiveContainer>
+                <ComboChart data={d.trend.map((m: any) => ({ ...m, label: monthLabel(m.month) }))} xKey="label" leftWidth={64}
+                  formatLeft={v => fmtMoney(v, lang).replace('৳', '')} format={v => fmtMoney(v, lang)} series={[
+                    { key: 'income', name: t('Income', 'আয়'), kind: 'bar', color: 'var(--chart-1)' },
+                    { key: 'expenses', name: t('Expenses', 'খরচ'), kind: 'bar', color: 'var(--chart-2)' },
+                    { key: 'profit', name: t('Profit', 'মুনাফা'), kind: 'line', color: 'var(--chart-3)', dots: true },
+                  ]} />
               </div>
             </Card>
             <Card title={t('Where the money went', 'টাকা কোথায় খরচ হলো')} subtitle={fmtDate(d.from, lang) + ' – ' + fmtDate(d.to, lang)}>
@@ -98,16 +81,11 @@ export default function Dashboard() {
           <Card className="span2" title={t('Daily egg collection', 'দৈনিক ডিম সংগ্রহ')} actions={<Link to="/production" className="small">{t('Production log →', 'উৎপাদন খাতা →')}</Link>}>
             {d.production.length ? (
               <div className="chart-box">
-                <ResponsiveContainer>
-                  <ComposedChart data={d.production.map((p: any) => ({ ...p, label: fmtDate(p.date, lang).slice(0, 6) }))} margin={{ left: 8, right: 8, top: 12 }}>
-                    <CartesianGrid stroke="var(--border)" vertical={false} />
-                    <XAxis dataKey="label" tick={axis} axisLine={false} tickLine={false} />
-                    <YAxis tick={axis} axisLine={false} tickLine={false} width={48} />
-                    <Tooltip content={<ChartTip lang={lang} money={false} />} cursor={{ fill: 'var(--surface-3)' }} />
-                    <Area dataKey="eggs" name={t('Eggs', 'ডিম')} stroke="var(--chart-1)" fill="var(--chart-1)" fillOpacity={0.15} strokeWidth={2} />
-                    <Bar dataKey="broken" name={t('Broken', 'ভাঙা')} fill="var(--chart-5)" maxBarSize={12} />
-                  </ComposedChart>
-                </ResponsiveContainer>
+                <ComboChart data={d.production.map((p: any) => ({ ...p, label: fmtDate(p.date, lang).slice(0, 6) }))} xKey="label" leftWidth={48}
+                  formatLeft={v => fmtNum(v, lang, 0)} format={v => fmtNum(v, lang, 0)} series={[
+                    { key: 'eggs', name: t('Eggs', 'ডিম'), kind: 'area', color: 'var(--chart-1)' },
+                    { key: 'broken', name: t('Broken', 'ভাঙা'), kind: 'bar', color: 'var(--chart-5)' },
+                  ]} />
               </div>
             ) : <Empty icon={Egg}>{t('No production recorded in this period.', 'এই সময়ে উৎপাদন লেখা হয়নি।')}</Empty>}
           </Card>
