@@ -32,14 +32,14 @@ export function RemindersCard() {
 
   return (
     <Card title={<span className="row gap-8"><BellRing size={18} />{t('Daily reminders', 'দৈনিক মনে করিয়ে দেওয়া')}</span>}
-      subtitle={t('Data-entry staff get a phone notification to record the morning eggs and the evening feed, medicine and expenses (Bangladesh time).', 'ডেটা এন্ট্রির কর্মীরা সকালের ডিম এবং সন্ধ্যার খাদ্য, ওষুধ ও খরচ লেখার জন্য ফোনে নোটিফিকেশন পান (বাংলাদেশ সময়)।')} pad>
+      subtitle={t('Data-entry staff get phone notifications to keep the books up to date: the morning eggs, then the day’s sales and money collected, spending, feed and medicine (Bangladesh time). They are asked again until it is done.', 'হিসাব হালনাগাদ রাখতে ডেটা এন্ট্রির কর্মীরা ফোনে নোটিফিকেশন পান: সকালের ডিম, তারপর দিনের বিক্রি ও টাকা আদায়, খরচ, খাদ্য ও ওষুধ (বাংলাদেশ সময়)। শেষ না হওয়া পর্যন্ত আবার মনে করানো হয়।')} pad>
       <div className="stack">
         <Switch checked={cfg.on} onChange={on => setCfg({ ...cfg, on })} label={cfg.on ? t('Reminders are on', 'চালু আছে') : t('Reminders are off', 'বন্ধ আছে')} />
         <div className="form-grid">
-          <Field label={t('Morning reminder (eggs)', 'সকালের মনে করানো (ডিম)')} hint={t(`Again at ${plus(cfg.morning, 1)}; you are told at ${plus(cfg.morning, 2)} if still not done.`, `${plus(cfg.morning, 1)}-এ আবার; ${plus(cfg.morning, 2)}-এও না হলে আপনাকে জানানো হবে।`)}>
+          <Field label={t('Morning reminder (eggs)', 'সকালের মনে করানো (ডিম)')} hint={t(`Staff are asked again at ${plus(cfg.morning, 1)} and ${plus(cfg.morning, 2)}; you are told at ${plus(cfg.morning, 2)} if still not done.`, `${plus(cfg.morning, 1)} ও ${plus(cfg.morning, 2)}-এ কর্মীদের আবার; ${plus(cfg.morning, 2)}-এও না হলে আপনাকে জানানো হবে।`)}>
             <Input type="time" value={cfg.morning} disabled={!cfg.on} onChange={e => setCfg({ ...cfg, morning: e.target.value })} />
           </Field>
-          <Field label={t('Evening reminder (feed, medicine, expenses)', 'সন্ধ্যার মনে করানো (খাদ্য, ওষুধ, খরচ)')} hint={t(`Again at ${plus(cfg.evening, 1)}; you are told at ${plus(cfg.evening, 2)} if still not done.`, `${plus(cfg.evening, 1)}-এ আবার; ${plus(cfg.evening, 2)}-এও না হলে আপনাকে জানানো হবে।`)}>
+          <Field label={t('Evening reminder (sales, collections, spending, feed, medicine)', 'সন্ধ্যার মনে করানো (বিক্রি, আদায়, খরচ, খাদ্য, ওষুধ)')} hint={t(`Staff are asked again at ${plus(cfg.evening, 1)} and ${plus(cfg.evening, 2)}; you are told at ${plus(cfg.evening, 2)} if still not done.`, `${plus(cfg.evening, 1)} ও ${plus(cfg.evening, 2)}-এ কর্মীদের আবার; ${plus(cfg.evening, 2)}-এও না হলে আপনাকে জানানো হবে।`)}>
             <Input type="time" value={cfg.evening} disabled={!cfg.on} onChange={e => setCfg({ ...cfg, evening: e.target.value })} />
           </Field>
         </div>

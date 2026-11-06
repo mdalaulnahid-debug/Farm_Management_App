@@ -86,13 +86,16 @@ describe('sending', () => {
     expect(sent).toEqual([]);
   });
 
-  it('tells the owner at +2 h when the morning eggs are still not recorded', async () => {
+  it('keeps asking staff at +1 h and +2 h, and tells the owner at +2 h, while the eggs are not recorded', async () => {
     sent = [];
     await runReminders(prisma, day('11:00'), send);
     expect(sent.map(s => s.endpoint)).toEqual(['https://fcm.googleapis.com/fcm/send/op-phone']);
+    expect(sent[0].payload.title).toMatch(/Still waiting/);
     sent = [];
     await runReminders(prisma, day('12:00'), send);
-    expect(sent.map(s => s.endpoint)).toEqual(['https://fcm.googleapis.com/fcm/send/owner-phone']);
+    expect(sent.map(s => s.endpoint).sort()).toEqual(['https://fcm.googleapis.com/fcm/send/op-phone', 'https://fcm.googleapis.com/fcm/send/owner-phone']);
+    expect(sent.find(s => s.endpoint.endsWith('owner-phone'))!.payload.title).toMatch(/not recorded/);
+    expect(sent.find(s => s.endpoint.endsWith('op-phone'))!.payload.title).toMatch(/Still waiting/);
   });
 
   it('one failing phone does not stop the others; the failure is logged', async () => {
@@ -109,10 +112,30 @@ describe('sending', () => {
   it('stays quiet once the job is done', async () => {
     const flock = await prisma.flock.findFirstOrThrow({ where: { code: 'REM-A' } });
     await prisma.productionLog.create({ data: { date: new Date('2026-11-06T00:00:00Z'), flockId: flock.id, eggsCollected: 80, feedQty: 6 } });
-    await prisma.reminderLog.createMany({ data: [{ day: '2026-11-06', slot: 'none-medicine', kind: 'none' }, { day: '2026-11-06', slot: 'none-expenses', kind: 'none' }] });
+    await prisma.reminderLog.createMany({ data: [{ day: '2026-11-06', slot: 'none-medicine', kind: 'none' }, { day: '2026-11-06', slot: 'none-expenses', kind: 'none' }, { day: '2026-11-06', slot: 'none-sales', kind: 'none' }] });
     sent = [];
     await runReminders(prisma, day('17:00'), send);
     expect(sent).toEqual([]);
+  });
+
+  it('the evening reminder asks for sales and money collected too, until recorded or answered "none today"', async () => {
+    const flock = await prisma.flock.findFirstOrThrow({ where: { code: 'REM-A' } });
+    await prisma.productionLog.create({ data: { date: new Date('2026-11-10T00:00:00Z'), flockId: flock.id, eggsCollected: 80, feedQty: 6 } });
+    await prisma.reminderLog.createMany({ data: [{ day: '2026-11-10', slot: 'none-medicine', kind: 'none' }, { day: '2026-11-10', slot: 'none-expenses', kind: 'none' }] });
+    const evening = (hhmm: string) => new Date(`2026-11-10T${hhmm}:00+06:00`);
+    sent = [];
+    await runReminders(prisma, evening('17:00'), send); // feed, medicine, spending done; sales not
+    expect(sent.map(s => s.endpoint)).toEqual(['https://fcm.googleapis.com/fcm/send/op-phone']);
+    expect(sent[0].payload.body).toMatch(/sales and money collected/);
+    // Owner capital coming in is not a sale: still asked.
+    await prisma.payment.create({ data: { number: 'REM-CAP-1', date: new Date('2026-11-10T00:00:00Z'), direction: 'IN', cashAccountId: (await prisma.account.findUniqueOrThrow({ where: { code: '1010' } })).id, counterAccountId: (await prisma.account.findUniqueOrThrow({ where: { code: '3010' } })).id, amount: 5000 } });
+    sent = [];
+    await runReminders(prisma, evening('18:00'), send);
+    expect(sent.map(s => s.endpoint)).toEqual(['https://fcm.googleapis.com/fcm/send/op-phone']);
+    await prisma.reminderLog.create({ data: { day: '2026-11-10', slot: 'none-sales', kind: 'none' } });
+    sent = [];
+    await runReminders(prisma, evening('19:00'), send);
+    expect(sent.filter(s => s.endpoint.endsWith('op-phone'))).toEqual([]);
   });
 });
 
@@ -137,6 +160,7 @@ describe('settings and subscriptions', () => {
     expect((await call('POST', '/me/today/none', operator, { what: 'feed' })).status).toBe(200);
     expect(await prisma.reminderLog.count({ where: { day: farmYmd(), slot: 'none-feed' } })).toBe(1);
     expect((await call('POST', '/me/today/none', operator, { what: 'feed' })).status).toBe(200); // twice is fine
+    expect((await call('POST', '/me/today/none', operator, { what: 'sales' })).status).toBe(200);
     expect((await call('POST', '/me/today/none', operator, { what: 'eggs' })).status).toBe(400);
     expect((await call('GET', '/me/today', owner)).body.none).toContain('feed');
     expect(await prisma.auditLog.count({ where: { entity: 'reminder', summary: { startsWith: 'Marked no feed today' } } })).toBe(1);
