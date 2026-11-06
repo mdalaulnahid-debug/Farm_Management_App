@@ -21,10 +21,17 @@
 .nav-link.active { background: color-mix(in srgb, #fff 16%, var(--side-bg)); color: #fff; font-weight: 600; }
 .nav-link.active svg { color: var(--gold); opacity: 1; }
 .nav-link svg { flex: none; opacity: .85; }
+/* Sidebar depth: a faint gold glow behind the crest and a gentle fall to a deeper green. */
+.sidebar { background:
+  radial-gradient(260px 200px at 18% 0%, color-mix(in srgb, var(--gold) 16%, transparent), transparent 70%),
+  linear-gradient(180deg, color-mix(in srgb, #fff 4%, var(--side-bg)) 0%, var(--side-bg) 45%, color-mix(in srgb, #000 18%, var(--side-bg)) 100%); }
+.nav-link { transition: background var(--dur-fast), color var(--dur-fast); }
+.nav-link.active { background: color-mix(in srgb, #fff 13%, var(--side-bg)); box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 10%, transparent), 0 1px 2px rgba(0, 0, 0, .18); }
+:root[data-lite='true'] .sidebar { background: var(--side-bg); }
 .sidebar-foot { margin-top: auto; padding: 12px 10px 4px; border-top: 1px solid var(--side-line); font-size: .8em; }
 
 .main { min-width: 0; display: flex; flex-direction: column; }
-.topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px; padding: 10px 24px; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
+.topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px; padding: 10px 24px; background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent); }
 .topbar .spacer { flex: 1; }
 .content { padding: 22px 24px 48px; max-width: 1440px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: var(--gap); }
 
@@ -90,13 +97,13 @@
 .auth-form { display: grid; place-items: center; padding: 32px; background: var(--surface); }
 .auth-form form { width: min(380px, 100%); display: flex; flex-direction: column; gap: 14px; }
 
-.chart-box { height: 280px; padding: 8px 12px 12px 0; }
+.chart-box { height: 300px; padding: 12px 14px 12px 2px; }
 .legend { display: flex; gap: 14px; font-size: .82em; color: var(--text-2); }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
 .bar-list { display: flex; flex-direction: column; gap: 10px; }
 .bar-list .bar-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: .9em; }
 .bar-list .bar { grid-column: 1 / -1; height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
-.bar-list .bar > i { display: block; height: 100%; background: var(--brand-2); border-radius: 99px; }
+.bar-list .bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--chart-1), color-mix(in srgb, var(--chart-1) 55%, var(--chart-2))); border-radius: 99px; }
 .activity { display: flex; flex-direction: column; }
 .activity > div { display: flex; gap: 10px; padding: 10px 18px; border-bottom: 1px solid var(--border); font-size: .9em; }
 .activity > div:last-child { border-bottom: 0; }

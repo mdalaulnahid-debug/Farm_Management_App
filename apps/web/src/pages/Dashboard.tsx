@@ -5,7 +5,8 @@ import { nameOf, unitLabel, usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi } from '../lib/hooks';
 import { fmtDate, fmtDateTime, fmtLongDate, fmtMoney, fmtNum, fmtPct } from '../lib/format';
-import { Alert, Card, Empty, Kpi, Loading, PageHeader, RangePicker, thisMonth, ComboChart } from '../components/ui';
+import { Alert, Card, Empty, Kpi, Loading, PageHeader, RangePicker, thisMonth } from '../components/ui';
+import { Chart } from '../components/charts/Chart';
 import { dashRiver } from '../assets/photos';
 import { Money } from '../components/forms';
 
@@ -59,7 +60,7 @@ export default function Dashboard() {
           <div className="grid g3">
             <Card className="span2" title={t('Income vs expenses — last 12 months', 'আয় বনাম খরচ — গত ১২ মাস')} actions={<div className="legend"><span><i style={{ background: 'var(--chart-1)' }} />{t('Income', 'আয়')}</span><span><i style={{ background: 'var(--chart-2)' }} />{t('Expenses', 'খরচ')}</span><span><i style={{ background: 'var(--chart-3)' }} />{t('Profit', 'মুনাফা')}</span></div>}>
               <div className="chart-box">
-                <ComboChart data={d.trend.map((m: any) => ({ ...m, label: monthLabel(m.month) }))} xKey="label" leftWidth={64}
+                <Chart data={d.trend.map((m: any) => ({ ...m, label: monthLabel(m.month) }))} xKey="label" leftWidth={64}
                   formatLeft={v => fmtMoney(v, lang).replace('৳', '')} format={v => fmtMoney(v, lang)} series={[
                     { key: 'income', name: t('Income', 'আয়'), kind: 'bar', color: 'var(--chart-1)' },
                     { key: 'expenses', name: t('Expenses', 'খরচ'), kind: 'bar', color: 'var(--chart-2)' },
@@ -81,7 +82,7 @@ export default function Dashboard() {
           <Card className="span2" title={t('Daily egg collection', 'দৈনিক ডিম সংগ্রহ')} actions={<Link to="/production" className="small">{t('Production log →', 'উৎপাদন খাতা →')}</Link>}>
             {d.production.length ? (
               <div className="chart-box">
-                <ComboChart data={d.production.map((p: any) => ({ ...p, label: fmtDate(p.date, lang).slice(0, 6) }))} xKey="label" leftWidth={48}
+                <Chart data={d.production.map((p: any) => ({ ...p, label: fmtDate(p.date, lang).slice(0, 6) }))} xKey="label" leftWidth={48}
                   formatLeft={v => fmtNum(v, lang, 0)} format={v => fmtNum(v, lang, 0)} series={[
                     { key: 'eggs', name: t('Eggs', 'ডিম'), kind: 'area', color: 'var(--chart-1)' },
                     { key: 'broken', name: t('Broken', 'ভাঙা'), kind: 'bar', color: 'var(--chart-5)' },

@@ -1,8 +1,8 @@
 /* Brand-neutral design tokens: size, rhythm, layers and motion. Colours and fonts come from a theme file. */
 :root {
   --fs: 14px;
-  --radius: 10px;
-  --radius-sm: 7px;
+  --radius: 14px;
+  --radius-sm: 9px;
   --gap: 16px;
   --row: 40px;
   /* Layers, lowest to highest. */

@@ -5,7 +5,8 @@ import { useAuth } from '../lib/auth';
 import { useApi, useFlocks, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtMoney, fmtNum, fmtPct, iso10, ymd } from '../lib/format';
 import type { Flock } from '../lib/api';
-import { Alert, Badge, Card, DataTable, Dialog, Drawer, Empty, Field, Input, Kpi, Loading, PageHeader, RangePicker, Segmented, Select, StatusBadge, Tabs, thisMonth, VoidDialog, type Column, ComboChart } from '../components/ui';
+import { Alert, Badge, Card, DataTable, Dialog, Drawer, Empty, Field, Input, Kpi, Loading, PageHeader, RangePicker, Segmented, Select, StatusBadge, Tabs, thisMonth, VoidDialog, type Column } from '../components/ui';
+import { Chart } from '../components/charts/Chart';
 import { duckPath } from '../assets/photos';
 import { Money, ProductionDrawer } from '../components/forms';
 
@@ -119,7 +120,7 @@ function DailyLog() {
         actions={<div className="legend"><span><i style={{ background: 'var(--chart-1)' }} />{t('Eggs', 'ডিম')}</span><span><i style={{ background: 'var(--chart-2)' }} />{t('Laying rate %', 'পাড়ার হার %')}</span></div>}>
         {!r ? <Loading /> : !chartData.length ? <Empty>{t('No production recorded in this period.', 'এই সময়ে কোনো উৎপাদন লেখা হয়নি।')}</Empty> : (
           <div className="chart-box">
-            <ComboChart data={chartData} xKey="label" leftWidth={48} rightDomain={[0, 100]}
+            <Chart data={chartData} xKey="label" leftWidth={48} rightDomain={[0, 100]}
               formatLeft={v => fmtNum(v, lang, 0)} formatRight={v => `${v}%`}
               format={(v, s) => (s.key === 'layingRate' ? fmtPct(v, lang) : fmtNum(v, lang, 0))} series={[
                 { key: 'eggs', name: t('Eggs', 'ডিম'), kind: 'bar', color: 'var(--chart-1)' },
