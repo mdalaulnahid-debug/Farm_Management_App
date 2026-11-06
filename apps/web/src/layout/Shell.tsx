@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3, BookOpen, Bird, Gift, ChevronDown, ClipboardList, Contact, Egg, FileText, LayoutDashboard, LogOut, Menu,
   KeyRound, Monitor, Moon, Package, Palette, Plus, Receipt, Settings, ShieldCheck, ShoppingCart, Sun, Truck, UserRound, Wallet,
+  FileCheck2,
 } from 'lucide-react';
 import { LogoMark } from '../brand/Logo';
 import { nameOf, usePrefs } from '../lib/i18n';
@@ -47,6 +48,7 @@ export default function Shell({ children }: { children: ReactNode }) {
     ] },
     { label: t('Finance', 'অর্থ'), links: [
       { to: '/banking', label: t('Cash & bank', 'নগদ ও ব্যাংক'), icon: Wallet, perm: 'banking.view' },
+      { to: '/vouchers', label: t('Vouchers to check', 'যাচাইয়ের ভাউচার'), icon: FileCheck2, perm: 'accounting.manage' },
       { to: '/accounting', label: t('Accounting', 'হিসাবরক্ষণ'), icon: BookOpen, perm: 'accounting.view' },
       { to: '/reports', label: t('Reports', 'রিপোর্ট'), icon: BarChart3, perm: 'reports.view' },
     ] },

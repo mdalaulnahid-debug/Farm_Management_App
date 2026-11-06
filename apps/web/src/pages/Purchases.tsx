@@ -9,6 +9,7 @@ import { feedStore } from '../assets/photos';
 import { AllocationsTable, BillDrawer, DocLinesTable, Money, PaymentDrawer } from '../components/forms';
 import { DocPaper, docQr, docStatus } from '../components/DocPaper';
 import { SlipPhotos } from '../components/SlipPhotos';
+import { VoucherStatus } from '../components/VoucherStatus';
 
 interface Bill {
   id: string; number: string; date: string; dueDate: string | null; status: string; total: number; amountPaid: number;
@@ -115,7 +116,9 @@ function BillDetail({ id, onClose }: { id: string; onClose: () => void }) {
           {d.notes && <div className="doc-notes">{d.notes}</div>}
         </DocPaper>
       )}
-      {d && <SlipPhotos kind="bills" id={d.id} photos={d.attachments ?? []} canRemove={can('purchases.void')} canAdd={d.status !== 'VOID' && can('purchases.create')} />}
+      {d && <VoucherStatus v={d.voucher} />}
+      {d && <SlipPhotos kind="bills" id={d.id} photos={d.attachments ?? []} canRemove={can('purchases.void') && (!d.voucher || d.voucher.status === 'UNCHECKED')}
+        canAdd={d.status !== 'VOID' && (!d.voucher || d.voucher.status === 'UNCHECKED') && can('purchases.create')} />}
       {voiding && <VoidDialog what={t('bill', 'বিল')} busy={voidIt.isPending} onClose={() => setVoiding(false)} onConfirm={reason => voidIt.mutate({ reason }, { onSuccess: () => { setVoiding(false); onClose(); } })} />}
       {paying && d && <PaymentDrawer direction="OUT" partyId={d.supplierId} onClose={() => setPaying(false)} />}
     </Drawer>

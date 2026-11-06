@@ -402,3 +402,41 @@
   .page-in > .overlay { animation: fade .15s ease-out; }
 }
 @keyframes page-rise { from { transform: translateY(8px); } }
+
+/* ───────── Vouchers (owner's rule: no spending without its matching voucher) ───────── */
+.voucher-box { display: grid; gap: 8px; padding: 14px 16px; border-radius: 12px; border: 1.5px solid color-mix(in srgb, var(--gold) 55%, var(--border)); background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
+.voucher-box h3 { font-family: var(--font-display); font-weight: 600; }
+.voucher-box > p { margin: 0; }
+.voucher-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.voucher-photos { display: flex; flex-wrap: wrap; gap: 8px; }
+.voucher-photo { position: relative; width: 100%; max-width: 260px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); background: #fff; }
+.voucher-photos .voucher-photo + .voucher-photo { max-width: 120px; }
+.voucher-photo img { display: block; width: 100%; max-height: 300px; object-fit: contain; }
+.voucher-add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 150px; border: 2px dashed color-mix(in srgb, var(--gold) 70%, var(--border)); border-radius: 12px; background: var(--surface); color: var(--text); font-weight: 600; cursor: pointer; padding: 12px; text-align: center; }
+.voucher-add.small { width: auto; min-height: 0; flex-direction: row; padding: 8px 12px; font-weight: 550; }
+.voucher-add span:first-child { font-size: 1.6em; }
+.voucher-fields { display: grid; gap: 10px; }
+.voucher-match { display: flex; align-items: center; gap: 6px; font-weight: 650; }
+.voucher-match.ok { color: var(--success); }
+.voucher-match.bad { color: var(--danger); }
+.voucher-photos.easy { justify-content: center; }
+.voucher-photos.easy .voucher-photo { max-width: 280px; }
+.voucher-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.vcheck-list { display: grid; }
+.vcheck { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 18px; padding: 18px 20px; border-bottom: 1px solid var(--border); }
+.vcheck:last-child { border-bottom: 0; }
+.vcheck-photos { display: flex; flex-wrap: wrap; gap: 8px; }
+.vcheck-photos a { display: block; flex: 1 1 200px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); background: #fff; }
+.vcheck-photos img { display: block; width: 100%; max-height: 420px; object-fit: contain; }
+.vcheck-body { display: grid; gap: 10px; align-content: start; }
+.vcheck-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.vcheck-compare { display: grid; grid-template-columns: max-content 1fr 1fr; gap: 6px 14px; margin: 0; }
+.vcheck-compare dt { color: var(--text-3); }
+.vcheck-compare dd { margin: 0; font-variant-numeric: tabular-nums; }
+.vcheck-lines { margin: 0; padding-left: 18px; color: var(--text-2); font-size: .92em; }
+.vcheck-note { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--danger-soft); }
+.vcheck-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.vcheck-actions .input { flex: 1 1 200px; width: auto; }
+@media (max-width: 700px) {
+  .voucher-grid, .vcheck { grid-template-columns: 1fr; }
+}

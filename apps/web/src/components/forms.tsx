@@ -8,6 +8,7 @@ import { useAccounts, useApi, useCashAccounts, useFlocks, useItems, useParties, 
 import type { Account } from '../lib/api';
 import { LogoMark } from '../brand/Logo';
 import { SlipPhotoPicker, useAttachAfterSave } from './SlipPhotos';
+import { emptyVoucher, VoucherFields, voucherOk, voucherPayload, type VoucherValue } from './VoucherFields';
 import { isMobile } from '../lib/phone';
 import { Alert, Drawer, Field, Input, Segmented, Select, StatusBadge } from './ui';
 
@@ -230,19 +231,20 @@ export function BillDrawer({ onClose, expense }: { onClose: () => void; expense?
   const total = round2(lines.reduce((a, l) => a + Number(l.quantity || 0) * Number(l.unitPrice || 0), 0));
   const paid = pay.mode === 'full' ? total : pay.mode === 'partial' ? Number(pay.amount || 0) : 0;
   const needsSupplier = paid < total && !form.supplierId;
-  const [photo, setPhoto] = useState<string | null>(null);
-  const attach = useAttachAfterSave();
+  // Owner's rule: no spending without its voucher, and the voucher must match the entry.
+  const [voucher, setVoucher] = useState<VoucherValue>(emptyVoucher);
 
   const submit = () => save.mutate({
     ...form, supplierId: form.supplierId || null, dueDate: form.dueDate || null,
     lines: lines.filter(l => Number(l.quantity) > 0 && Number(l.unitPrice) >= 0).map(l => ({ itemId: l.itemId || null, accountId: l.accountId || null, description: l.description || undefined, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice || 0) })),
     paid: paid > 0 ? { amount: paid, cashAccountId: pay.cashAccountId } : null,
-  }, { onSuccess: (res: any) => { attach('bills', res?.id, photo); onClose(); } });
+    voucher: voucherPayload({ ...voucher, date: voucher.date || form.date }),
+  }, { onSuccess: onClose });
 
   return (
     <Drawer title={expense ? t('Record expense', 'খরচ লিখুন') : t('New purchase bill', 'নতুন ক্রয় বিল')}
       subtitle={t('Stocked items (e.g. feed) go to inventory and are expensed when used. Other lines are expensed now.', 'মজুদযোগ্য পণ্য (যেমন খাদ্য) মজুদে যায় এবং ব্যবহারের সময় খরচ হয়। অন্যান্য লাইন এখনই খরচ।')} onClose={onClose}
-      footer={<><div className="left">{t('Total', 'মোট')}: <b><Money v={total} /></b></div><button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button><button className="btn primary" disabled={save.isPending || total <= 0 || needsSupplier} onClick={submit}>{t('Save & post', 'সংরক্ষণ ও পোস্ট')}</button></>}>
+      footer={<><div className="left">{t('Total', 'মোট')}: <b><Money v={total} /></b></div><button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button><button className="btn primary" disabled={save.isPending || total <= 0 || needsSupplier || !voucherOk(voucher, total)} onClick={submit}>{t('Save & post', 'সংরক্ষণ ও পোস্ট')}</button></>}>
       <div className="form-grid three">
         <Field label={t('Supplier', 'সরবরাহকারী')} className="full" hint={t('Optional for cash expenses paid in full', 'সম্পূর্ণ নগদ খরচে ঐচ্ছিক')}><Select value={form.supplierId} onChange={e => setForm({ ...form, supplierId: e.target.value })} placeholder={t('— No supplier —', '— সরবরাহকারী নেই —')} options={(suppliers.data?.data ?? []).filter(s => s.active).map(s => ({ value: s.id, label: s.name }))} /></Field>
         <Field label={t('Date', 'তারিখ')}><Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></Field>
@@ -277,7 +279,7 @@ export function BillDrawer({ onClose, expense }: { onClose: () => void; expense?
         </table>
       </div>
       <Field label={t('Notes', 'নোট')}><textarea className="textarea" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></Field>
-      <SlipPhotoPicker value={photo} onChange={setPhoto} />
+      <VoucherFields value={voucher} onChange={setVoucher} total={total} />
       <div className="card card-pad stack soft">
         <h3>{t('Paid now', 'এখন পরিশোধ')}</h3>
         <div className="row">{(['full', 'partial', 'none'] as const).map(m => <label key={m} className="check"><input type="radio" checked={pay.mode === m} onChange={() => setPay({ ...pay, mode: m })} />{m === 'full' ? t('Paid in full', 'সম্পূর্ণ পরিশোধ') : m === 'partial' ? t('Part payment', 'আংশিক') : t('Pay later', 'পরে পরিশোধ')}</label>)}</div>
@@ -310,14 +312,18 @@ export function PaymentDrawer({ direction, onClose, partyId: initialParty }: { d
   const save = useSave('post', '/payments', direction === 'IN' ? t('Receipt recorded.', 'আদায় লেখা হয়েছে।') : t('Payment recorded.', 'পরিশোধ লেখা হয়েছে।'));
   const [photo, setPhoto] = useState<string | null>(null);
   const attach = useAttachAfterSave();
+  // Money out is spending: it needs its matching voucher. Money in may keep a slip photo.
+  const [voucher, setVoucher] = useState<VoucherValue>(emptyVoucher);
+  const out = direction === 'OUT';
   const submit = () => save.mutate({
     direction, date: form.date, partyId: form.partyId, cashAccountId: form.cashAccountId, amount: Number(form.amount), method: form.method, reference: form.reference || null, notes: form.notes || null,
     allocations: Object.entries(alloc).filter(([, v]) => Number(v) > 0).map(([id, v]) => (direction === 'IN' ? { invoiceId: id, amount: Number(v) } : { billId: id, amount: Number(v) })),
-  }, { onSuccess: (res: any) => { attach('payments', res?.id, photo); onClose(); } });
+    ...(out ? { voucher: voucherPayload(voucher) } : {}),
+  }, { onSuccess: (res: any) => { if (!out) attach('payments', res?.id, photo); onClose(); } });
 
   return (
     <Drawer narrow title={direction === 'IN' ? t('Receive payment', 'টাকা আদায়') : t('Pay supplier', 'সরবরাহকারীকে পরিশোধ')} onClose={onClose}
-      footer={<><button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button><button className="btn primary" disabled={save.isPending || !form.partyId || !(Number(form.amount) > 0) || allocated > Number(form.amount) + 0.001} onClick={submit}>{t('Save', 'সংরক্ষণ')}</button></>}>
+      footer={<><button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button><button className="btn primary" disabled={save.isPending || !form.partyId || !(Number(form.amount) > 0) || allocated > Number(form.amount) + 0.001 || (out && !voucherOk(voucher, Number(form.amount)))} onClick={submit}>{t('Save', 'সংরক্ষণ')}</button></>}>
       <Field label={direction === 'IN' ? t('Customer', 'ক্রেতা') : t('Supplier', 'সরবরাহকারী')}><Select value={form.partyId} onChange={e => setForm({ ...form, partyId: e.target.value })} placeholder={t('Choose…', 'বাছাই করুন…')} options={(parties.data?.data ?? []).map(p => ({ value: p.id, label: p.name }))} /></Field>
       <div className="form-grid">
         <Field label={t('Date', 'তারিখ')}><Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></Field>
@@ -325,7 +331,7 @@ export function PaymentDrawer({ direction, onClose, partyId: initialParty }: { d
         <Field label={direction === 'IN' ? t('Deposit to', 'জমা হিসাব') : t('Pay from', 'যে হিসাব থেকে')}><CashAccountSelect value={form.cashAccountId} onChange={v => setForm(f => ({ ...f, cashAccountId: v }))} /></Field>
         <Field label={t('Method', 'মাধ্যম')}><Select value={form.method} onChange={e => setForm({ ...form, method: e.target.value })} options={methodOptions(t)} /></Field>
         <Field label={t('Reference', 'রেফারেন্স')} className="full"><Input value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })} placeholder={t('Transaction ID / cheque no.', 'লেনদেন আইডি / চেক নং')} /></Field>
-        <SlipPhotoPicker value={photo} onChange={setPhoto} />
+        {!out && <SlipPhotoPicker value={photo} onChange={setPhoto} />}
       </div>
       {form.partyId && (
         <div className="lines">
@@ -345,6 +351,7 @@ export function PaymentDrawer({ direction, onClose, partyId: initialParty }: { d
       )}
       {Number(form.amount) > allocated && docs.length > 0 && <small className="muted">{t(`${fmtMoney(Number(form.amount) - allocated, lang)} will be kept as an advance.`, `${fmtMoney(Number(form.amount) - allocated, lang)} অগ্রিম হিসেবে থাকবে।`)}</small>}
       <Field label={t('Notes', 'নোট')}><textarea className="textarea" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></Field>
+      {out && <VoucherFields value={voucher} onChange={setVoucher} total={round2(Number(form.amount || 0))} />}
     </Drawer>
   );
 }

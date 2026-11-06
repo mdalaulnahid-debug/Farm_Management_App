@@ -11,6 +11,7 @@ import { Drawer, Loading, StatusBadge, VoidDialog } from './ui';
 import { methodLabel, Money } from './forms';
 import { DocPaper } from './DocPaper';
 import { SlipPhotos } from './SlipPhotos';
+import { VoucherStatus } from './VoucherStatus';
 
 const ONES = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
 const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
@@ -96,8 +97,9 @@ export function PaymentSlip({ id, onClose }: { id: string; onClose: () => void }
           {p.notes && p.party && <div className="doc-notes">{p.notes}</div>}
         </DocPaper>
       )}
-      {p && <SlipPhotos kind="payments" id={p.id} photos={p.attachments ?? []} canRemove={can('banking.manage')}
-        canAdd={p.status !== 'VOID' && (can('sales.create') || can('purchases.create') || can('banking.manage'))} />}
+      {p && <VoucherStatus v={p.voucher} />}
+      {p && <SlipPhotos kind="payments" id={p.id} photos={p.attachments ?? []} canRemove={can('banking.manage') && (!p.voucher || p.voucher.status === 'UNCHECKED')}
+        canAdd={p.status !== 'VOID' && (!p.voucher || p.voucher.status === 'UNCHECKED') && (can('sales.create') || can('purchases.create') || can('banking.manage'))} />}
       {voiding && <VoidDialog what={t('payment', 'লেনদেন')} busy={voidIt.isPending} onClose={() => setVoiding(false)}
         onConfirm={reason => voidIt.mutate({ reason }, { onSuccess: () => { setVoiding(false); onClose(); } })} />}
     </Drawer>

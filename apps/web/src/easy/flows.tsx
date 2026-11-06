@@ -7,6 +7,8 @@ import { useApi, useParties } from '../lib/hooks';
 import { nameOf, unitLabel, usePrefs } from '../lib/i18n';
 import { Pic, useEasySave, useFarmLists, useItemLabel, useTodayProduction } from './shared';
 import { isMobile } from '../lib/phone';
+import { useRef, useState } from 'react';
+import { shrinkPhoto } from '../components/SlipPhotos';
 
 const n = (v: string) => Number(v || 0);
 const NoFlock = () => {
@@ -291,6 +293,29 @@ function BuyerByPhone({ phone, name, matchId, set, next }: { phone: string; name
   </>;
 }
 
+/** Camera button and preview for the voucher photo (one page, or up to three). */
+function VoucherPhotoStep({ photos, onChange }: { photos: string[]; onChange: (v: string[]) => void }) {
+  const { t } = usePrefs();
+  const input = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState('');
+  return <>
+    <div className="voucher-photos easy">
+      {photos.map((p, i) => <div key={i} className="voucher-photo"><img src={p} alt={t('Voucher photo', 'ভাউচারের ছবি')} />
+        <button type="button" className="slip-remove" onClick={() => onChange(photos.filter((_, j) => j !== i))} aria-label={t('Remove photo', 'ছবি সরান')}>×</button></div>)}
+      {photos.length < 3 && <button type="button" className={`voucher-add${photos.length ? ' small' : ''}`} onClick={() => input.current?.click()}>
+        <span>📷</span><span>{photos.length ? t('Add another page', 'আরেক পাতা') : t('Take photo of the voucher', 'ভাউচারের ছবি তুলুন')}</span>
+      </button>}
+    </div>
+    {error && <p className="wizard-error">{error}</p>}
+    <input ref={input} type="file" accept="image/*" capture="environment" hidden onChange={async e => {
+      const f = e.target.files?.[0];
+      e.target.value = '';
+      if (!f) return;
+      try { setError(''); onChange([...photos, await shrinkPhoto(f)]); } catch { setError(t('That photo could not be read. Try again.', 'ছবিটি পড়া গেল না। আবার চেষ্টা করুন।')); }
+    }} />
+  </>;
+}
+
 function CustomerChoice({ value, onChange, onPick }: { value: string; onChange: (v: string) => void; onPick: () => void }) {
   const { t, lang } = usePrefs();
   const parties = useEasyCustomers();
@@ -304,7 +329,7 @@ function useEasyCustomers() {
 }
 
 // ───── Bought feed / medicine ─────
-interface BoughtData { itemId: string; qty: string; cost: string; how: 'cash' | 'mobile' | 'credit' | ''; supplierId: string }
+interface BoughtData { itemId: string; qty: string; cost: string; how: 'cash' | 'mobile' | 'credit' | ''; supplierId: string; vPhotos: string[]; vAmount: string; vNumber: string }
 export function BoughtFlow({ onClose }: { onClose: () => void }) {
   const { t, lang } = usePrefs();
   const L = useFarmLists();
@@ -348,16 +373,33 @@ export function BoughtFlow({ onClose }: { onClose: () => void }) {
         ? <ChoiceButtons value={d.supplierId} onChange={v => set({ supplierId: v })} onPick={next} options={suppliers.data.data.map(s => ({ value: s.id, label: s.name, picture: <Pic name="bought" /> }))} />
         : <Empty>{t('No suppliers yet. Ask the owner to add the shop, or pay now.', 'এখনো কোনো সরবরাহকারী নেই। মালিককে দোকান যোগ করতে বলুন, অথবা এখন পরিশোধ করুন।')}</Empty>,
     },
+    // Owner's rule: no spending without the real voucher, and the voucher must match.
+    {
+      key: 'vphoto', title: t('Photo of the voucher', 'ভাউচারের ছবি'), picture: <Pic name="money" />, valid: d => d.vPhotos.length > 0,
+      help: t('Take a photo of the shop’s voucher or slip for this purchase. It cannot be saved without it.', 'এই কেনার দোকানের ভাউচার বা রসিদের ছবি তুলুন। ছবি ছাড়া লেখা যাবে না।'),
+      render: (d, set) => <VoucherPhotoStep photos={d.vPhotos} onChange={v => set({ vPhotos: v })} />,
+    },
+    {
+      key: 'vamount', title: t('Amount written on the voucher?', 'ভাউচারে কত টাকা লেখা?'), picture: <Pic name="money" />,
+      valid: d => Math.abs(n(d.vAmount) - n(d.cost)) <= 0.011,
+      help: t('Type the total exactly as written on the paper. It must be the same as the cost you entered.', 'কাগজে যেমন লেখা ঠিক তেমন মোট টাকা লিখুন। আপনার লেখা দামের সাথে একই হতে হবে।'),
+      render: (d, set) => <>
+        <NumberPad allowDecimal label={t('Voucher amount', 'ভাউচারের টাকা')} unit="৳" value={d.vAmount} onChange={v => set({ vAmount: v })} />
+        {d.vAmount && Math.abs(n(d.vAmount) - n(d.cost)) > 0.011 && <p className="wizard-error">{t(`The voucher says ${fmtMoney(n(d.vAmount), lang)} but you entered ${fmtMoney(n(d.cost), lang)}. Check the paper, or go back and fix the cost.`, `ভাউচারে ${fmtMoney(n(d.vAmount), lang)} কিন্তু আপনি লিখেছেন ${fmtMoney(n(d.cost), lang)}। কাগজ দেখুন, অথবা পেছনে গিয়ে দাম ঠিক করুন।`)}</p>}
+        <Input className="input-lg" placeholder={t('Voucher number (if written)', 'ভাউচার নম্বর (লেখা থাকলে)')} value={d.vNumber} onChange={e => set({ vNumber: e.target.value })} />
+      </>,
+    },
   ];
   const howWord = (d: BoughtData) => (d.how === 'cash' ? t('paid in cash', 'নগদে পরিশোধ') : d.how === 'mobile' ? t('paid by bKash/Nagad', 'বিকাশ/নগদে পরিশোধ') : t(`owed to ${supplierName(d.supplierId)}`, `${supplierName(d.supplierId)}-এর কাছে বাকি`));
   return (
     <Wizard<BoughtData> title={t('Bought feed / medicine', 'খাদ্য / ওষুধ কেনা')} steps={steps} key={lang}
-      initial={{ itemId: '', qty: '', cost: '', how: '', supplierId: '' }} busy={save.busy} error={save.error} onCancel={onClose}
+      initial={{ itemId: '', qty: '', cost: '', how: '', supplierId: '', vPhotos: [], vAmount: '', vNumber: '' }} busy={save.busy} error={save.error} onCancel={onClose}
       sentence={d => t(`You bought ${label(item(d.itemId), n(d.qty))} for ${fmtMoney(n(d.cost), lang)}, ${howWord(d)}.`, `আপনি ${label(item(d.itemId), n(d.qty))} কিনেছেন ${fmtMoney(n(d.cost), lang)}-তে, ${howWord(d)}।`)}
       onSave={d => save.run([save.post('/bills', {
         date, supplierId: d.how === 'credit' ? d.supplierId : null,
         lines: [{ itemId: d.itemId, quantity: n(d.qty), unitPrice: Math.round((n(d.cost) / n(d.qty)) * 10000) / 10000 }],
         paid: d.how === 'credit' ? null : { amount: n(d.cost), cashAccountId: d.how === 'mobile' ? L.mobileId : L.cashId, method: d.how === 'mobile' ? 'MOBILE' : 'CASH' },
+        voucher: { number: d.vNumber.trim() || null, date, amount: n(d.vAmount), photos: d.vPhotos },
       })])}
     />
   );

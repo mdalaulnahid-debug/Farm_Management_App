@@ -9,6 +9,7 @@ import { ledgerDesk } from '../assets/photos';
 import { accountOptions, CashAccountSelect, methodLabel, methodOptions, Money, PaymentDrawer } from '../components/forms';
 import { GrantsTab, ProjectsTab } from './BankingProjects';
 import { PaymentSlip } from '../components/PaymentSlip';
+import { emptyVoucher, VoucherFields, voucherOk, voucherPayload, type VoucherValue } from '../components/VoucherFields';
 
 type Tab = 'accounts' | 'register' | 'transfer' | 'grants' | 'projects' | 'other' | 'count';
 interface Payment {
@@ -239,11 +240,14 @@ function OtherMoneyTab() {
   const recent = useApi<{ data: Payment[] }>('/payments', { pageSize: 200 });
   const others = (recent.data?.data ?? []).filter(p => !p.partyId && !p.party).slice(0, 20);
   const acctName = (id?: string) => { const a = all.find(x => x.id === id); return a ? nameOf(a, lang) : '—'; };
-  const valid = !!f.date && !!f.cashAccountId && !!f.counterAccountId && Number(f.amount) > 0;
+  // Money out is spending: saved only with its matching voucher (owner's rule).
+  const [voucher, setVoucher] = useState<VoucherValue>(emptyVoucher);
+  const valid = !!f.date && !!f.cashAccountId && !!f.counterAccountId && Number(f.amount) > 0 && (f.direction === 'IN' || voucherOk(voucher, round2(Number(f.amount))));
   const submit = () => save.mutate({
     direction: f.direction, date: f.date, cashAccountId: f.cashAccountId, counterAccountId: f.counterAccountId,
     amount: round2(Number(f.amount)), method: f.method, notes: f.notes.trim() || null,
-  }, { onSuccess: () => setF(x => ({ ...x, amount: '', notes: '' })) });
+    ...(f.direction === 'OUT' ? { voucher: voucherPayload(voucher) } : {}),
+  }, { onSuccess: () => { setF(x => ({ ...x, amount: '', notes: '' })); setVoucher(emptyVoucher()); } });
 
   const presets: { label: string; direction: 'IN' | 'OUT'; code: string; note: string }[] = [
     { label: t('Owner puts money in', 'মালিকের মূলধন জমা'), direction: 'IN', code: '3010', note: t('Owner capital', 'মালিকের মূলধন') },
@@ -270,6 +274,7 @@ function OtherMoneyTab() {
             </Field>
             <Field label={t('Notes', 'নোট')} className="full"><textarea className="textarea" maxLength={500} value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} /></Field>
           </div>
+          {f.direction === 'OUT' && <VoucherFields value={voucher} onChange={setVoucher} total={round2(Number(f.amount || 0))} />}
           <div className="row end">
             <button className="btn primary" disabled={!valid || save.isPending} onClick={submit}>{f.direction === 'IN' ? t('Record money in', 'প্রাপ্তি লিখুন') : t('Record money out', 'প্রদান লিখুন')}</button>
           </div>

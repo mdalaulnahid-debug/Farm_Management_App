@@ -23,6 +23,7 @@ const SystemReference = lazy(() => import('./pages/SystemReference'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const EasyHome = lazy(() => import('./easy/EasyHome'));
 const QuickSale = lazy(() => import('./pages/QuickSale'));
+const VoucherCheck = lazy(() => import('./pages/VoucherCheck'));
 const SaleStickers = lazy(() => import('./pages/QuickSale').then(m => ({ default: m.SaleStickers })));
 
 function Guard({ perm, children }: { perm: string | string[]; children: ReactNode }) {
@@ -50,6 +51,7 @@ export default function App() {
             {/* The simple workspace (big task buttons) replaces the dashboard as the start page when switched on. */}
           <Route path="/" element={simple ? <EasyHome /> : <Guard perm="dashboard.view"><Dashboard /></Guard>} />
             <Route path="/sales" element={<Guard perm="sales.view"><Sales /></Guard>} />
+            <Route path="/vouchers" element={<Guard perm="accounting.manage"><VoucherCheck /></Guard>} />
             <Route path="/sell" element={<Guard perm="sales.create"><QuickSale /></Guard>} />
             <Route path="/sell/stickers" element={<Guard perm="sales.create"><SaleStickers /></Guard>} />
             <Route path="/customers" element={<Guard perm="sales.view"><Parties kind="CUSTOMER" /></Guard>} />
