@@ -139,8 +139,10 @@ export function EveningFlow({ onClose }: { onClose: () => void }) {
 }
 
 // ───── Sale & money received ─────
-interface SaleData { kind: 'sale' | 'due' | ''; itemId: string; qty: string; price: string; buyer: string; phone: string; how: 'cash' | 'mobile' | 'credit' | ''; partyId: string; amount: string }
-export function SaleFlow({ onClose }: { onClose: () => void }) {
+interface SaleData { kind: 'sale' | 'due' | ''; itemId: string; qty: string; price: string; buyer: string; phone: string; how: 'cash' | 'mobile' | 'credit' | 'part' | ''; partyId: string; amount: string; paidNow: string; partHow: 'cash' | 'mobile' | '' }
+/** A sale QR sticker (pages/QuickSale) opens this with the item, and optionally the customer, already chosen. */
+export interface SalePreset { itemId?: string; customerId?: string; customerName?: string }
+export function SaleFlow({ onClose, preset }: { onClose: () => void; preset?: SalePreset }) {
   const { t, lang } = usePrefs();
   const L = useFarmLists();
   const label = useItemLabel();
@@ -149,14 +151,19 @@ export function SaleFlow({ onClose }: { onClose: () => void }) {
   if (L.loading) return <Loading />;
   const item = (id: string) => L.produce.find(i => i.id === id);
   const total = (d: SaleData) => Math.round(n(d.qty) * n(d.price) * 100) / 100;
+  /** Money still owed must be owed by someone: credit and part-paid need a named buyer. */
+  const hasBuyer = (d: SaleData) => !!(preset?.customerId || d.buyer.trim() || d.phone.trim());
   const howOptions = (credit: boolean) => [
     { value: 'cash' as const, label: t('Cash', 'নগদ'), picture: <Pic name="cash" /> },
     { value: 'mobile' as const, label: t('bKash / Nagad', 'বিকাশ / নগদ'), picture: <Pic name="mobile" /> },
-    ...(credit ? [{ value: 'credit' as const, label: t('Not paid yet (on credit)', 'এখনো পরিশোধ হয়নি (বাকি)'), picture: <Pic name="money" /> }] : []),
+    ...(credit ? [
+      { value: 'credit' as const, label: t('Not paid yet (on credit)', 'এখনো পরিশোধ হয়নি (বাকি)'), picture: <Pic name="money" /> },
+      { value: 'part' as const, label: t('Part paid now, rest later', 'কিছু এখন, বাকি পরে'), picture: <Pic name="money" /> },
+    ] : []),
   ];
   const steps: WizardStep<SaleData>[] = [
     {
-      key: 'kind', title: t('What happened?', 'কী হয়েছে?'), picture: <Pic name="sale" />, valid: d => !!d.kind,
+      key: 'kind', title: t('What happened?', 'কী হয়েছে?'), picture: <Pic name="sale" />, valid: d => !!d.kind, skip: () => !!preset?.itemId,
       help: t('“I sold something” for eggs or ducks sold today. “Money for an old sale” when a buyer pays what they owed.', 'আজ ডিম বা হাঁস বিক্রি হলে “বিক্রি করেছি”। কোনো ক্রেতা আগের বাকি দিলে “আগের বিক্রির টাকা”।'),
       render: (d, set, next) => <ChoiceButtons value={d.kind || undefined} onChange={v => set({ kind: v })} onPick={next} options={[
         { value: 'sale', label: t('I sold something', 'বিক্রি করেছি'), picture: <Pic name="sale" /> },
@@ -164,13 +171,13 @@ export function SaleFlow({ onClose }: { onClose: () => void }) {
       ]} />,
     },
     {
-      key: 'item', title: t('What did you sell?', 'কী বিক্রি করলেন?'), picture: <Pic name="sale" />, skip: d => d.kind !== 'sale', valid: d => !!d.itemId,
+      key: 'item', title: t('What did you sell?', 'কী বিক্রি করলেন?'), picture: <Pic name="sale" />, skip: d => d.kind !== 'sale' || !!preset?.itemId, valid: d => !!d.itemId,
       help: t('Choose what was sold. Ask the owner if it is not in the list.', 'যা বিক্রি হয়েছে তা বেছে নিন। তালিকায় না থাকলে মালিককে জিজ্ঞেস করুন।'),
       render: (d, set, next) => <ChoiceButtons value={d.itemId} onChange={v => set({ itemId: v, price: String(item(v)?.salePrice || '') })} onPick={next}
         options={L.produce.map(i => ({ value: i.id, label: nameOf(i, lang), sub: t(`${i.qtyOnHand} ${unitLabel(t, i.unit)} in stock`, `মজুদে ${i.qtyOnHand} ${unitLabel(t, i.unit)}`), picture: <Pic name={/egg|ডিম/i.test(i.name) ? 'eggs' : 'deaths'} /> }))} />,
     },
     {
-      key: 'qty', title: t('How many?', 'কতগুলো?'), picture: <Pic name="sale" />, skip: d => d.kind !== 'sale', valid: d => n(d.qty) > 0,
+      key: 'qty', title: preset?.itemId && item(preset.itemId) ? t(`How many ${nameOf(item(preset.itemId)!, lang)}?`, `কতগুলো ${nameOf(item(preset.itemId)!, lang)}?`) : t('How many?', 'কতগুলো?'), picture: <Pic name="sale" />, skip: d => d.kind !== 'sale', valid: d => n(d.qty) > 0,
       help: t('The number sold, in the unit shown.', 'যতগুলো বিক্রি হয়েছে, দেখানো এককে।'),
       render: (d, set) => <NumberPad allowDecimal label={t('Quantity', 'পরিমাণ')} unit={item(d.itemId) ? unitLabel(t, item(d.itemId)!.unit) : ''} value={d.qty} onChange={v => set({ qty: v })} />,
     },
@@ -183,7 +190,7 @@ export function SaleFlow({ onClose }: { onClose: () => void }) {
       </>,
     },
     {
-      key: 'buyer', title: t('Who bought it?', 'কে কিনেছেন?'), picture: <Pic name="sale" />, skip: d => d.kind !== 'sale',
+      key: 'buyer', title: t('Who bought it?', 'কে কিনেছেন?'), picture: <Pic name="sale" />, skip: d => d.kind !== 'sale' || !!preset?.customerId,
       help: t('Optional. Leave both empty for a walk-in sale. With a mobile number, a known customer is recognised.', 'ঐচ্ছিক। সাধারণ বিক্রিতে দুটোই খালি রাখুন। মোবাইল নম্বর দিলে পরিচিত ক্রেতা চেনা যাবে।'),
       render: (d, set) => <>
         <Input className="input-lg" inputMode="tel" placeholder={t('Mobile number (optional)', 'মোবাইল নম্বর (ঐচ্ছিক)')} value={d.phone} onChange={e => set({ phone: e.target.value })} />
@@ -203,24 +210,46 @@ export function SaleFlow({ onClose }: { onClose: () => void }) {
     {
       key: 'how', title: t('How was it paid?', 'কীভাবে টাকা দিলেন?'), picture: <Pic name="cash" />, valid: d => !!d.how,
       help: t('Cash in hand, by bKash/Nagad, or not paid yet (the buyer owes it).', 'হাতে নগদ, বিকাশ/নগদে, অথবা এখনো দেননি (ক্রেতার বাকি)।'),
-      render: (d, set, next) => <ChoiceButtons value={d.how || undefined} onChange={v => set({ how: v })} onPick={next} options={howOptions(d.kind === 'sale')} />,
+      render: (d, set, next) => <>
+        <ChoiceButtons value={d.how || undefined} onChange={v => set({ how: v })} onPick={next} options={howOptions(d.kind === 'sale' && hasBuyer(d))} />
+        {d.kind === 'sale' && !hasBuyer(d) && <p className="wizard-q">{t('To sell on credit, go back and write the buyer’s name or mobile number.', 'বাকিতে বিক্রি করতে পেছনে গিয়ে ক্রেতার নাম বা মোবাইল নম্বর লিখুন।')}</p>}
+      </>,
+    },
+    {
+      key: 'paidNow', title: t('How much was paid now?', 'এখন কত টাকা দিলেন?'), picture: <Pic name="money" />, skip: d => d.how !== 'part',
+      valid: d => n(d.paidNow) > 0 && n(d.paidNow) < total(d),
+      help: t('The taka the buyer gave now. The rest stays as money they owe.', 'ক্রেতা এখন যত টাকা দিয়েছেন। বাকিটা তার কাছে পাওনা থাকবে।'),
+      render: (d, set) => <>
+        <NumberPad allowDecimal label={t('Paid now', 'এখন পরিশোধ')} unit="৳" value={d.paidNow} onChange={v => set({ paidNow: v })} />
+        <p className="wizard-total">{t('Total', 'মোট')} {fmtMoney(total(d), lang)} · {t('Still owed', 'বাকি থাকবে')}: <b>{fmtMoney(Math.max(total(d) - n(d.paidNow), 0), lang)}</b></p>
+      </>,
+    },
+    {
+      key: 'partHow', title: t('How did they pay that part?', 'ওই টাকা কীভাবে দিলেন?'), picture: <Pic name="cash" />, skip: d => d.how !== 'part', valid: d => !!d.partHow,
+      help: t('Cash in hand, or by bKash/Nagad.', 'হাতে নগদ, অথবা বিকাশ/নগদে।'),
+      render: (d, set, next) => <ChoiceButtons value={d.partHow || undefined} onChange={v => set({ partHow: v as 'cash' | 'mobile' })} onPick={next} options={howOptions(false)} />,
     },
   ];
-  const howWord = (d: SaleData) => (d.how === 'cash' ? t('paid in cash', 'নগদে পরিশোধ') : d.how === 'mobile' ? t('paid by bKash/Nagad', 'বিকাশ/নগদে পরিশোধ') : t('not paid yet', 'এখনো পরিশোধ হয়নি'));
-  const account = (d: SaleData) => (d.how === 'mobile' ? L.mobileId : L.cashId);
+  const howWord = (d: SaleData) => (d.how === 'cash' ? t('paid in cash', 'নগদে পরিশোধ') : d.how === 'mobile' ? t('paid by bKash/Nagad', 'বিকাশ/নগদে পরিশোধ')
+    : d.how === 'part' ? t(`${fmtMoney(n(d.paidNow), lang)} paid now ${d.partHow === 'mobile' ? 'by bKash/Nagad' : 'in cash'}, ${fmtMoney(total(d) - n(d.paidNow), lang)} still owed`,
+      `এখন ${fmtMoney(n(d.paidNow), lang)} ${d.partHow === 'mobile' ? 'বিকাশ/নগদে' : 'নগদে'} পরিশোধ, ${fmtMoney(total(d) - n(d.paidNow), lang)} বাকি`)
+    : t('not paid yet', 'এখনো পরিশোধ হয়নি'));
+  const way = (d: SaleData) => (d.how === 'part' ? d.partHow : d.how);
+  const account = (d: SaleData) => (way(d) === 'mobile' ? L.mobileId : L.cashId);
+  const buyerName = (d: SaleData) => d.buyer || preset?.customerName || '';
   return (
     <Wizard<SaleData> title={t('Sale & money received', 'বিক্রি ও টাকা আদায়')} steps={steps} key={lang}
-      initial={{ kind: '', itemId: '', qty: '', price: '', buyer: '', phone: '', how: '', partyId: '', amount: '' }}
+      initial={{ kind: preset?.itemId ? 'sale' : '', itemId: preset?.itemId ?? '', qty: '', price: preset?.itemId ? String(item(preset.itemId)?.salePrice || '') : '', buyer: '', phone: '', how: '', partyId: '', amount: '', paidNow: '', partHow: '' }}
       busy={save.busy} error={save.error} onCancel={onClose}
       sentence={d => d.kind === 'sale'
-        ? t(`You sold ${label(item(d.itemId), n(d.qty))} at ${fmtMoney(n(d.price), lang)} each = ${fmtMoney(total(d), lang)}${d.buyer ? ` to ${d.buyer}` : ''}, ${howWord(d)}.`,
-          `আপনি ${label(item(d.itemId), n(d.qty))} প্রতিটি ${fmtMoney(n(d.price), lang)} দরে বিক্রি করেছেন = ${fmtMoney(total(d), lang)}${d.buyer ? `, ক্রেতা ${d.buyer}` : ''}, ${howWord(d)}।`)
+        ? t(`You sold ${label(item(d.itemId), n(d.qty))} at ${fmtMoney(n(d.price), lang)} each = ${fmtMoney(total(d), lang)}${buyerName(d) ? ` to ${buyerName(d)}` : ''}, ${howWord(d)}.`,
+          `আপনি ${label(item(d.itemId), n(d.qty))} প্রতিটি ${fmtMoney(n(d.price), lang)} দরে বিক্রি করেছেন = ${fmtMoney(total(d), lang)}${buyerName(d) ? `, ক্রেতা ${buyerName(d)}` : ''}, ${howWord(d)}।`)
         : t(`You received ${fmtMoney(n(d.amount), lang)}, ${howWord(d)}.`, `আপনি ${fmtMoney(n(d.amount), lang)} পেয়েছেন, ${howWord(d)}।`)}
       onSave={d => save.run([d.kind === 'sale'
         ? save.post('/invoices', {
-          date, customer: d.buyer || d.phone ? { name: d.buyer || null, phone: d.phone || null } : null,
+          date, ...(preset?.customerId ? { customerId: preset.customerId } : { customer: d.buyer || d.phone ? { name: d.buyer || null, phone: d.phone || null } : null }),
           lines: [{ itemId: d.itemId, quantity: n(d.qty), unitPrice: n(d.price) }],
-          received: d.how === 'credit' ? null : { amount: total(d), cashAccountId: account(d), method: d.how === 'mobile' ? 'MOBILE' : 'CASH' },
+          received: d.how === 'credit' ? null : { amount: d.how === 'part' ? n(d.paidNow) : total(d), cashAccountId: account(d), method: way(d) === 'mobile' ? 'MOBILE' : 'CASH' },
         })
         : async () => {
           // Money for old sales pays the oldest unpaid invoices first, as the full receipt form does.

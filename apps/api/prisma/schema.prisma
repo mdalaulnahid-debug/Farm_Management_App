@@ -467,3 +467,18 @@ model ImportBatch {
 
   @@index([fileHash])
 }
+
+// A photo kept with a money record as proof: the handwritten voucher or receipt slip behind a payment or a
+// bill. Stored in the database (not loose files) so backups and restores carry it with the record it proves.
+model Attachment {
+  id          String   @id @default(cuid())
+  ownerType   String   // PAYMENT | BILL
+  ownerId     String
+  mime        String   // image/jpeg | image/png | image/webp
+  size        Int
+  data        Bytes
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([ownerType, ownerId])
+}

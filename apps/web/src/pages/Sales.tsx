@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { AlertCircle, Download, FileText, Plus, Printer, Receipt, Wallet } from 'lucide-react';
+import { AlertCircle, Download, FileText, Plus, Printer, QrCode, Receipt, Wallet } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi, useSave } from '../lib/hooks';
@@ -45,6 +46,7 @@ export default function Sales() {
       <PageHeader photo={salesMarket.full} photoSmall={salesMarket.small} photoPos="center 55%" crumb={t('Sales', 'বিক্রয়')} title={t('Sales invoices', 'বিক্রয় চালান')} subtitle={t('Every sale posts revenue, updates receivables and reduces stock automatically.', 'প্রতিটি বিক্রয় স্বয়ংক্রিয়ভাবে আয় পোস্ট করে, পাওনা হালনাগাদ করে এবং মজুদ কমায়।')}
         actions={<>
           <button className="btn" onClick={exportCsv}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>
+          {can('sales.create') && <Link className="btn" to="/sell/stickers"><QrCode size={16} />{t('QR stickers', 'কিউআর স্টিকার')}</Link>}
           {can('sales.create') && <button className="btn" onClick={() => setReceiving(true)}><Receipt size={16} />{t('Receive payment', 'টাকা আদায়')}</button>}
           {can('sales.create') && <button className="btn primary" onClick={() => setCreating(true)}><Plus size={16} />{t('New invoice', 'নতুন চালান')}</button>}
         </>} />

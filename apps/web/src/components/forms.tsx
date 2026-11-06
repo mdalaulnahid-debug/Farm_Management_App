@@ -7,6 +7,7 @@ import { fmtDate, fmtMoney, fmtNum, fmtPct, round2, ymd } from '../lib/format';
 import { useAccounts, useApi, useCashAccounts, useFlocks, useItems, useParties, useSave } from '../lib/hooks';
 import type { Account } from '../lib/api';
 import { LogoMark } from '../brand/Logo';
+import { SlipPhotoPicker, useAttachAfterSave } from './SlipPhotos';
 import { Alert, Drawer, Field, Input, Segmented, Select, StatusBadge } from './ui';
 
 /** Farm name at the top of a printed document: Bangla and English together, like a letterhead. */
@@ -220,12 +221,14 @@ export function BillDrawer({ onClose, expense }: { onClose: () => void; expense?
   const total = round2(lines.reduce((a, l) => a + Number(l.quantity || 0) * Number(l.unitPrice || 0), 0));
   const paid = pay.mode === 'full' ? total : pay.mode === 'partial' ? Number(pay.amount || 0) : 0;
   const needsSupplier = paid < total && !form.supplierId;
+  const [photo, setPhoto] = useState<string | null>(null);
+  const attach = useAttachAfterSave();
 
   const submit = () => save.mutate({
     ...form, supplierId: form.supplierId || null, dueDate: form.dueDate || null,
     lines: lines.filter(l => Number(l.quantity) > 0 && Number(l.unitPrice) >= 0).map(l => ({ itemId: l.itemId || null, accountId: l.accountId || null, description: l.description || undefined, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice || 0) })),
     paid: paid > 0 ? { amount: paid, cashAccountId: pay.cashAccountId } : null,
-  }, { onSuccess: onClose });
+  }, { onSuccess: (res: any) => { attach('bills', res?.id, photo); onClose(); } });
 
   return (
     <Drawer title={expense ? t('Record expense', 'খরচ লিখুন') : t('New purchase bill', 'নতুন ক্রয় বিল')}
@@ -265,6 +268,7 @@ export function BillDrawer({ onClose, expense }: { onClose: () => void; expense?
         </table>
       </div>
       <Field label={t('Notes', 'নোট')}><textarea className="textarea" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></Field>
+      <SlipPhotoPicker value={photo} onChange={setPhoto} />
       <div className="card card-pad stack soft">
         <h3>{t('Paid now', 'এখন পরিশোধ')}</h3>
         <div className="row">{(['full', 'partial', 'none'] as const).map(m => <label key={m} className="check"><input type="radio" checked={pay.mode === m} onChange={() => setPay({ ...pay, mode: m })} />{m === 'full' ? t('Paid in full', 'সম্পূর্ণ পরিশোধ') : m === 'partial' ? t('Part payment', 'আংশিক') : t('Pay later', 'পরে পরিশোধ')}</label>)}</div>
@@ -295,10 +299,12 @@ export function PaymentDrawer({ direction, onClose, partyId: initialParty }: { d
   }, [form.amount, docs]);
   const allocated = round2(Object.values(alloc).reduce((a, v) => a + Number(v || 0), 0));
   const save = useSave('post', '/payments', direction === 'IN' ? t('Receipt recorded.', 'আদায় লেখা হয়েছে।') : t('Payment recorded.', 'পরিশোধ লেখা হয়েছে।'));
+  const [photo, setPhoto] = useState<string | null>(null);
+  const attach = useAttachAfterSave();
   const submit = () => save.mutate({
     direction, date: form.date, partyId: form.partyId, cashAccountId: form.cashAccountId, amount: Number(form.amount), method: form.method, reference: form.reference || null, notes: form.notes || null,
     allocations: Object.entries(alloc).filter(([, v]) => Number(v) > 0).map(([id, v]) => (direction === 'IN' ? { invoiceId: id, amount: Number(v) } : { billId: id, amount: Number(v) })),
-  }, { onSuccess: onClose });
+  }, { onSuccess: (res: any) => { attach('payments', res?.id, photo); onClose(); } });
 
   return (
     <Drawer narrow title={direction === 'IN' ? t('Receive payment', 'টাকা আদায়') : t('Pay supplier', 'সরবরাহকারীকে পরিশোধ')} onClose={onClose}
@@ -310,6 +316,7 @@ export function PaymentDrawer({ direction, onClose, partyId: initialParty }: { d
         <Field label={direction === 'IN' ? t('Deposit to', 'জমা হিসাব') : t('Pay from', 'যে হিসাব থেকে')}><CashAccountSelect value={form.cashAccountId} onChange={v => setForm(f => ({ ...f, cashAccountId: v }))} /></Field>
         <Field label={t('Method', 'মাধ্যম')}><Select value={form.method} onChange={e => setForm({ ...form, method: e.target.value })} options={methodOptions(t)} /></Field>
         <Field label={t('Reference', 'রেফারেন্স')} className="full"><Input value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })} placeholder={t('Transaction ID / cheque no.', 'লেনদেন আইডি / চেক নং')} /></Field>
+        <SlipPhotoPicker value={photo} onChange={setPhoto} />
       </div>
       {form.partyId && (
         <div className="lines">
