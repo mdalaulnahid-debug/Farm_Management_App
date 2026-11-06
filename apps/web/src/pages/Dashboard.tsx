@@ -4,12 +4,12 @@ import { AlertTriangle, ArrowDownRight, ArrowUpRight, Bird, CircleDollarSign, Eg
 import { nameOf, unitLabel, usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi } from '../lib/hooks';
-import { fmtDate, fmtDateTime, fmtLongDate, fmtMoney, fmtNum, fmtPct } from '../lib/format';
+import { fmtDate, fmtDateTime, fmtLongDate, fmtMoney, fmtNum, fmtPct, ymd } from '../lib/format';
 import { Alert, Card, Empty, Kpi, Loading, PageHeader, RangePicker, thisMonth, type KpiDelta } from '../components/ui';
 import { Chart } from '../components/charts/Chart';
 import { dashRiver } from '../assets/photos';
 import { Money } from '../components/forms';
-import { change, periodWord, previousRange, summary } from '../lib/compare';
+import { change, comparison, summary } from '../lib/compare';
 
 
 
@@ -18,7 +18,10 @@ export default function Dashboard() {
   const { me, can } = useAuth();
   const [range, setRange] = useState(thisMonth());
   const q = useApi<any>('/dashboard', range);
-  const prevQ = useApi<any>('/dashboard', previousRange(range));
+  // Like with like: a month still in progress is compared up to today with the same days of last month.
+  const cmp = comparison(t, range, ymd());
+  const prevQ = useApi<any>('/dashboard', cmp.previous);
+  const curQ = useApi<any>(cmp.clipped ? '/dashboard' : null, cmp.current);
   const flocks = useApi<any>(can('production.view') ? '/flocks' : null);
   const d = q.data;
   const k = d?.kpis;
@@ -26,8 +29,9 @@ export default function Dashboard() {
   const monthLabel = (m: string) => new Intl.DateTimeFormat(lang === 'bn' ? 'bn-BD' : 'en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' }).format(new Date(`${m}-01T00:00:00Z`));
   const noBirds = (flocks.data?.data ?? []).some((f: any) => f.status === 'ACTIVE' && f.currentCount === 0);
   const p = prevQ.data?.kpis;
-  const vs = periodWord(t, range);
-  const ch = (key: string, upIsGood: boolean | null, points = false) => (k && p ? change(t, lang, k[key], p[key], upIsGood, vs, points) : null);
+  const c = cmp.clipped ? curQ.data?.kpis : k;
+  const vs = cmp.vs;
+  const ch = (key: string, upIsGood: boolean | null, points = false) => (c && p ? change(t, lang, c[key], p[key], upIsGood, vs, points) : null);
   const months = (d?.trend ?? []) as any[];
   const days = (d?.production ?? []) as any[];
   const said = k && p ? summary(t, vs, [
@@ -56,7 +60,7 @@ export default function Dashboard() {
             <Kpi icon={TrendingUp} label={t('Sales revenue', 'বিক্রয় আয়')} value={<Money v={k.revenue} />} delta={ch('revenue', true)} spark={months.map(m => m.income)} sub={k.totalIncome !== k.revenue ? t(`Total income ${fmtMoney(k.totalIncome, lang)}`, `মোট আয় ${fmtMoney(k.totalIncome, lang)}`) : t('Net of discounts', 'ছাড় বাদে')} />
             <Kpi icon={Receipt} tone="amber" label={t('Expenses', 'খরচ')} value={<Money v={k.expenses} />} delta={ch('expenses', false)} spark={months.map(m => m.expenses)} sub={t('Costs incurred in the period', 'সময়কালে সংঘটিত খরচ')} />
             <Kpi icon={k.netProfit >= 0 ? ArrowUpRight : ArrowDownRight} tone={k.netProfit >= 0 ? undefined : 'red'} label={t('Net profit', 'নিট মুনাফা')} value={<Money v={k.netProfit} />} delta={ch('netProfit', true)} spark={months.map(m => m.profit)} sub={t(`Net margin ${fmtPct(k.netMargin, lang)}`, `নিট মার্জিন ${fmtPct(k.netMargin, lang)}`)} />
-            <Kpi icon={Wallet} tone="blue" label={t('Cash & bank', 'নগদ ও ব্যাংক')} value={<Money v={k.cash + k.bank} />} delta={k && p ? change(t, lang, k.cash + k.bank, p.cash + p.bank, true, vs) : null} sub={t(`Cash ${fmtMoney(k.cash, lang)} · Bank ${fmtMoney(k.bank, lang)}`, `নগদ ${fmtMoney(k.cash, lang)} · ব্যাংক ${fmtMoney(k.bank, lang)}`)} />
+            <Kpi icon={Wallet} tone="blue" label={t('Cash & bank', 'নগদ ও ব্যাংক')} value={<Money v={k.cash + k.bank} />} delta={c && p ? change(t, lang, c.cash + c.bank, p.cash + p.bank, true, vs) : null} sub={t(`Cash ${fmtMoney(k.cash, lang)} · Bank ${fmtMoney(k.bank, lang)}`, `নগদ ${fmtMoney(k.cash, lang)} · ব্যাংক ${fmtMoney(k.bank, lang)}`)} />
           </div>
         )}
         <div className="grid g4">
