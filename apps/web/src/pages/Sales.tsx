@@ -6,7 +6,8 @@ import { useApi, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate } from '../lib/format';
 import { Card, DataTable, Drawer, Kpi, PageHeader, RangePicker, SearchBox, Segmented, StatusBadge, thisMonth, VoidDialog, type Column } from '../components/ui';
 import { salesMarket } from '../assets/photos';
-import { AllocationsTable, DocLinesTable, InvoiceDrawer, Money, OrgLetterhead, PaymentDrawer } from '../components/forms';
+import { AllocationsTable, DocLinesTable, InvoiceDrawer, Money, PaymentDrawer } from '../components/forms';
+import { DocPaper, docQr, docStatus } from '../components/DocPaper';
 
 
 interface Invoice { id: string; number: string; date: string; dueDate: string; status: string; subtotal: number; discount: number; total: number; amountPaid: number; reference?: string; notes?: string; customer: { id: string; name: string } }
@@ -87,28 +88,23 @@ function InvoiceDetail({ id, onClose }: { id: string; onClose: () => void }) {
         {can('sales.void') && d.status !== 'VOID' && <button className="btn" onClick={() => setVoiding(true)}>{t('Void', 'বাতিল')}</button>}
         {can('sales.create') && balance > 0.005 && d.status !== 'VOID' && <button className="btn primary" onClick={() => setReceiving(true)}>{t('Receive payment', 'টাকা আদায়')}</button>}
       </>}>
-      {!d ? null : <>
-        <div className="row between align-start">
-          <OrgLetterhead sub={[me?.organization.address, me?.organization.phone].filter(Boolean).join(' · ')} />
-          <dl className="desc-list">
-            <dt>{t('Date', 'তারিখ')}</dt><dd>{fmtDate(d.date, lang)}</dd>
-            <dt>{t('Due', 'শেষ তারিখ')}</dt><dd>{fmtDate(d.dueDate, lang)}</dd>
-            {d.reference && <><dt>{t('Reference', 'রেফারেন্স')}</dt><dd>{d.reference}</dd></>}
-          </dl>
-        </div>
-        <div><div className="muted small">{t('Bill to', 'ক্রেতা')}</div><b>{d.customer.name}</b>{d.customer.phone && <div className="small">{d.customer.phone}</div>}</div>
-        <DocLinesTable lines={d.lines} />
-        <div className="totals">
-          <span className="muted">{t('Subtotal', 'উপমোট')}</span><Money v={d.subtotal} />
-          {d.discount > 0 && <><span className="muted">{t('Discount', 'ছাড়')}</span><Money v={-d.discount} /></>}
-          <span className="grand">{t('Total', 'মোট')}</span><span className="grand num"><Money v={d.total} /></span>
-          <span className="muted">{t('Paid', 'পরিশোধিত')}</span><Money v={d.amountPaid} />
-          <span><b>{t('Balance due', 'বাকি')}</b></span><b className="num"><Money v={balance} /></b>
-        </div>
-        <AllocationsTable allocations={d.allocations} />
-        {d.notes && <div className="muted small">{d.notes}</div>}
-        {me?.organization.invoiceFooter && <div className="muted small text-center">{me.organization.invoiceFooter}</div>}
-      </>}
+      {!d ? null : (
+        <DocPaper kind={t('Invoice', 'চালান')} number={d.number} status={docStatus(t, d.status)}
+          party={{ label: t('Bill to', 'ক্রেতা'), name: d.customer.name, lines: [d.customer.phone, d.customer.address] }}
+          meta={[[t('Date', 'তারিখ'), fmtDate(d.date, lang)], [t('Due', 'শেষ তারিখ'), fmtDate(d.dueDate, lang)], ...(d.reference ? [[t('Reference', 'রেফারেন্স'), d.reference] as [string, string]] : [])]}
+          qr={docQr(me?.organization.name, 'Invoice', d.number, d.date, d.total, balance, d.status)}>
+          <DocLinesTable lines={d.lines} />
+          <div className="totals">
+            <span className="muted">{t('Subtotal', 'উপমোট')}</span><Money v={d.subtotal} />
+            {d.discount > 0 && <><span className="muted">{t('Discount', 'ছাড়')}</span><Money v={-d.discount} /></>}
+            <span className="grand">{t('Total', 'মোট')}</span><span className="grand num"><Money v={d.total} /></span>
+            <span className="muted">{t('Paid', 'পরিশোধিত')}</span><Money v={d.amountPaid} />
+            <span className="due">{t('Balance due', 'বাকি')}</span><span className="due num"><Money v={d.status === 'VOID' ? 0 : balance} /></span>
+          </div>
+          <AllocationsTable allocations={d.allocations} />
+          {d.notes && <div className="doc-notes">{d.notes}</div>}
+        </DocPaper>
+      )}
       {voiding && <VoidDialog what={t('invoice', 'চালান')} busy={voidIt.isPending} onClose={() => setVoiding(false)} onConfirm={reason => voidIt.mutate({ reason }, { onSuccess: () => { setVoiding(false); onClose(); } })} />}
       {receiving && d && <PaymentDrawer direction="IN" partyId={d.customerId} onClose={() => setReceiving(false)} />}
     </Drawer>

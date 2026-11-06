@@ -156,7 +156,8 @@ export default function Shell({ children }: { children: ReactNode }) {
             )}
           </div>
         </header>
-        <main className="content">{children}</main>
+        {/* Keyed by page so each page arrives with a short fade (styles.css › .page-in). */}
+        <main className="content page-in" key={loc.pathname}>{children}</main>
       </div>
       {quick === 'invoice' && <InvoiceDrawer onClose={() => setQuick(null)} />}
       {quick === 'receipt' && <PaymentDrawer direction="IN" onClose={() => setQuick(null)} />}

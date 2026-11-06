@@ -287,3 +287,84 @@
 
 /* The "বাংলা" switch on English pages uses the phone's own Bangla font, so it costs no font download. */
 :root[lang='en'] .lang-switch { font-family: system-ui, 'Nirmala UI', 'Noto Sans Bengali', sans-serif; }
+
+/* ───────── Printed documents (invoice, bill): DocPaper ───────── */
+.doc-paper { --text: #14201a; --text-2: #3f4f45; --text-3: #5f6c63; --border: #e1e7dd; --border-strong: #c4cebf; --surface: #fff; --surface-2: #f6f8f4; --surface-3: #e5ebe2; --danger: #b42318; --success: #067647; --brand: #0e3b2c; --brand-2: #17573f; color-scheme: light; position: relative; display: flex; flex-direction: column; gap: 22px; padding: 30px 32px 26px; background: #fff; color: #14201a; border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow); overflow: hidden; }
+/* A deep green band along the top edge with a gold thread under it: the farm's colours, once. */
+.doc-paper::before { content: ''; position: absolute; inset: 0 0 auto; height: 6px; background: linear-gradient(90deg, #0e3b2c, #17573f 60%, #0e3b2c); box-shadow: 0 2px 0 #e3a81b; }
+.doc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; padding-top: 4px; }
+.doc-org { display: flex; gap: 14px; align-items: center; }
+.doc-org b { display: block; font-family: var(--font-display); font-size: 1.32em; font-weight: 650; line-height: 1.2; color: #0e3b2c; }
+.doc-org span { display: block; font-weight: 600; color: #3f4f45; }
+.doc-org small { display: block; margin-top: 3px; color: #5f6c63; font-size: .84em; }
+.doc-title { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.doc-title h2 { font-family: var(--font-display); font-size: 1.9em; font-weight: 600; letter-spacing: .01em; color: #0e3b2c; line-height: 1; }
+.doc-number { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: .95em; color: #3f4f45; letter-spacing: .02em; }
+/* The status stamp: a tilted outlined label, like an ink stamp on paper. */
+.doc-stamp { margin-top: 6px; padding: 3px 12px; border: 2px solid currentColor; border-radius: 6px; font-weight: 750; font-size: .8em; letter-spacing: .12em; text-transform: uppercase; transform: rotate(-4deg); opacity: .9; }
+.doc-stamp.paid { color: #067647; }
+.doc-stamp.open { color: #a06a00; }
+.doc-stamp.void { color: #b42318; }
+.doc-rule { height: 1px; background: linear-gradient(90deg, #e3a81b, color-mix(in srgb, #e3a81b 20%, transparent)); margin: -6px 0 -4px; }
+.doc-meta { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.doc-party small, .doc-meta dt { display: block; font-size: .74em; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; color: #6b776f; }
+.doc-party b { display: block; margin-top: 4px; font-size: 1.12em; font-weight: 650; }
+.doc-party span { display: block; color: #3f4f45; font-size: .92em; }
+.doc-meta dl { margin: 0; display: flex; gap: 28px; flex-wrap: wrap; }
+.doc-meta dd { margin: 4px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.doc-content { display: flex; flex-direction: column; gap: 16px; }
+.doc-paper .lines { border: 0; border-radius: 0; }
+.doc-paper .lines table thead { background: #0e3b2c; }
+.doc-paper .lines th.num { text-align: right; }
+.doc-paper .lines th { background: transparent; color: #fff; font-weight: 600; letter-spacing: .06em; padding: 9px 12px; border: 0; }
+.doc-paper .lines td { padding: 10px 12px; border-bottom: 1px solid #e6ebe3; }
+.doc-paper .lines tbody tr:nth-child(even) td { background: #f7f9f5; }
+.doc-paper .doc-section h3 { font-size: .8em; letter-spacing: .08em; text-transform: uppercase; color: #6b776f; }
+.doc-paper .totals { width: min(340px, 100%); padding: 14px 16px; border-radius: 12px; background: #f4f7f2; gap: 7px 0; }
+.doc-paper .totals > :nth-child(even) { padding-left: 18px; text-align: right; }
+.doc-paper .totals .grand { border-top: 1px solid #c4cebf; font-family: var(--font-display); }
+.doc-paper .totals .due { padding-top: 8px; border-top: 2px solid #0e3b2c; color: #0e3b2c; font-weight: 750; font-size: 1.08em; }
+.doc-paper .totals .due.num { text-align: right; }
+.doc-notes { padding: 10px 14px; border-radius: 10px; background: #fbf6e8; color: #3f4f45; font-size: .92em; }
+.doc-foot { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; padding-top: 18px; border-top: 1px dashed #d5dccf; }
+.doc-thanks p { margin: 0 0 22px; color: #3f4f45; font-family: var(--font-display); font-size: 1.05em; }
+.doc-sign { display: grid; gap: 6px; width: 220px; font-size: .8em; color: #6b776f; }
+.doc-sign i { display: block; height: 1px; background: #8a958d; }
+.doc-qr { width: 92px; height: 92px; flex: none; }
+.doc-qr svg { display: block; width: 100%; height: 100%; }
+/* On screen in dark mode the document stays white paper, like holding a printout. */
+:root[data-theme='dark'] .doc-paper { border-color: transparent; }
+@media (max-width: 600px) {
+  .doc-paper { padding: 22px 16px 18px; gap: 16px; }
+  .doc-title { text-align: left; align-items: flex-start; }
+  .doc-title h2 { font-size: 1.5em; }
+  .doc-meta dl { gap: 18px; }
+  .doc-foot { flex-wrap: wrap; }
+  .doc-sign { width: 180px; }
+  .doc-paper .lines table { min-width: 0; }
+  .doc-paper .lines th, .doc-paper .lines td { padding: 8px 6px; font-size: .88em; letter-spacing: 0; }
+  .doc-paper .lines th:first-child, .doc-paper .lines td:first-child { padding-left: 10px; }
+  .doc-paper .lines th:last-child, .doc-paper .lines td:last-child { padding-right: 10px; }
+}
+@media print {
+  @page { size: A4; margin: 14mm; }
+  /* With a document open, print only the document: no page behind it and no drawer frame. */
+  body:has(.doc-paper) .content > :not(.overlay) { display: none !important; }
+  body:has(.doc-paper) .drawer-head { display: none !important; }
+  body:has(.doc-paper) .drawer-body { padding: 0; overflow: visible; }
+  .doc-paper { border: 0; box-shadow: none; border-radius: 0; padding: 0 0 0; font-size: 12.5px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .doc-paper { padding-top: 16px; }
+  .doc-paper::before { inset: 0 0 auto; }
+  .doc-paper .lines tbody tr { break-inside: avoid; }
+  .doc-foot { break-inside: avoid; }
+}
+
+/* Each page arrives with a short rise; content is never hidden, so it shows even if the animation is paused. */
+@media (prefers-reduced-motion: no-preference) {
+  .page-in > * { animation: page-rise .38s var(--ease-out) backwards; }
+  .page-in > :nth-child(2) { animation-delay: .03s; }
+  .page-in > :nth-child(3) { animation-delay: .06s; }
+  .page-in > :nth-child(n+4) { animation-delay: .09s; }
+  .page-in > .overlay { animation: fade .15s ease-out; }
+}
+@keyframes page-rise { from { transform: translateY(8px); } }

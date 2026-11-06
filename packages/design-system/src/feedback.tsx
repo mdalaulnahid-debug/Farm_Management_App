@@ -1,6 +1,6 @@
 // Messages and states: toasts, alerts, badges, empty and loading.
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
-import { AlertTriangle, CheckCircle2, Inbox, Info, XCircle } from 'lucide-react';
+import { AlertTriangle, Inbox, Info, XCircle } from 'lucide-react';
 import { Skeleton } from './states';
 
 /** `action` adds one button to the toast, e.g. Undo for a setting (never for money records). */
@@ -22,7 +22,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div className="toasts" role="status" aria-live="polite">
         {items.map(i => (
           <div key={i.id} className={`toast ${i.kind === 'error' ? 'error' : ''}`}>
-            {i.kind === 'error' ? <XCircle size={18} /> : <CheckCircle2 size={18} />}<span>{i.message}</span>
+            {i.kind === 'error' ? <XCircle size={18} /> : <SavedTick />}<span>{i.message}</span>
             {i.action && <button className="toast-action" onClick={() => { i.action!.onClick(); drop(i.id); }}>{i.action.label}</button>}
           </div>
         ))}
@@ -30,6 +30,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     </ToastContext.Provider>
   );
 }
+/** The tick on a "saved" message: the ring draws itself, then the check (components.css › .tick). */
+export function SavedTick({ size = 18 }: { size?: number }) {
+  return (
+    <svg className="tick" viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
+      <circle cx="12" cy="12" r="10" pathLength={1} />
+      <path d="M7.5 12.4l3 3 6-6.4" pathLength={1} />
+    </svg>
+  );
+}
+
 export const useToast = () => useContext(ToastContext);
 
 export function Badge({ children, tone }: { children: ReactNode; tone?: 'green' | 'amber' | 'red' | 'blue' }) {

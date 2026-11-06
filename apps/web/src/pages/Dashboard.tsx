@@ -5,10 +5,12 @@ import { nameOf, unitLabel, usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { useApi } from '../lib/hooks';
 import { fmtDate, fmtDateTime, fmtLongDate, fmtMoney, fmtNum, fmtPct } from '../lib/format';
-import { Alert, Card, Empty, Kpi, Loading, PageHeader, RangePicker, thisMonth } from '../components/ui';
+import { Alert, Card, Empty, Kpi, Loading, PageHeader, RangePicker, thisMonth, type KpiDelta } from '../components/ui';
 import { Chart } from '../components/charts/Chart';
 import { dashRiver } from '../assets/photos';
 import { Money } from '../components/forms';
+import { change, periodWord, previousRange, summary } from '../lib/compare';
+
 
 
 export default function Dashboard() {
@@ -16,18 +18,28 @@ export default function Dashboard() {
   const { me, can } = useAuth();
   const [range, setRange] = useState(thisMonth());
   const q = useApi<any>('/dashboard', range);
+  const prevQ = useApi<any>('/dashboard', previousRange(range));
   const flocks = useApi<any>(can('production.view') ? '/flocks' : null);
   const d = q.data;
   const k = d?.kpis;
   const showMoney = can('reports.view');
   const monthLabel = (m: string) => new Intl.DateTimeFormat(lang === 'bn' ? 'bn-BD' : 'en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' }).format(new Date(`${m}-01T00:00:00Z`));
   const noBirds = (flocks.data?.data ?? []).some((f: any) => f.status === 'ACTIVE' && f.currentCount === 0);
+  const p = prevQ.data?.kpis;
+  const vs = periodWord(t, range);
+  const ch = (key: string, upIsGood: boolean | null, points = false) => (k && p ? change(t, lang, k[key], p[key], upIsGood, vs, points) : null);
+  const months = (d?.trend ?? []) as any[];
+  const days = (d?.production ?? []) as any[];
+  const said = k && p ? summary(t, vs, [
+    ...(showMoney ? [['sales', 'বিক্রি', ch('revenue', true)], ['expenses', 'খরচ', ch('expenses', false)]] as [string, string, KpiDelta | null][] : []),
+    ['eggs collected', 'ডিম সংগ্রহ', ch('eggsProduced', true)],
+  ]) : null;
   const maxExpense = Math.max(1, ...(d?.expenseBreakdown ?? []).map((e: any) => e.amount));
 
   return (
     <>
       <PageHeader photo={dashRiver.full} photoSmall={dashRiver.small} photoPos="center 60%" tall crumb={fmtLongDate(new Date(), lang, banglaCalendar)} title={t(`Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ${me?.user.name.split(' ')[0]}`, `স্বাগতম, ${me?.user.name.split(' ')[0]}`)}
-        subtitle={t(`${me?.organization.name} — business overview from the posted ledger.`, `${me?.organization.nameBn || me?.organization.name} — পোস্ট করা খাতা থেকে ব্যবসার সারসংক্ষেপ।`)}
+        subtitle={said ?? t(`${me?.organization.name} — business overview from the posted ledger.`, `${me?.organization.nameBn || me?.organization.name} — পোস্ট করা খাতা থেকে ব্যবসার সারসংক্ষেপ।`)}
         actions={<RangePicker value={range} onChange={setRange} />} />
 
       {(noBirds || (k?.overdueCount ?? 0) > 0 || (d?.lowStock?.length ?? 0) > 0) && (
@@ -41,19 +53,19 @@ export default function Dashboard() {
       {!d ? <Loading /> : <>
         {showMoney && (
           <div className="grid g4">
-            <Kpi icon={TrendingUp} label={t('Sales revenue', 'বিক্রয় আয়')} value={<Money v={k.revenue} />} sub={k.totalIncome !== k.revenue ? t(`Total income ${fmtMoney(k.totalIncome, lang)}`, `মোট আয় ${fmtMoney(k.totalIncome, lang)}`) : t('Net of discounts', 'ছাড় বাদে')} />
-            <Kpi icon={Receipt} tone="amber" label={t('Expenses', 'খরচ')} value={<Money v={k.expenses} />} sub={t('Costs incurred in the period', 'সময়কালে সংঘটিত খরচ')} />
-            <Kpi icon={k.netProfit >= 0 ? ArrowUpRight : ArrowDownRight} tone={k.netProfit >= 0 ? undefined : 'red'} label={t('Net profit', 'নিট মুনাফা')} value={<Money v={k.netProfit} />} sub={t(`Net margin ${fmtPct(k.netMargin, lang)}`, `নিট মার্জিন ${fmtPct(k.netMargin, lang)}`)} />
-            <Kpi icon={Wallet} tone="blue" label={t('Cash & bank', 'নগদ ও ব্যাংক')} value={<Money v={k.cash + k.bank} />} sub={t(`Cash ${fmtMoney(k.cash, lang)} · Bank ${fmtMoney(k.bank, lang)}`, `নগদ ${fmtMoney(k.cash, lang)} · ব্যাংক ${fmtMoney(k.bank, lang)}`)} />
+            <Kpi icon={TrendingUp} label={t('Sales revenue', 'বিক্রয় আয়')} value={<Money v={k.revenue} />} delta={ch('revenue', true)} spark={months.map(m => m.income)} sub={k.totalIncome !== k.revenue ? t(`Total income ${fmtMoney(k.totalIncome, lang)}`, `মোট আয় ${fmtMoney(k.totalIncome, lang)}`) : t('Net of discounts', 'ছাড় বাদে')} />
+            <Kpi icon={Receipt} tone="amber" label={t('Expenses', 'খরচ')} value={<Money v={k.expenses} />} delta={ch('expenses', false)} spark={months.map(m => m.expenses)} sub={t('Costs incurred in the period', 'সময়কালে সংঘটিত খরচ')} />
+            <Kpi icon={k.netProfit >= 0 ? ArrowUpRight : ArrowDownRight} tone={k.netProfit >= 0 ? undefined : 'red'} label={t('Net profit', 'নিট মুনাফা')} value={<Money v={k.netProfit} />} delta={ch('netProfit', true)} spark={months.map(m => m.profit)} sub={t(`Net margin ${fmtPct(k.netMargin, lang)}`, `নিট মার্জিন ${fmtPct(k.netMargin, lang)}`)} />
+            <Kpi icon={Wallet} tone="blue" label={t('Cash & bank', 'নগদ ও ব্যাংক')} value={<Money v={k.cash + k.bank} />} delta={k && p ? change(t, lang, k.cash + k.bank, p.cash + p.bank, true, vs) : null} sub={t(`Cash ${fmtMoney(k.cash, lang)} · Bank ${fmtMoney(k.bank, lang)}`, `নগদ ${fmtMoney(k.cash, lang)} · ব্যাংক ${fmtMoney(k.bank, lang)}`)} />
           </div>
         )}
         <div className="grid g4">
-          <Kpi icon={Egg} label={t('Eggs collected', 'সংগৃহীত ডিম')} value={fmtNum(k.eggsProduced, lang)} sub={t(`${fmtNum(k.eggsSold, lang)} sold`, `${fmtNum(k.eggsSold, lang)}টি বিক্রি`)} />
-          <Kpi icon={Bird} tone="amber" label={t('Laying rate', 'ডিম পাড়ার হার')} value={fmtPct(k.avgLayingRate, lang)} sub={t(`${fmtNum(k.birds, lang)} birds · ${fmtNum(k.mortality, lang)} lost`, `${fmtNum(k.birds, lang)}টি পাখি · ${fmtNum(k.mortality, lang)}টি মৃত`)} />
+          <Kpi icon={Egg} label={t('Eggs collected', 'সংগৃহীত ডিম')} value={fmtNum(k.eggsProduced, lang)} delta={ch('eggsProduced', true)} spark={days.map(x => x.eggs)} sub={t(`${fmtNum(k.eggsSold, lang)} sold`, `${fmtNum(k.eggsSold, lang)}টি বিক্রি`)} />
+          <Kpi icon={Bird} tone="amber" label={t('Laying rate', 'ডিম পাড়ার হার')} value={fmtPct(k.avgLayingRate, lang)} delta={ch('avgLayingRate', true, true)} spark={days.filter(x => x.layingRate != null).map(x => x.layingRate)} sub={t(`${fmtNum(k.birds, lang)} birds · ${fmtNum(k.mortality, lang)} lost`, `${fmtNum(k.birds, lang)}টি পাখি · ${fmtNum(k.mortality, lang)}টি মৃত`)} />
           {showMoney ? <>
-            <Kpi icon={CircleDollarSign} tone="blue" label={t('Receivables', 'পাওনা')} value={<Money v={k.receivables} />} sub={k.overdueCount ? t(`${fmtMoney(k.overdueAmount, lang)} overdue`, `${fmtMoney(k.overdueAmount, lang)} মেয়াদোত্তীর্ণ`) : t('Nothing overdue', 'মেয়াদোত্তীর্ণ নেই')} />
-            <Kpi icon={Truck} tone="red" label={t('Payables', 'দেনা')} value={<Money v={k.payables} />} sub={t(`Stock value ${fmtMoney(k.inventoryValue, lang)}`, `মজুদ মূল্য ${fmtMoney(k.inventoryValue, lang)}`)} />
-          </> : <Kpi icon={Package} label={t('Feed cost / egg', 'প্রতি ডিমে খাদ্য খরচ')} value={k.feedCostPerEgg === null ? '—' : fmtMoney(k.feedCostPerEgg, lang, { decimals: 2 })} />}
+            <Kpi icon={CircleDollarSign} tone="blue" label={t('Receivables', 'পাওনা')} value={<Money v={k.receivables} />} delta={ch('receivables', null)} sub={k.overdueCount ? t(`${fmtMoney(k.overdueAmount, lang)} overdue`, `${fmtMoney(k.overdueAmount, lang)} মেয়াদোত্তীর্ণ`) : t('Nothing overdue', 'মেয়াদোত্তীর্ণ নেই')} />
+            <Kpi icon={Truck} tone="red" label={t('Payables', 'দেনা')} value={<Money v={k.payables} />} delta={ch('payables', false)} sub={t(`Stock value ${fmtMoney(k.inventoryValue, lang)}`, `মজুদ মূল্য ${fmtMoney(k.inventoryValue, lang)}`)} />
+          </> : <Kpi icon={Package} label={t('Feed cost / egg', 'প্রতি ডিমে খাদ্য খরচ')} value={k.feedCostPerEgg === null ? '—' : fmtMoney(k.feedCostPerEgg, lang, { decimals: 2 })} delta={ch('feedCostPerEgg', false)} />}
         </div>
 
         {showMoney && (
