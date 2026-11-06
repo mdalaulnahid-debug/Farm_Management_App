@@ -1,0 +1,21 @@
+/* Brand-neutral design tokens: size, rhythm, layers and motion. Colours and fonts come from a theme file. */
+:root {
+  --fs: 14px;
+  --radius: 10px;
+  --radius-sm: 7px;
+  --gap: 16px;
+  --row: 40px;
+  /* Layers, lowest to highest. */
+  --z-dropdown: 40;
+  --z-sticky: 45;
+  --z-backdrop: 50;
+  --z-modal: 55;
+  --z-toast: 60;
+  /* Motion: short, eased out, never bouncy. */
+  --dur-fast: .12s;
+  --dur: .18s;
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+}
+:root[data-density='compact'] { --gap: 12px; --row: 34px; --fs: 13px; }
+/* Settings › Appearance › Motion: "Reduce" stops animations and transitions in this browser, like the device setting does. */
+:root[data-motion='reduce'] *, :root[data-motion='reduce'] *::before, :root[data-motion='reduce'] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

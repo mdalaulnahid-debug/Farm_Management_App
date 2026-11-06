@@ -190,6 +190,11 @@ export default function MyAccount() {
             <Card title={t('About', 'সম্পর্কে')} pad>
               <Row label="FarmLedger ERP" hint={t('Version 1.0', 'সংস্করণ ১.০')}><span className="sample">{nameOf(me.organization, lang)}</span></Row>
               <Row label={t('Where settings are saved', 'সেটিংস কোথায় থাকে')} hint={t('Language is saved to your account. Everything else on this page is saved in this browser only.', 'ভাষা আপনার অ্যাকাউন্টে সংরক্ষিত। এই পাতার বাকি সব শুধু এই ব্রাউজারে।')}><span /></Row>
+              {can('settings.manage') && (
+                <Row label={t('Design reference', 'ডিজাইন রেফারেন্স')} hint={t('Every colour and building block of the shared design system, for checking the look.', 'শেয়ার করা ডিজাইন সিস্টেমের প্রতিটি রং ও অংশ, চেহারা যাচাইয়ের জন্য।')}>
+                  <Link className="btn" to="/system"><Palette size={16} />{t('Open', 'খুলুন')}</Link>
+                </Row>
+              )}
               <Row label={t('Reset display settings', 'প্রদর্শন সেটিংস রিসেট')} hint={t('Theme, colour, density, text size, motion, calendar and start page go back to their defaults. Language is kept.', 'থিম, রং, ঘনত্ব, লেখার আকার, অ্যানিমেশন, সন ও শুরুর পাতা আগের মতো হবে। ভাষা বদলাবে না।')}>
                 <button type="button" className="btn" onClick={() => { reset(); toast(t('Display settings reset.', 'প্রদর্শন সেটিংস রিসেট হয়েছে।')); }}><RotateCcw size={16} />{t('Reset', 'রিসেট')}</button>
               </Row>

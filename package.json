@@ -5,14 +5,15 @@
   "description": "FarmLedger ERP — farm business management: sales, purchases, cash, inventory, production and double-entry accounting.",
   "workspaces": [
     "apps/api",
-    "apps/web"
+    "apps/web",
+    "packages/*"
   ],
   "scripts": {
     "setup": "npm install && npm run db:setup -w apps/api",
     "dev": "concurrently -k -n api,web -c green,cyan \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
     "build": "npm run build -w apps/web && npm run build -w apps/api",
     "start": "npm run start -w apps/api",
-    "test": "npm run test -w apps/api",
+    "test": "npm run test -w apps/api && npm run test -w packages/design-system",
     "typecheck": "npm run typecheck -w apps/api && npm run typecheck -w apps/web"
   },
   "devDependencies": {

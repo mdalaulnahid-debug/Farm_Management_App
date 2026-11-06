@@ -1,0 +1,25 @@
+{
+  "name": "@farmledger/design-system",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Brand-neutral tokens and React components. FarmLedger's BDP Agrofarm look is one theme (themes/bdp.css).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./src/tokens.css",
+    "./components.css": "./src/components.css",
+    "./themes/bdp.css": "./src/themes/bdp.css",
+    "./tokens.json": "./tokens.json"
+  },
+  "scripts": {
+    "tokens": "node scripts/build-tokens.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "lucide-react": ">=0.400.0",
+    "react": ">=19"
+  }
+}
