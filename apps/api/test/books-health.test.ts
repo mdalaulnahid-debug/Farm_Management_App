@@ -16,7 +16,7 @@ const PASSWORD = 'TestOwner2026';
 // A quiet future month that no other test file reports on (only the owner may date entries ahead).
 const day = () => '2027-06-15';
 const call = async (method: string, url: string, payload?: unknown, c = cookie) => {
-  const res = await app.inject({ method: method as any, url: `/api/v1${url}`, payload: withVoucher(method, url, payload) as any, headers: c ? { cookie: c } : {} });
+  const res = await app.inject({ method: method as any, url: `/api/v1${url}`, payload: (await withVoucher(method, url, payload)) as any, headers: c ? { cookie: c } : {} });
   if (res.statusCode !== 200) throw new Error(`${method} ${url}: ${res.statusCode} ${res.body}`);
   return res.json() as any;
 };

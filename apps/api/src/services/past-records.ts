@@ -20,6 +20,7 @@ import { recordGrant } from './projects.js';
 import { adjustStock, recordProduction } from './operations.js';
 import { audit, nextNumber, type Actor } from './common.js';
 import type { Docs } from './importer.js';
+import { importCutoffError } from './vouchers.js';
 
 // ───────────── The template ─────────────
 
@@ -691,6 +692,8 @@ export async function previewTemplate(actor: Actor | null, p: ParsedTemplate) {
   const org = await prisma.organization.findUnique({ where: { id: 'org' } });
   const issues = [...p.issues];
   if (p.from && org?.lockDate && toDate(p.from) <= org.lockDate) issues.unshift({ sheet: 'Start', row: p.start!.row, column: 'Start date', message: `The books are closed up to ${ymd(org.lockDate)}. Reopen that period first.` });
+  const cutoff = await importCutoffError(prisma, p.to ? toDate(p.to) : null);
+  if (cutoff) issues.unshift({ sheet: 'Start', row: p.start?.row ?? 1, column: 'Dates', message: cutoff });
   // The real import, rolled back: it finds every problem the import would hit.
   const run = await prisma.$transaction(async db => {
     const r = await runTemplate(db, actor, p, { dryRun: true });
@@ -707,6 +710,8 @@ export async function previewTemplate(actor: Actor | null, p: ParsedTemplate) {
 
 export async function importTemplate(db: Db, actor: Actor | null, p: ParsedTemplate, opts: { fileName?: string | null; confirmOverlap: boolean }) {
   if (p.issues.length) throw badRequest('Fix the problems shown in the preview, then upload the file again.');
+  const cutoff = await importCutoffError(db, p.to ? toDate(p.to) : null);
+  if (cutoff) throw badRequest(cutoff);
   const guards = await guardsOf(db, p);
   if (guards.duplicateOf) throw conflict(`These records, or another file with the same start date, were already imported as ${guards.duplicateOf}. Undo that import first if this file replaces it.`);
   if (guards.overlap && !opts.confirmOverlap) throw badRequest('The books already have records in these dates. Tick the box to confirm you are not entering them twice.');

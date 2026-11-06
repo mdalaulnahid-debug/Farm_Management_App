@@ -8,7 +8,7 @@ import type { Permission } from '../lib/constants.js';
 import { parse, zDate, zId, zMoney, zOptDate, zOptText, zQty, zRange, zReason } from '../lib/validate.js';
 import { ADJUSTMENT_TYPES, PAYMENT_METHODS } from '../lib/constants.js';
 import { endOf } from '../lib/dates.js';
-import { actorOf, can } from '../auth/auth.js';
+import { actorOf, can, signedInEarly } from '../auth/auth.js';
 import { createInvoice, voidInvoice } from '../services/sales.js';
 import { createBill, voidBill } from '../services/purchases.js';
 import { createPayment, voidPayment } from '../services/payments.js';
@@ -16,6 +16,7 @@ import { adjustStock, cashCount, recordProduction, transfer, voidAdjustment, voi
 import { postEntry, reverseEntry } from '../services/ledger.js';
 import { listAttachments } from './attachments.js';
 import { saveVoucher, voucherMissing, zVoucher } from '../services/vouchers.js';
+import { badRequest } from '../lib/errors.js';
 import { audit, ownSameDay } from '../services/common.js';
 
 const listQuery = zRange.extend({
@@ -45,6 +46,19 @@ async function voidGate(req: FastifyRequest, perm: Permission, find: () => Promi
   }
   if (!ownSameDay(u, rec)) throw forbidden('Only the owner or an admin can change entries from an earlier day or entered by someone else.');
   return true;
+}
+
+/** Cash, bank and mobile-money accounts: the farm's own money. */
+export const MONEY_SUBTYPES = ['CASH', 'BANK'];
+/** Money a journal takes out of the farm's own money accounts to somewhere else (0 when it only moves money between
+ *  them, or touches no money account). */
+export async function moneyOut(lines: { accountId: string; debit?: number; credit?: number }[]) {
+  const accounts = await prisma.account.findMany({ where: { id: { in: lines.map(l => l.accountId) } }, select: { id: true, subtype: true } });
+  const isMoney = (id: string) => MONEY_SUBTYPES.includes(accounts.find(a => a.id === id)?.subtype ?? '');
+  const r2 = (v: number) => Math.round(v * 100) / 100;
+  const out = r2(lines.filter(l => isMoney(l.accountId)).reduce((a, l) => a + Number(l.credit ?? 0) - Number(l.debit ?? 0), 0));
+  const elsewhere = lines.some(l => !isMoney(l.accountId) && Number(l.debit ?? 0) > 0);
+  return out > 0 && elsewhere ? out : 0;
 }
 
 export default async function transactionRoutes(app: FastifyInstance) {
@@ -113,7 +127,7 @@ export default async function transactionRoutes(app: FastifyInstance) {
     return { ...bill, attachments: await listAttachments('BILL', bill.id), voucher: await prisma.voucher.findUnique({ where: { ownerType_ownerId: { ownerType: 'BILL', ownerId: bill.id } } }) };
   });
   // Spending is saved only with its voucher (photo + amount as written), in one transaction: no bill without it.
-  app.post('/bills', { preHandler: can('purchases.create'), bodyLimit: 8 * 1024 * 1024 }, async req => {
+  app.post('/bills', { onRequest: signedInEarly, preHandler: can('purchases.create'), bodyLimit: 8 * 1024 * 1024 }, async req => {
     const body = parse(z.object({
       date: zDate, dueDate: zOptDate, supplierId: zOptText(40), reference: zOptText(60), notes: zOptText(500),
       lines: z.array(z.object({ itemId: zOptText(40), accountId: zOptText(40), description: z.string().max(200).optional(), quantity: zQty, unitPrice: zMoney })).min(1).max(100),
@@ -125,7 +139,7 @@ export default async function transactionRoutes(app: FastifyInstance) {
     const actor = actorOf(req);
     return tx(async db => {
       const made = await createBill(db, actor, bill);
-      await saveVoucher(db, actor, 'BILL', { id: made.id, number: made.number, total: Number(made.total) }, voucher);
+      await saveVoucher(db, actor, 'BILL', { id: made.id, number: made.number, total: Number(made.total), date: made.date, partyId: made.supplierId }, voucher);
       return made;
     });
   });
@@ -172,7 +186,7 @@ export default async function transactionRoutes(app: FastifyInstance) {
     const accounts = await prisma.account.findMany({ where: { id: { in: [pay.cashAccountId, pay.counterAccountId] } }, select: { id: true, code: true, name: true, nameBn: true } });
     return { ...pay, cashAccount: accounts.find(a => a.id === pay.cashAccountId) ?? null, counterAccount: accounts.find(a => a.id === pay.counterAccountId) ?? null, attachments: await listAttachments('PAYMENT', pay.id), voucher: await prisma.voucher.findUnique({ where: { ownerType_ownerId: { ownerType: 'PAYMENT', ownerId: pay.id } } }) };
   });
-  app.post('/payments', { preHandler: can('banking.view'), bodyLimit: 8 * 1024 * 1024 }, async req => {
+  app.post('/payments', { onRequest: signedInEarly, preHandler: can('banking.view'), bodyLimit: 8 * 1024 * 1024 }, async req => {
     const body = parse(z.object({
       direction: z.enum(['IN', 'OUT']), date: zDate, partyId: zOptText(40), cashAccountId: zId, counterAccountId: zOptText(40), amount: zMoney,
       method: z.enum(PAYMENT_METHODS).optional(), reference: zOptText(60), notes: zOptText(500),
@@ -188,7 +202,7 @@ export default async function transactionRoutes(app: FastifyInstance) {
     const actor = actorOf(req);
     return tx(async db => {
       const made = await createPayment(db, actor, payment);
-      if (payment.direction === 'OUT') await saveVoucher(db, actor, 'PAYMENT', { id: made.id, number: made.number, total: Number(made.amount) }, voucher!);
+      if (payment.direction === 'OUT') await saveVoucher(db, actor, 'PAYMENT', { id: made.id, number: made.number, total: Number(made.amount), date: made.date, partyId: made.partyId }, voucher!);
       return made;
     });
   });
@@ -208,7 +222,8 @@ export default async function transactionRoutes(app: FastifyInstance) {
   app.get('/cash-counts', { preHandler: can('banking.view') }, async () => ({ data: await prisma.cashCount.findMany({ orderBy: { date: 'desc' }, take: 100 }) }));
   app.post('/cash-counts', { preHandler: can('banking.manage') }, async req => {
     const body = parse(z.object({ date: zDate, accountId: zId, counted: zMoney, notes: zOptText(300), postVariance: z.boolean().default(false) }), req.body);
-    return tx(db => cashCount(db, actorOf(req), body));
+    // A shortage written off has no voucher, so only the owner may approve it, with a reason.
+    return tx(db => cashCount(db, actorOf(req), { ...body, ownerApproves: req.user!.role.key === 'owner' }));
   });
 
   // ───── Manual journals ─────
@@ -224,14 +239,21 @@ export default async function transactionRoutes(app: FastifyInstance) {
     ]);
     return { data, total };
   });
-  app.post('/journals', { preHandler: can('accounting.manage') }, async req => {
+  app.post('/journals', { onRequest: signedInEarly, preHandler: can('accounting.manage'), bodyLimit: 8 * 1024 * 1024 }, async req => {
     const body = parse(z.object({
       date: zDate, memo: z.string().trim().min(3).max(300), opening: z.boolean().default(false),
       lines: z.array(z.object({ accountId: zId, debit: zMoney.default(0), credit: zMoney.default(0), partyId: zOptText(40), memo: zOptText(200) })).min(2).max(100),
+      voucher: zVoucher.nullish(),
     }), req.body);
+    // Money leaving the farm's cash/bank/mobile accounts for anything that is not another of those accounts is
+    // spending, and needs its voucher like a payment. Moves between own accounts and non-cash adjustments do not.
+    const spent = body.opening ? 0 : await moneyOut(body.lines);
+    if (spent > 0.005 && !body.voucher) throw voucherMissing();
+    const actor = actorOf(req);
     return tx(async db => {
-      const je = await postEntry(db, actorOf(req), { date: body.date, memo: body.memo, sourceType: body.opening ? 'OPENING' : 'MANUAL', lines: body.lines });
-      await audit(db, actorOf(req), 'create', 'journal', je.id, `Journal ${je.number}: ${body.memo}`);
+      const je = await postEntry(db, actor, { date: body.date, memo: body.memo, sourceType: body.opening ? 'OPENING' : 'MANUAL', lines: body.lines });
+      await audit(db, actor, 'create', 'journal', je.id, `Journal ${je.number}: ${body.memo}`);
+      if (spent > 0.005) await saveVoucher(db, actor, 'JOURNAL', { id: je.id, number: je.number, total: spent, date: je.date, partyId: body.lines.find(l => l.partyId)?.partyId ?? null }, body.voucher!);
       return je;
     });
   });

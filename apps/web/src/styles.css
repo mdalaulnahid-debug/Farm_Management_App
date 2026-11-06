@@ -440,3 +440,5 @@
 @media (max-width: 700px) {
   .voucher-grid, .vcheck { grid-template-columns: 1fr; }
 }
+.vcheck-removed { position: relative; opacity: .7; outline: 2px dashed var(--danger); outline-offset: -2px; }
+.vcheck-removed span { position: absolute; left: 0; right: 0; bottom: 0; padding: 4px 8px; background: rgba(120, 20, 20, .8); color: #fff; font-size: .78em; }

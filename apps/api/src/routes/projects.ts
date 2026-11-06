@@ -5,7 +5,8 @@ import { prisma, tx } from '../db.js';
 import { conflict, notFound } from '../lib/errors.js';
 import { parse, zDate, zId, zMoney, zOptText } from '../lib/validate.js';
 import { PAYMENT_METHODS, PROJECT_KINDS, SYS } from '../lib/constants.js';
-import { actorOf, can } from '../auth/auth.js';
+import { actorOf, can, signedInEarly } from '../auth/auth.js';
+import { saveVoucher, voucherMissing, zVoucher } from '../services/vouchers.js';
 import { audit } from '../services/common.js';
 import { projectSummary, projectTransfer, recordGrant } from '../services/projects.js';
 
@@ -49,9 +50,17 @@ export default async function projectRoutes(app: FastifyInstance) {
       }),
     };
   });
-  app.post('/project-transfers', { preHandler: can('banking.manage') }, async req => {
-    const b = parse(z.object({ date: zDate, projectId: zId, direction: z.enum(['OUT', 'IN']), cashAccountId: zId, amount: zMoney, memo: zOptText(200) }), req.body);
-    return tx(db => projectTransfer(db, actorOf(req), b));
+  // Money sent out to a side project leaves the farm: it is spending, and needs its voucher.
+  app.post('/project-transfers', { onRequest: signedInEarly, preHandler: can('banking.manage'), bodyLimit: 8 * 1024 * 1024 }, async req => {
+    const body = parse(z.object({ date: zDate, projectId: zId, direction: z.enum(['OUT', 'IN']), cashAccountId: zId, amount: zMoney, memo: zOptText(200), voucher: zVoucher.nullish() }), req.body);
+    const { voucher, ...b } = body;
+    if (b.direction === 'OUT' && !voucher) throw voucherMissing();
+    const actor = actorOf(req);
+    return tx(async db => {
+      const je = await projectTransfer(db, actor, b);
+      if (b.direction === 'OUT') await saveVoucher(db, actor, 'JOURNAL', { id: je.id, number: je.number, total: b.amount, date: je.date }, voucher!);
+      return je;
+    });
   });
 
   app.get('/grants', { preHandler: can('banking.view') }, async () => {

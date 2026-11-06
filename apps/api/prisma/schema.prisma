@@ -37,6 +37,9 @@ model Organization {
   remindersOn      Boolean   @default(true)
   reminderMorning  String    @default("10:00")
   reminderEvening  String    @default("17:00")
+  /// The voucher rule's go-live date: imports of past records may not contain anything dated on or after it.
+  /// Set once on the first start of this version (or by VOUCHER_RULE_FROM).
+  voucherRuleFrom  DateTime?
   updatedAt        DateTime  @updatedAt
 }
 
@@ -485,6 +488,8 @@ model Attachment {
   size        Int
   data        Bytes
   sha256      String   @default("")
+  /// One of the photos the record was saved with (its voucher), not one added later.
+  isVoucher   Boolean  @default(false)
   createdById String?
   createdAt   DateTime @default(now())
   /// A wrong photo is hidden, never deleted: who removed it and when. The bytes stay as evidence.
@@ -499,8 +504,9 @@ model Attachment {
 // accountant then checks it against the entry: MATCHES or MISMATCH, with who and when.
 model Voucher {
   id          String    @id @default(cuid())
-  ownerType   String    // PAYMENT | BILL
+  ownerType   String    // PAYMENT | BILL | JOURNAL (manual journal or side-project transfer paying money out)
   ownerId     String
+  partyId     String?   // supplier/payee, so the same voucher number cannot be used twice with them
   number      String?   // as written on the paper, if it has one
   date        DateTime
   amount      Decimal

@@ -8,6 +8,7 @@ import { downloadCsv, fmtDate, fmtMoney, round2, ymd } from '../lib/format';
 import { Alert, Badge, Card, Drawer, Empty, Field, Input, Loading, PageHeader, RangePicker, SearchBox, Segmented, Select, StatusBadge, Tabs, thisMonth, VoidDialog, type Range } from '../components/ui';
 import { ledgerWindow } from '../assets/photos';
 import { accountOptions, Money } from '../components/forms';
+import { emptyVoucher, VoucherFields, voucherOk, voucherPayload, type VoucherValue } from '../components/VoucherFields';
 
 type T = (en: string, bn: string) => string;
 
@@ -371,7 +372,14 @@ function JournalDrawer({ onClose }: { onClose: () => void }) {
   const bothSides = used.some(l => amt(l.debit) > 0 && amt(l.credit) > 0);
   const lockDate = me?.organization.lockDate?.slice(0, 10) ?? null;
   const locked = !!lockDate && form.date <= lockDate;
-  const valid = used.length >= 2 && !missingAccount && !bothSides && diff === 0 && dr > 0 && form.memo.trim().length >= 3 && !!form.date && !locked;
+  // Money leaving the farm's cash/bank/mobile accounts for anything else is spending: it needs its voucher.
+  const isMoney = (id: string) => ['CASH', 'BANK'].includes(accounts.data?.data.find(a => a.id === id)?.subtype ?? '');
+  const spent = form.opening ? 0 : (() => {
+    const out = round2(used.filter(l => isMoney(l.accountId)).reduce((s, l) => s + amt(l.credit) - amt(l.debit), 0));
+    return out > 0 && used.some(l => !isMoney(l.accountId) && amt(l.debit) > 0) ? out : 0;
+  })();
+  const [voucher, setVoucher] = useState<VoucherValue>(emptyVoucher);
+  const valid = used.length >= 2 && !missingAccount && !bothSides && diff === 0 && dr > 0 && form.memo.trim().length >= 3 && !!form.date && !locked && (spent === 0 || voucherOk(voucher, spent));
 
   // Puts the remaining difference on the given line, on whichever side balances the entry.
   const balanceOn = (i: number) => {
@@ -383,6 +391,7 @@ function JournalDrawer({ onClose }: { onClose: () => void }) {
   const submit = () => save.mutate({
     date: form.date, memo: form.memo.trim(), opening: form.opening,
     lines: used.map(l => ({ accountId: l.accountId, debit: amt(l.debit), credit: amt(l.credit), partyId: l.partyId || null, memo: l.memo.trim() || null })),
+    ...(spent > 0 ? { voucher: voucherPayload(voucher) } : {}),
   }, { onSuccess: onClose });
 
   return (
@@ -460,6 +469,7 @@ function JournalDrawer({ onClose }: { onClose: () => void }) {
       </div>
       {used.length < 2 && <small className="muted">{t('Fill in at least two lines with an amount.', 'কমপক্ষে দুটি লাইনে টাকা দিন।')}</small>}
       {missingAccount && <small className="neg">{t('Choose an account for every line with an amount.', 'টাকা দেওয়া প্রতিটি লাইনে হিসাব বাছাই করুন।')}</small>}
+      {spent > 0 && <VoucherFields value={voucher} onChange={setVoucher} total={spent} />}
     </Drawer>
   );
 }

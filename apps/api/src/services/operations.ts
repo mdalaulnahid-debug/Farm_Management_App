@@ -1,7 +1,7 @@
 // Farm operations that touch stock and the books: daily production, stock adjustments,
 // transfers between cash/bank accounts, and physical cash counts.
 import type { Db } from '../db.js';
-import { badRequest, conflict, notFound } from '../lib/errors.js';
+import { badRequest, conflict, notFound, forbidden } from '../lib/errors.js';
 import { money, num, qty as q3, round2 } from '../lib/money.js';
 import { SYS } from '../lib/constants.js';
 import { accountBalance, accountId, assertRecentDate, postEntry, reverseEntry } from './ledger.js';
@@ -179,12 +179,16 @@ export async function transfer(db: Db, actor: Actor | null, input: { date: Date;
   return je;
 }
 
-export async function cashCount(db: Db, actor: Actor | null, input: { date: Date; accountId: string; counted: number; notes?: string | null; postVariance?: boolean }) {
+export async function cashCount(db: Db, actor: Actor | null, input: { date: Date; accountId: string; counted: number; notes?: string | null; postVariance?: boolean; ownerApproves?: boolean }) {
   const account = await db.account.findUnique({ where: { id: input.accountId } });
   if (!account || !['CASH', 'BANK'].includes(account.subtype)) throw badRequest('Choose a cash or bank account.');
   const book = await accountBalance(db, account.id, new Date(input.date.getTime() + 86_399_999));
   const counted = money(input.counted);
   const variance = round2(counted - book);
+  // A shortage written off as an expense has no voucher: only the owner may approve it, and must say why.
+  const writesOffShortage = !!input.postVariance && variance <= -0.01;
+  if (writesOffShortage && input.ownerApproves === false) throw forbidden('Only the owner can write off a cash shortage.');
+  if (writesOffShortage && !input.notes?.trim()) throw badRequest('Write the reason for the shortage.');
   const count = await db.cashCount.create({ data: { date: input.date, accountId: account.id, bookBalance: book, counted, variance, notes: input.notes ?? null, createdById: actor?.id ?? null } });
   if (input.postVariance && Math.abs(variance) >= 0.01) {
     const shortage = await accountId(db, SYS.CASH_SHORTAGE);
@@ -195,6 +199,8 @@ export async function cashCount(db: Db, actor: Actor | null, input: { date: Date
         : [{ accountId: shortage, debit: -variance }, { accountId: account.id, credit: -variance }],
     });
   }
-  await audit(db, actor, 'create', 'cash_count', count.id, `Counted ${counted} vs book ${book} (${variance})`);
+  await audit(db, actor, 'create', 'cash_count', count.id, writesOffShortage
+    ? `Cash shortage of ${-variance} written off by the owner: ${input.notes?.trim()}`
+    : `Counted ${counted} vs book ${book} (${variance})`);
   return count;
 }

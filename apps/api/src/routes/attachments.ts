@@ -7,14 +7,13 @@ import { z } from 'zod';
 import { prisma } from '../db.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { parse } from '../lib/validate.js';
-import { actorOf, can } from '../auth/auth.js';
+import { actorOf, can, signedInEarly } from '../auth/auth.js';
 import { audit } from '../services/common.js';
 import type { Permission } from '../lib/constants.js';
-import { addPhoto, decodePhoto, MAX_PHOTO_BYTES } from '../services/vouchers.js';
+import { addPhoto, decodePhoto, MAX_PHOTO_BYTES, photoRateLimit, UPLOADS_PER_MINUTE } from '../services/vouchers.js';
 
 export const MAX_BYTES = MAX_PHOTO_BYTES;
-/** Uploads per person per minute. */
-export const UPLOADS_PER_MINUTE = 20;
+export { UPLOADS_PER_MINUTE };
 const KINDS = {
   payments: {
     type: 'PAYMENT', label: 'Payment', view: 'banking.view', remove: 'banking.manage',
@@ -27,6 +26,12 @@ const KINDS = {
     create: [['purchases.view', 'purchases.create']],
     find: (id: string) => prisma.bill.findUnique({ where: { id }, select: { id: true, number: true, status: true } }),
   },
+  // Manual journals and side-project transfers that paid money out (their voucher photos).
+  journals: {
+    type: 'JOURNAL', label: 'Journal', view: 'banking.view', remove: 'accounting.manage',
+    create: [['banking.view', 'accounting.manage'], ['banking.view', 'banking.manage']],
+    find: (id: string) => prisma.journalEntry.findUnique({ where: { id }, select: { id: true, number: true, status: true } }),
+  },
 } as const;
 
 /** Signed in and holding every permission of at least one of the sets. */
@@ -36,15 +41,6 @@ const canAny = (sets: readonly (readonly string[])[]) => async (req: FastifyRequ
   if (!sets.some(set => set.every(p => mine.includes(p as Permission)))) throw forbidden();
 };
 
-/** A simple per-person sliding window, so one account cannot fill the database with photos. */
-const recent = new Map<string, number[]>();
-function tooMany(userId: string, now = Date.now()) {
-  const times = (recent.get(userId) ?? []).filter(t => now - t < 60_000);
-  if (times.length >= UPLOADS_PER_MINUTE) { recent.set(userId, times); return true; }
-  times.push(now);
-  recent.set(userId, times);
-  return false;
-}
 
 /** A checked voucher (MATCHES or MISMATCH) locks the record's photos. */
 const checkedVoucher = async (ownerType: string, ownerId: string) =>
@@ -57,9 +53,9 @@ export function listAttachments(ownerType: string, ownerId: string) {
 
 export default async function attachmentRoutes(app: FastifyInstance) {
   for (const [path, k] of Object.entries(KINDS)) {
-    app.post(`/${path}/:id/attachments`, { preHandler: canAny(k.create), bodyLimit: 2.5 * 1024 * 1024 }, async req => {
+    app.post(`/${path}/:id/attachments`, { onRequest: signedInEarly, preHandler: canAny(k.create), bodyLimit: 2.5 * 1024 * 1024 }, async req => {
       const actor = actorOf(req);
-      if (tooMany(req.user!.id)) throw badRequest(`Too many photos at once. Wait a minute (${UPLOADS_PER_MINUTE} per minute at most).`);
+      photoRateLimit(req.user!.id);
       const { dataUrl } = parse(z.object({ dataUrl: z.string().max(2.1 * 1024 * 1024) }), req.body);
       const owner = await k.find((req.params as any).id);
       if (!owner) throw notFound(k.label);
@@ -67,7 +63,7 @@ export default async function attachmentRoutes(app: FastifyInstance) {
       if (await checkedVoucher(k.type, owner.id)) throw badRequest('This voucher has been checked; its photos are locked.');
       const photo = decodePhoto(dataUrl);
       // Count and create together, so two uploads at once cannot pass the limit.
-      return prisma.$transaction(db => addPhoto(db, actor, k.type as 'PAYMENT' | 'BILL', owner, photo));
+      return prisma.$transaction(db => addPhoto(db, actor, k.type as 'PAYMENT' | 'BILL' | 'JOURNAL', owner, photo));
     });
 
     app.get(`/${path}/:id/attachments/:aid`, { preHandler: can(k.view as Permission) }, async (req, reply: FastifyReply) => {
@@ -79,8 +75,11 @@ export default async function attachmentRoutes(app: FastifyInstance) {
 
     app.delete(`/${path}/:id/attachments/:aid`, { preHandler: can(k.remove as Permission) }, async req => {
       const { id, aid } = req.params as any;
-      const a = await prisma.attachment.findFirst({ where: { id: aid, ownerType: k.type, ownerId: id, removedAt: null }, select: { id: true, size: true, sha256: true } });
+      const a = await prisma.attachment.findFirst({ where: { id: aid, ownerType: k.type, ownerId: id, removedAt: null }, select: { id: true, size: true, sha256: true, isVoucher: true } });
       if (!a) throw notFound('Photo');
+      // The photos the spending was saved with are the evidence: only the owner or a checker may remove one.
+      const mine = req.user!.permissions as readonly string[];
+      if (a.isVoucher && req.user!.role.key !== 'owner' && !mine.includes('accounting.manage')) throw forbidden('Only the owner or the accountant can remove the original voucher photo.');
       const voucher = await prisma.voucher.findUnique({ where: { ownerType_ownerId: { ownerType: k.type, ownerId: id } } });
       if (voucher && voucher.status !== 'UNCHECKED') throw badRequest('This voucher has been checked; its photos are locked.');
       if (voucher && (await prisma.attachment.count({ where: { ownerType: k.type, ownerId: id, removedAt: null } })) <= 1) {

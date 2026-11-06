@@ -23,6 +23,9 @@ import backupRoutes from './routes/backup.js';
 import myDayRoutes from './routes/my-day.js';
 import reminderRoutes from './routes/reminders.js';
 import { startReminderScheduler } from './services/reminders.js';
+import { ensureWalkInKey } from './services/sales.js';
+import { ensureVoucherRuleFrom } from './services/vouchers.js';
+import { farmYmd } from './lib/farm-time.js';
 import { ensureReferenceData } from './services/reference.js';
 import { startBackupScheduler } from './services/backup.js';
 import { sealAudit } from './services/audit-chain.js';
@@ -149,6 +152,9 @@ if (isMain) {
   setInterval(seal, 5 * 60_000).unref();
   // Daily reminders to data-entry staff at the farm's chosen times (Settings → Organization).
   startReminderScheduler(prisma, app.log);
+  // One-off, idempotent start-up steps: mark the walk-in customer, and remember the voucher rule's go-live date.
+  await ensureWalkInKey(prisma, app.log);
+  await ensureVoucherRuleFrom(prisma, farmYmd());
   // Say at start-up what is not set up safely, so it shows in the server window and log.
   securityCheck(prisma).then(r => {
     for (const c of r.checks) if (c.level !== 'ok') app.log.warn(`Security ${c.level === 'fail' ? 'PROBLEM' : 'warning'}: ${c.title.en} ${c.fix?.en ?? ''}`);

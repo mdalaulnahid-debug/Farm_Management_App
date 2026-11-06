@@ -9,8 +9,8 @@ import { withVoucher } from './helpers/voucher.js';
 let app: FastifyInstance;
 let cookie = '';
 const PASSWORD = 'TestOwner2026';
-const req = (method: string, url: string, payload?: unknown) =>
-  app.inject({ method: method as any, url: `/api/v1${url}`, payload: withVoucher(method, url, payload) as any, headers: { cookie } });
+const req = async (method: string, url: string, payload?: unknown) =>
+  app.inject({ method: method as any, url: `/api/v1${url}`, payload: (await withVoucher(method, url, payload)) as any, headers: { cookie } });
 const ok = async (method: string, url: string, payload?: unknown) => {
   const res = await req(method, url, payload);
   if (res.statusCode !== 200) throw new Error(`${method} ${url}: ${res.statusCode} ${res.body}`);
@@ -92,12 +92,14 @@ describe('slip photos', () => {
 
   it('limits how many photos one person can send per minute', async () => {
     let refused = 0;
+    // Every photo counts: the voucher photo a payment out is saved with, and photos added afterwards.
     for (let i = 0; i < 25 && !refused; i++) {
-      const pay = await ok('POST', '/payments', { direction: 'OUT', date: '2027-08-04', cashAccountId: await acc('1010'), counterAccountId: await acc('6090'), amount: 1, notes: `Rate ${i}` });
-      const res = await req('POST', `/payments/${pay.id}/attachments`, { dataUrl: url('image/jpeg', jpeg) });
+      const made = await req('POST', '/payments', { direction: 'OUT', date: '2027-08-04', cashAccountId: await acc('1010'), counterAccountId: await acc('6090'), amount: 1, notes: `Rate ${i}` });
+      if (made.statusCode === 400 && /Too many/.test(made.body)) { refused = i + 1; break; }
+      const res = await req('POST', `/payments/${made.json().id}/attachments`, { dataUrl: url('image/jpeg', Buffer.concat([jpeg, Buffer.from([i])])) });
       if (res.statusCode === 400 && /Too many/.test(res.body)) refused = i + 1;
     }
     expect(refused).toBeGreaterThan(0);
-    expect(refused).toBeLessThanOrEqual(21);
+    expect(refused).toBeLessThanOrEqual(11); // 2 photos per round, 20 per minute
   });
 });

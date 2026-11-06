@@ -14,7 +14,7 @@ let cookie = '';
 const PASSWORD = 'TestOwner2026';
 
 const call = async (method: string, url: string, payload?: unknown, c = cookie) => {
-  const res = await app.inject({ method: method as any, url: `/api/v1${url}`, payload: withVoucher(method, url, payload) as any, headers: c ? { cookie: c } : {} });
+  const res = await app.inject({ method: method as any, url: `/api/v1${url}`, payload: (await withVoucher(method, url, payload)) as any, headers: c ? { cookie: c } : {} });
   return { status: res.statusCode, body: res.json() as any };
 };
 const id = async (code: string) => (await prisma.account.findUniqueOrThrow({ where: { code } })).id;
@@ -251,7 +251,8 @@ describe('grants and side projects', () => {
   });
 
   it('can void a side-project transfer', async () => {
-    const list = (await call('GET', '/project-transfers')).body.data;
+    // Only this test's cow transfers (other test files may have their own side projects).
+    const list = (await call('GET', '/project-transfers')).body.data.filter((t: any) => t.project?.code === 'COW');
     expect(list).toHaveLength(2);
     expect((await call('POST', `/journals/${list[0].id}/void`, { reason: 'entered by mistake' })).status).toBe(200);
     const summary = (await call('GET', '/projects/summary')).body.data;

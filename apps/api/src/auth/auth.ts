@@ -116,6 +116,10 @@ export const can = (...perms: Permission[]) => async (req: FastifyRequest, reply
   if (perms.length && !perms.every(p => req.user!.permissions.includes(p))) throw forbidden();
 };
 export const authed = can();
+/** For routes that accept large uploads: refuse anyone not signed in before the body is even read (onRequest). */
+export const signedInEarly = async (req: FastifyRequest) => {
+  if (!req.user) throw unauthorized();
+};
 /** Signed in, even on a temporary password. Only for what the "set a new password" screen needs. */
 export const signedIn = async (req: FastifyRequest, _reply: FastifyReply) => {
   if (!req.user) throw unauthorized();

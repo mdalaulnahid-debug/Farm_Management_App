@@ -8,11 +8,13 @@ import { useApi, useSave } from '../lib/hooks';
 import { fmtDate } from '../lib/format';
 import { Badge, Card, Empty, Input, Loading, PageHeader, Segmented } from '../components/ui';
 import { Money } from '../components/forms';
+import { useAuth } from '../lib/auth';
 
 type Status = 'UNCHECKED' | 'MISMATCH' | 'MATCHES';
 interface Row {
-  id: string; ownerType: 'BILL' | 'PAYMENT'; ownerId: string; number: string | null; date: string; amount: number; status: Status; note: string | null; checkedAt: string | null;
-  entry: { kind: 'bill' | 'payment'; number: string; date: string; total: number; party: string | null; lines?: { description: string; quantity: number; amount: number }[]; method?: string; reference?: string | null; notes?: string | null };
+  id: string; ownerType: 'BILL' | 'PAYMENT' | 'JOURNAL'; ownerId: string; number: string | null; date: string; amount: number; status: Status; note: string | null; checkedAt: string | null; createdById: string | null;
+  removedPhotos: { id: string; removedAt: string; original: boolean }[];
+  entry: { kind: 'bill' | 'payment' | 'journal'; number: string; date: string; total: number; party: string | null; lines?: { description: string; quantity: number; amount: number }[]; method?: string; reference?: string | null; notes?: string | null };
   photos: string[];
 }
 
@@ -41,17 +43,24 @@ function VoucherRow({ v }: { v: Row }) {
   const { t, lang } = usePrefs();
   const [note, setNote] = useState('');
   const check = useSave<{ result: 'MATCHES' | 'MISMATCH'; note?: string }>('post', `/vouchers/${v.id}/check`, t('Voucher checked.', 'ভাউচার যাচাই হয়েছে।'));
-  const kind = v.ownerType === 'BILL' ? 'bills' : 'payments';
+  const { me } = useAuth();
+  const isOwner = me?.user.role.key === 'owner';
+  const own = v.createdById === me?.user.id && !isOwner;
+  const kind = v.ownerType === 'BILL' ? 'bills' : v.ownerType === 'PAYMENT' ? 'payments' : 'journals';
   const same = Math.abs(Number(v.amount) - v.entry.total) < 0.011;
   return (
     <article className="vcheck">
       <div className="vcheck-photos">
         {v.photos.map(p => <a key={p} href={`/api/v1/${kind}/${v.ownerId}/attachments/${p}`} target="_blank" rel="noreferrer"><img src={`/api/v1/${kind}/${v.ownerId}/attachments/${p}`} alt={t('Voucher photo', 'ভাউচারের ছবি')} loading="lazy" /></a>)}
+        {v.removedPhotos.map(p => <a key={p.id} className="vcheck-removed" href={`/api/v1/vouchers/${v.id}/photos/${p.id}`} target="_blank" rel="noreferrer">
+          <img src={`/api/v1/vouchers/${v.id}/photos/${p.id}`} alt={t('Removed photo', 'সরানো ছবি')} loading="lazy" />
+          <span>{p.original ? t('Original voucher photo, removed', 'আসল ভাউচারের ছবি, সরানো') : t('Removed photo', 'সরানো ছবি')} · {fmtDate(p.removedAt, lang)}</span>
+        </a>)}
       </div>
       <div className="vcheck-body">
         <div className="vcheck-head">
           <b className="mono">{v.entry.number}</b>
-          <span>{v.entry.kind === 'bill' ? t('Bill / expense', 'বিল / খরচ') : t('Payment out', 'পরিশোধ')}</span>
+          <span>{v.entry.kind === 'bill' ? t('Bill / expense', 'বিল / খরচ') : v.entry.kind === 'payment' ? t('Payment out', 'পরিশোধ') : t('Journal / side-project money', 'জার্নাল / সাইড প্রকল্পের টাকা')}</span>
           {v.status === 'MATCHES' && <Badge tone="green">{t('Matches', 'মিলেছে')}</Badge>}
           {v.status === 'MISMATCH' && <Badge tone="red">{t('Does not match', 'মেলেনি')}</Badge>}
         </div>
@@ -66,7 +75,8 @@ function VoucherRow({ v }: { v: Row }) {
         {v.entry.lines && <ul className="vcheck-lines">{v.entry.lines.map((l, i) => <li key={i}>{l.description} × {l.quantity} = <Money v={l.amount} /></li>)}</ul>}
         {v.entry.notes && <p className="muted small">{v.entry.notes}</p>}
         {v.note && <p className="vcheck-note">{v.note}</p>}
-        {v.status !== 'MATCHES' && (
+        {own && <p className="muted small">{t('You entered this one, so someone else (or the owner) checks it.', 'এটি আপনি লিখেছেন, তাই অন্য কেউ (বা মালিক) যাচাই করবেন।')}</p>}
+        {!own && (v.status === 'UNCHECKED' || isOwner) && (
           <div className="vcheck-actions">
             <button className="btn primary" disabled={check.isPending} onClick={() => check.mutate({ result: 'MATCHES' })}><CheckCircle2 size={16} />{t('Matches', 'মিলেছে')}</button>
             <Input placeholder={t('What does not match?', 'কী মেলেনি?')} value={note} onChange={e => setNote(e.target.value)} />
