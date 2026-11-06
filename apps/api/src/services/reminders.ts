@@ -4,7 +4,7 @@
 // spending (with vouchers), feed and medicine. While the job is not done they are asked again after 1 hour and
 // after 2 hours, and at 2 hours the owner is told too. Each item counts as done when recorded, or when staff answer
 // "none today" for it. Each slot is handled once per farm day.
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import webpush from 'web-push';
 import type { Db } from '../db.js';
@@ -135,25 +135,47 @@ export async function runReminders(db: Db, now: Date, send: (s: Sent) => Promise
 
 // ───── Web Push keys and sending ─────
 
-/** VAPID keys from VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY (both or neither), or generated once and kept in
- *  VAPID_FILE (default: vapid.json next to the database; tests point it at a temp folder). */
-export function vapidKeys(): { publicKey: string; privateKey: string } {
+type VapidKeys = { publicKey: string; privateKey: string };
+let cachedKeys: VapidKeys | null = null;
+
+/** VAPID keys set in the environment: both or neither. Throws when only one is set. */
+export function vapidFromEnv(): VapidKeys | null {
   const pub = process.env.VAPID_PUBLIC_KEY, priv = process.env.VAPID_PRIVATE_KEY;
   if (!!pub !== !!priv) throw new Error('Set both VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY, or neither.');
-  if (pub && priv) return { publicKey: pub, privateKey: priv };
-  const file = process.env.VAPID_FILE || join(dirname(sqliteFile()), 'vapid.json');
-  if (existsSync(file)) return JSON.parse(readFileSync(file, 'utf8'));
-  const keys = webpush.generateVAPIDKeys();
-  writeFileSync(file, JSON.stringify(keys), { mode: 0o600 });
-  return keys;
+  return pub && priv ? { publicKey: pub, privateKey: priv } : null;
 }
+
+/** The Web Push key pair: from the environment, else kept in the database (AppSecret "vapid") so backups and
+ *  restores carry it. An older install's vapid.json (VAPID_FILE, default next to the database) is moved in once,
+ *  so phones that already turned reminders on keep working. Otherwise a new pair is made once. */
+export async function vapidKeys(db: Db): Promise<VapidKeys> {
+  const env = vapidFromEnv();
+  if (env) return env;
+  if (cachedKeys) return cachedKeys;
+  const row = await db.appSecret.findUnique({ where: { key: 'vapid' } });
+  if (row) return (cachedKeys = JSON.parse(row.value));
+  const file = process.env.VAPID_FILE || join(dirname(sqliteFile()), 'vapid.json');
+  const keys: VapidKeys = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : webpush.generateVAPIDKeys();
+  if (!keys?.publicKey || !keys?.privateKey) throw new Error(`${file} does not hold a VAPID key pair.`);
+  // update: {} keeps a pair another request saved first, so every caller ends up with the same keys.
+  await db.appSecret.upsert({ where: { key: 'vapid' }, create: { key: 'vapid', value: JSON.stringify(keys) }, update: {} });
+  const saved = await db.appSecret.findUniqueOrThrow({ where: { key: 'vapid' } });
+  return (cachedKeys = JSON.parse(saved.value));
+}
+
+/** Tests only: forget the keys read so far. */
+export const forgetVapidKeys = () => { cachedKeys = null; };
 
 /** Real sender. A phone that has uninstalled the app or turned reminders off (404/410) is forgotten. */
 export const pushSender = (db: Db) => {
-  const { publicKey, privateKey } = vapidKeys();
-  webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:farmledger@localhost', publicKey, privateKey);
+  vapidFromEnv(); // throws at start-up when only one VAPID key is set
+  let ready: Promise<void> | null = null;
+  const init = () => (ready ??= vapidKeys(db)
+    .then(k => webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:farmledger@localhost', k.publicKey, k.privateKey))
+    .catch(e => { ready = null; throw e; }));
   return async (s: Sent) => {
     if (!isPushEndpoint(s.endpoint)) { await db.pushSubscription.deleteMany({ where: { endpoint: s.endpoint } }); return; }
+    await init();
     try {
       await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, JSON.stringify(s.payload), { TTL: 3 * 3600 });
     } catch (e: any) {

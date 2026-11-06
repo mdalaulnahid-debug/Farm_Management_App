@@ -6,7 +6,8 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/server.js';
 import { seed } from '../src/seed.js';
 import { prisma } from '../src/db.js';
-import { dueSlots, isPushEndpoint, runReminders, vapidKeys, type Sent } from '../src/services/reminders.js';
+import { dueSlots, forgetVapidKeys, isPushEndpoint, pushSender, runReminders, vapidKeys, type Sent } from '../src/services/reminders.js';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { farmYmd } from '../src/lib/farm-time.js';
 
 let app: FastifyInstance;
@@ -177,8 +178,54 @@ describe('settings and subscriptions', () => {
     }
   });
 
-  it('refuses to run with only one of the two VAPID keys set', () => {
+  it('refuses to run with only one of the two VAPID keys set', async () => {
     process.env.VAPID_PUBLIC_KEY = 'only-the-public-half';
-    try { expect(() => vapidKeys()).toThrow(/both/); } finally { delete process.env.VAPID_PUBLIC_KEY; }
+    try {
+      await expect(vapidKeys(prisma)).rejects.toThrow(/both/);
+      expect(() => pushSender(prisma)).toThrow(/both/);
+    } finally { delete process.env.VAPID_PUBLIC_KEY; }
+  });
+
+  it('keeps the push keys in the database, so backups and restores carry them', async () => {
+    const file = process.env.VAPID_FILE!;
+    const hadFile = existsSync(file);
+    await prisma.appSecret.deleteMany({ where: { key: 'vapid' } });
+    forgetVapidKeys();
+    // An older install kept them in vapid.json: they move into the database unchanged.
+    const old = { publicKey: 'BOld-public-key-from-the-file', privateKey: 'old-private-key-from-the-file' };
+    writeFileSync(file, JSON.stringify(old));
+    try {
+      expect(await vapidKeys(prisma)).toEqual(old);
+      const row = await prisma.appSecret.findUniqueOrThrow({ where: { key: 'vapid' } });
+      expect(JSON.parse(row.value)).toEqual(old);
+      // Later the file is not needed: the same keys come from the database.
+      rmSync(file);
+      forgetVapidKeys();
+      expect(await vapidKeys(prisma)).toEqual(old);
+      // The public half is all a phone ever sees.
+      const r = await call('GET', '/push/key', operator);
+      expect(r.status).toBe(200);
+      expect(r.body).toEqual({ publicKey: old.publicKey });
+      expect(JSON.stringify(r.body)).not.toContain(old.privateKey);
+    } finally {
+      if (existsSync(file) && !hadFile) rmSync(file);
+      await prisma.appSecret.deleteMany({ where: { key: 'vapid' } });
+      forgetVapidKeys();
+    }
+  });
+
+  it('makes a new key pair once when there is none', async () => {
+    const file = process.env.VAPID_FILE!;
+    if (existsSync(file)) rmSync(file);
+    await prisma.appSecret.deleteMany({ where: { key: 'vapid' } });
+    forgetVapidKeys();
+    const first = await vapidKeys(prisma);
+    forgetVapidKeys();
+    const second = await vapidKeys(prisma);
+    expect(first.publicKey.length).toBeGreaterThan(40);
+    expect(second).toEqual(first);
+    expect(existsSync(file)).toBe(false);
+    await prisma.appSecret.deleteMany({ where: { key: 'vapid' } });
+    forgetVapidKeys();
   });
 });

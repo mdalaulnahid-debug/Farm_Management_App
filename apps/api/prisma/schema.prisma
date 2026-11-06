@@ -526,6 +526,14 @@ model Voucher {
 
 // ───────────────────────── Daily reminders ─────────────────────────
 
+/** Server-side secrets that must travel with the books, such as the Web Push (VAPID) key pair. Kept in the
+ *  database so every backup and restore carries them. Never returned by any route. */
+model AppSecret {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 /** A phone or browser that agreed to receive reminders (Web Push). */
 model PushSubscription {
   id        String   @id @default(cuid())
