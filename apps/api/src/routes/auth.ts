@@ -92,7 +92,8 @@ export default async function authRoutes(app: FastifyInstance) {
 
   app.get('/auth/me', { preHandler: signedIn }, async req => {
     const org = await prisma.organization.findUnique({ where: { id: 'org' } });
-    return { user: req.user, organization: org };
+    // PUBLIC_APP_URL: the address staff phones use (e.g. the VM's Tailscale address). Sale QR stickers point there.
+    return { user: req.user, organization: org ? { ...org, appUrl: process.env.PUBLIC_APP_URL || null } : org };
   });
 
   app.post('/auth/change-password', { preHandler: signedIn }, async req => {

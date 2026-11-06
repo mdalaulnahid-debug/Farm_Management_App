@@ -6,7 +6,7 @@ import { disableReminders } from './push';
 
 export interface Me {
   user: { id: string; name: string; email: string; locale: string; mustChangePassword: boolean; twoStepEnabled: boolean; mustSetUpTwoStep: boolean; role: { key: string; name: string }; permissions: string[]; preferences?: Partial<Prefs> | null };
-  organization: { name: string; nameBn?: string | null; currency: string; lockDate: string | null; fiscalYearStart: number; address?: string | null; phone?: string | null; email?: string | null; taxId?: string | null; legalName?: string | null; invoiceFooter?: string | null; requireTwoStep?: boolean };
+  organization: { name: string; nameBn?: string | null; currency: string; lockDate: string | null; fiscalYearStart: number; address?: string | null; phone?: string | null; email?: string | null; taxId?: string | null; legalName?: string | null; invoiceFooter?: string | null; requireTwoStep?: boolean; appUrl?: string | null };
 }
 
 interface Ctx { me: Me | null; loading: boolean; can: (p: string) => boolean; refresh: () => void; logout: () => Promise<void> }

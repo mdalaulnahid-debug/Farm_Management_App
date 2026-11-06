@@ -115,7 +115,7 @@ function BillDetail({ id, onClose }: { id: string; onClose: () => void }) {
           {d.notes && <div className="doc-notes">{d.notes}</div>}
         </DocPaper>
       )}
-      {d && <SlipPhotos kind="bills" id={d.id} photos={d.attachments ?? []} canRemove={can('purchases.void')} />}
+      {d && <SlipPhotos kind="bills" id={d.id} photos={d.attachments ?? []} canRemove={can('purchases.void')} canAdd={d.status !== 'VOID' && can('purchases.create')} />}
       {voiding && <VoidDialog what={t('bill', 'বিল')} busy={voidIt.isPending} onClose={() => setVoiding(false)} onConfirm={reason => voidIt.mutate({ reason }, { onSuccess: () => { setVoiding(false); onClose(); } })} />}
       {paying && d && <PaymentDrawer direction="OUT" partyId={d.supplierId} onClose={() => setPaying(false)} />}
     </Drawer>

@@ -74,7 +74,8 @@ export function useAttachAfterSave() {
 }
 
 /** On a saved payment or bill: its photos, a button to add more, and (with void rights) to remove a wrong one. */
-export function SlipPhotos({ kind, id, photos, canRemove }: { kind: SlipKind; id: string; photos: SlipPhoto[]; canRemove?: boolean }) {
+/** `canAdd` false (viewers, auditors, void records) shows the photos without the add button. */
+export function SlipPhotos({ kind, id, photos, canAdd = true, canRemove }: { kind: SlipKind; id: string; photos: SlipPhoto[]; canAdd?: boolean; canRemove?: boolean }) {
   const { t } = usePrefs();
   const toast = useToast();
   const qc = useQueryClient();
@@ -94,9 +95,9 @@ export function SlipPhotos({ kind, id, photos, canRemove }: { kind: SlipKind; id
               onClick={() => { if (window.confirm(t('Remove this photo? This is noted in the activity log.', 'ছবিটি সরাবেন? এটি কার্যক্রম লগে লেখা থাকবে।'))) run(() => api.del(`/${kind}/${id}/attachments/${p.id}`), t('Photo removed.', 'ছবি সরানো হয়েছে।')); }}><Trash2 size={14} /></button>}
           </div>
         ))}
-        <PickButton busy={busy} onPicked={d => run(() => uploadSlip(kind, id, d), t('Photo added.', 'ছবি যোগ হয়েছে।'))} label={photos.length ? t('Add another photo', 'আরেকটি ছবি') : t('Add photo of slip', 'স্লিপের ছবি যোগ করুন')} />
+        {canAdd && <PickButton busy={busy} onPicked={d => run(() => uploadSlip(kind, id, d), t('Photo added.', 'ছবি যোগ হয়েছে।'))} label={photos.length ? t('Add another photo', 'আরেকটি ছবি') : t('Add photo of slip', 'স্লিপের ছবি যোগ করুন')} />}
       </div>
-      {!photos.length && <small className="muted">{t('No photo yet. Add the handwritten voucher or receipt as proof.', 'এখনো ছবি নেই। প্রমাণ হিসেবে হাতে লেখা ভাউচার বা রসিদের ছবি দিন।')}</small>}
+      {!photos.length && canAdd && <small className="muted">{t('No photo yet. Add the handwritten voucher or receipt as proof.', 'এখনো ছবি নেই। প্রমাণ হিসেবে হাতে লেখা ভাউচার বা রসিদের ছবি দিন।')}</small>}
     </section>
   );
 }

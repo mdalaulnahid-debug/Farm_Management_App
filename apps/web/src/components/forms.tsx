@@ -107,12 +107,15 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
 
   const [buyer, setBuyer] = useState({ mode: 'phone' as 'phone' | 'list', phone: '', name: '' });
   const phoneDigits = buyer.phone.replace(/[০-৯]/g, d => String('০১২৩৪৫৬৭৮৯'.indexOf(d))).replace(/\D/g, '');
-  const lookup = useApi<{ match: { id: string; name: string; phone: string } | null }>(buyer.mode === 'phone' && phoneDigits.length >= 11 ? '/parties/lookup' : null, { phone: buyer.phone });
+  const lookup = useApi<{ match: { id: string; name: string; phone: string } | null; count?: number }>(buyer.mode === 'phone' && phoneDigits.length >= 11 ? '/parties/lookup' : null, { phone: buyer.phone });
   const match = phoneDigits.length >= 11 ? lookup.data?.match ?? null : null;
+  // Older books may hold two customers on one number: they cannot be told apart until the owner fixes it.
+  const shared = phoneDigits.length >= 11 && (lookup.data?.count ?? 0) > 1;
   const phoneBad = buyer.mode === 'phone' && !!buyer.phone.trim() && !isMobile(buyer.phone);
-  const buyerOk = buyer.mode === 'list' ? !!form.customerId : !buyer.phone.trim() || (!phoneBad && (!!match || buyer.name.trim().length >= 2));
+  const buyerOk = buyer.mode === 'list' ? !!form.customerId : !buyer.phone.trim() || (!phoneBad && !shared && (!!match || buyer.name.trim().length >= 2));
   // Walk-in buyers (no mobile number, or the Walk-in customers entry) pay in full; credit needs a known customer.
-  const walkIn = buyer.mode === 'phone' ? !buyer.phone.trim() : customers.data?.data.find(c => c.id === form.customerId)?.name === 'Walk-in customers';
+  const picked = customers.data?.data.find(c => c.id === form.customerId);
+  const walkIn = buyer.mode === 'phone' ? !buyer.phone.trim() : !!picked && (picked.systemKey === 'WALK_IN' || (!picked.systemKey && picked.name === 'Walk-in customers'));
   useEffect(() => {
     const eggs = items.data?.data.find(i => i.category === 'PRODUCE');
     if (eggs && lines.length === 1 && !lines[0].itemId) setLines([{ ...blank(), itemId: eggs.id, unitPrice: String(eggs.salePrice || '') }]);
@@ -142,7 +145,7 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
           </div>
           {buyer.mode === 'phone' ? (
             <div className="form-grid">
-              <Field label={t('Mobile number', 'মোবাইল নম্বর')} error={phoneBad ? t('11 digits starting 01, like 01711-223344.', '০১ দিয়ে শুরু ১১ সংখ্যা, যেমন ০১৭১১-২২৩৩৪৪।') : undefined}
+              <Field label={t('Mobile number', 'মোবাইল নম্বর')} error={phoneBad ? t('11 digits starting 01, like 01711-223344.', '০১ দিয়ে শুরু ১১ সংখ্যা, যেমন ০১৭১১-২২৩৩৪৪।') : shared ? t('Two customers have this number. Ask the owner to fix it in Customers, or pick from the list.', 'দুজন ক্রেতার একই নম্বর। মালিককে ক্রেতা তালিকায় ঠিক করতে বলুন, অথবা তালিকা থেকে বাছুন।') : undefined}
                 hint={match ? undefined : t('The mobile number identifies the customer, even if the name is spelt differently.', 'মোবাইল নম্বর দিয়েই ক্রেতা চেনা যায়, নামের বানান ভিন্ন হলেও।')}>
                 <Input type="tel" inputMode="tel" autoFocus value={buyer.phone} onChange={e => setBuyer({ ...buyer, phone: e.target.value })} placeholder="01XXXXXXXXX" />
               </Field>

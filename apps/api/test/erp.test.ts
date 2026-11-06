@@ -166,6 +166,26 @@ describe('customer by name + phone on the চালান', () => {
     expect(r.body.notes).toContain('Buyer: Jamal Bhai');
     expect(await prisma.party.count()).toBe(before);
   });
+  it('two customers can never share a mobile number', async () => {
+    const dup = await call('POST', '/parties', { kind: 'CUSTOMER', name: 'Karim Duplicate', phone: '+880 1711-223344' });
+    expect(dup.status).toBe(409);
+    // Books from before this rule may already hold two customers on one number: they are not guessed between.
+    await prisma.party.createMany({ data: [{ kind: 'CUSTOMER', name: 'Twin A', phone: '01999000111' }, { kind: 'CUSTOMER', name: 'Twin B', phone: '01999-000111' }] });
+    const look = await call('GET', '/parties/lookup?phone=01999000111');
+    expect(look.body).toMatchObject({ match: null, count: 2 });
+    const eggs = await prisma.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
+    const sale = await call('POST', '/invoices', { date: '2026-11-12', customer: { name: 'Twin', phone: '01999000111' }, lines: [{ itemId: eggs.id, quantity: 1, unitPrice: 16 }] });
+    expect(sale.status).toBe(400);
+    await prisma.party.deleteMany({ where: { phone: { in: ['01999000111', '01999-000111'] } } });
+  });
+  it('the walk-in rule holds even if "Walk-in customers" is renamed', async () => {
+    const walkIn = await prisma.party.findFirstOrThrow({ where: { systemKey: 'WALK_IN' } });
+    await prisma.party.update({ where: { id: walkIn.id }, data: { name: 'Counter sales' } });
+    const eggs = await prisma.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
+    try {
+      expect((await call('POST', '/invoices', { date: '2026-11-12', customerId: walkIn.id, lines: [{ itemId: eggs.id, quantity: 1, unitPrice: 16 }] })).status).toBe(400);
+    } finally { await prisma.party.update({ where: { id: walkIn.id }, data: { name: 'Walk-in customers' } }); }
+  });
   it('the mobile number is the identity: a bad number or a new number without a name is refused', async () => {
     const eggs = await prisma.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
     const line = [{ itemId: eggs.id, quantity: 1, unitPrice: 16 }];

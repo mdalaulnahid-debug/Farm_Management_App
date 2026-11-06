@@ -96,7 +96,8 @@ export function PaymentSlip({ id, onClose }: { id: string; onClose: () => void }
           {p.notes && p.party && <div className="doc-notes">{p.notes}</div>}
         </DocPaper>
       )}
-      {p && <SlipPhotos kind="payments" id={p.id} photos={p.attachments ?? []} canRemove={can('banking.manage')} />}
+      {p && <SlipPhotos kind="payments" id={p.id} photos={p.attachments ?? []} canRemove={can('banking.manage')}
+        canAdd={p.status !== 'VOID' && (can('sales.create') || can('purchases.create') || can('banking.manage'))} />}
       {voiding && <VoidDialog what={t('payment', 'লেনদেন')} busy={voidIt.isPending} onClose={() => setVoiding(false)}
         onConfirm={reason => voidIt.mutate({ reason }, { onSuccess: () => { setVoiding(false); onClose(); } })} />}
     </Drawer>

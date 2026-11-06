@@ -112,7 +112,7 @@ const ROUTES: Row[] = [
   // Suppliers and purchases
   row('GET', '/bills', need('purchases.view')),
   row('GET', '/bills/:id', need('purchases.view')),
-  row('POST', '/bills/:id/attachments', need('purchases.view')),
+  row('POST', '/bills/:id/attachments', need('purchases.view', 'purchases.create')),
   row('GET', '/bills/:id/attachments/:aid', need('purchases.view')),
   row('DELETE', '/bills/:id/attachments/:aid', need('purchases.void')),
   row('POST', '/bills', need('purchases.create')),
@@ -121,7 +121,7 @@ const ROUTES: Row[] = [
   // Cash and bank
   row('GET', '/payments', need('banking.view')),
   row('GET', '/payments/:id', need('banking.view')),
-  row('POST', '/payments/:id/attachments', need('banking.view')),
+  row('POST', '/payments/:id/attachments', [['banking.view', 'sales.create'], ['banking.view', 'purchases.create'], ['banking.view', 'banking.manage']]),
   row('GET', '/payments/:id/attachments/:aid', need('banking.view')),
   row('DELETE', '/payments/:id/attachments/:aid', need('banking.manage')),
   row('POST', '/payments', need('banking.view', 'sales.create'), { label: 'POST /payments (receipt from a customer)', payload: receipt }),

@@ -48,6 +48,8 @@ describe('slip photos', () => {
     expect(img.rawPayload.equals(jpeg)).toBe(true);
     const log = await prisma.auditLog.findFirst({ where: { action: 'ATTACH', entityId: paymentId } });
     expect(log?.summary).toMatch(/Photo added/);
+    expect(JSON.parse(log!.data!).sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(img.headers['cache-control']).toContain('no-store');
   });
 
   it('keeps a photo with a bill, and a photo is only reachable through its own record', async () => {
@@ -61,15 +63,38 @@ describe('slip photos', () => {
     expect((await req('POST', `/payments/${paymentId}/attachments`, { dataUrl: url('image/png', jpeg) })).statusCode).toBe(400);
     expect((await req('POST', `/payments/${paymentId}/attachments`, { dataUrl: `data:text/html;base64,${Buffer.from('<script>').toString('base64')}` })).statusCode).toBe(400);
     expect((await req('POST', `/payments/${paymentId}/attachments`, { dataUrl: url('image/jpeg', Buffer.from('not really a jpeg')) })).statusCode).toBe(400);
-    const big = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(4 * 1024 * 1024 + 10)]);
+    const big = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(1.5 * 1024 * 1024 + 10)]);
     expect((await req('POST', `/payments/${paymentId}/attachments`, { dataUrl: url('image/jpeg', big) })).statusCode).toBe(400);
     expect((await req('POST', '/payments/nope/attachments', { dataUrl: url('image/jpeg', jpeg) })).statusCode).toBe(404);
   });
 
-  it('removes a wrong photo and records who removed it', async () => {
+  it('a removed photo is hidden but kept as evidence, with who removed it', async () => {
     const a = await ok('POST', `/payments/${paymentId}/attachments`, { dataUrl: url('image/jpeg', jpeg) });
     await ok('DELETE', `/payments/${paymentId}/attachments/${a.id}`);
     expect((await req('GET', `/payments/${paymentId}/attachments/${a.id}`)).statusCode).toBe(404);
-    expect(await prisma.auditLog.findFirst({ where: { action: 'DETACH', entityId: paymentId } })).not.toBeNull();
+    expect((await ok('GET', `/payments/${paymentId}`)).attachments.map((x: any) => x.id)).not.toContain(a.id);
+    const kept = await prisma.attachment.findUniqueOrThrow({ where: { id: a.id } });
+    expect(kept.removedAt).not.toBeNull();
+    expect(kept.removedById).not.toBeNull();
+    expect(Buffer.from(kept.data).equals(jpeg)).toBe(true);
+    const log = await prisma.auditLog.findFirst({ where: { action: 'DETACH', entityId: paymentId } });
+    expect(JSON.parse(log!.data!).sha256).toBe(kept.sha256);
+  });
+
+  it('refuses photos on a void record', async () => {
+    const pay = await ok('POST', '/payments', { direction: 'OUT', date: '2027-08-03', cashAccountId: await acc('1010'), counterAccountId: await acc('6090'), amount: 12, notes: 'Entered twice' });
+    await ok('POST', `/payments/${pay.id}/void`, { reason: 'entered twice by mistake' });
+    expect((await req('POST', `/payments/${pay.id}/attachments`, { dataUrl: url('image/jpeg', jpeg) })).statusCode).toBe(400);
+  });
+
+  it('limits how many photos one person can send per minute', async () => {
+    let refused = 0;
+    for (let i = 0; i < 25 && !refused; i++) {
+      const pay = await ok('POST', '/payments', { direction: 'OUT', date: '2027-08-04', cashAccountId: await acc('1010'), counterAccountId: await acc('6090'), amount: 1, notes: `Rate ${i}` });
+      const res = await req('POST', `/payments/${pay.id}/attachments`, { dataUrl: url('image/jpeg', jpeg) });
+      if (res.statusCode === 400 && /Too many/.test(res.body)) refused = i + 1;
+    }
+    expect(refused).toBeGreaterThan(0);
+    expect(refused).toBeLessThanOrEqual(21);
   });
 });

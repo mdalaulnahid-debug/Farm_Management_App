@@ -272,8 +272,9 @@ export function SaleFlow({ onClose, preset }: { onClose: () => void; preset?: Sa
 function BuyerByPhone({ phone, name, matchId, set, next }: { phone: string; name: string; matchId: string; set: (p: Partial<SaleData>) => void; next: () => void }) {
   const { t } = usePrefs();
   const valid = isMobile(phone);
-  const q = useApi<{ match: { id: string; name: string; phone: string } | null }>(valid ? '/parties/lookup' : null, { phone });
+  const q = useApi<{ match: { id: string; name: string; phone: string } | null; count?: number }>(valid ? '/parties/lookup' : null, { phone });
   const match = valid ? q.data?.match ?? null : null;
+  const shared = valid && (q.data?.count ?? 0) > 1;
   return <>
     <Input className="input-lg" type="tel" inputMode="tel" autoFocus placeholder={t('Mobile number', 'মোবাইল নম্বর')} value={phone}
       onChange={e => set({ phone: e.target.value, matchId: '', ...(matchId ? { buyer: '' } : {}) })} />
@@ -284,7 +285,8 @@ function BuyerByPhone({ phone, name, matchId, set, next }: { phone: string; name
       <ChoiceButtons value={matchId || undefined} onChange={v => set({ matchId: v, buyer: match.name })} onPick={next}
         options={[{ value: match.id, label: match.name, sub: match.phone, picture: <Pic name="sale" /> }]} />
     </>}
-    {valid && q.data && !match && <Input className="input-lg" autoFocus placeholder={t('New buyer’s name', 'নতুন ক্রেতার নাম')} value={name} onChange={e => set({ buyer: e.target.value })} />}
+    {shared && <p className="wizard-error">{t('Two customers have this mobile number, so the sale cannot tell them apart. Ask the owner to fix it in Customers.', 'দুজন ক্রেতার একই মোবাইল নম্বর, তাই কার বিক্রি বোঝা যাচ্ছে না। মালিককে ক্রেতা তালিকায় ঠিক করতে বলুন।')}</p>}
+    {valid && q.data && !match && !shared && <Input className="input-lg" autoFocus placeholder={t('New buyer’s name', 'নতুন ক্রেতার নাম')} value={name} onChange={e => set({ buyer: e.target.value })} />}
     {!phone.trim() && <Input className="input-lg" placeholder={t('Name (optional, walk-in, cash only)', 'নাম (ঐচ্ছিক, খুচরা, শুধু নগদ)')} value={name} onChange={e => set({ buyer: e.target.value })} />}
   </>;
 }

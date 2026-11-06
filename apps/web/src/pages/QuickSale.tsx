@@ -55,7 +55,9 @@ export function SaleStickers() {
   const [customerId, setCustomerId] = useState('');
   const sellable = useMemo(() => (items.data?.data ?? []).filter(i => i.active && (i.category === 'PRODUCE' || i.category === 'LIVESTOCK')), [items.data]);
   const customer = customers.data?.data.find(c => c.id === customerId);
-  const url = (sku: string) => `${window.location.origin}/sell?item=${encodeURIComponent(sku)}${customerId ? `&customer=${encodeURIComponent(customerId)}` : ''}`;
+  // The address staff phones use, from the server's PUBLIC_APP_URL; this page's own address only as a fallback.
+  const base = (me?.organization.appUrl || window.location.origin).replace(/\/+$/, '');
+  const url = (sku: string) => `${base}/sell?item=${encodeURIComponent(sku)}${customerId ? `&customer=${encodeURIComponent(customerId)}` : ''}`;
   const sheet = sellable.flatMap(i => Array.from({ length: chosen[i.id] ?? 0 }, (_, k) => ({ item: i, k })));
   if (items.isLoading) return <Loading />;
   return (
@@ -63,7 +65,7 @@ export function SaleStickers() {
       <PageHeader crumb={t('Sales', 'বিক্রয়')} title={t('Sale QR stickers', 'বিক্রির কিউআর স্টিকার')}
         subtitle={t('Print and stick these where you sell. A salesperson scans one with the phone camera to record that sale in a few taps.', 'যেখানে বিক্রি হয় সেখানে প্রিন্ট করে লাগান। বিক্রেতা ফোনের ক্যামেরায় স্ক্যান করলে কয়েক ট্যাপে বিক্রি লেখা হয়ে যাবে।')}
         actions={<button className="btn primary" disabled={!sheet.length} onClick={() => window.print()}><Printer size={16} />{t('Print stickers', 'স্টিকার প্রিন্ট')}</button>} />
-      <Card className="no-print" title={t('Choose stickers', 'স্টিকার বাছুন')} pad>
+      <Card className="no-print" title={t('Choose stickers', 'স্টিকার বাছুন')} subtitle={t(`Stickers open ${base}`, `স্টিকার খুলবে ${base}`)} pad>
         {!sellable.length ? <Empty icon={QrCode}>{t('No products for sale yet. Add them in Inventory.', 'এখনো বিক্রির কোনো পণ্য নেই। মজুদ অংশে যোগ করুন।')}</Empty> : (
           <div className="stack">
             <Field label={t('For one regular customer (optional)', 'একজন নিয়মিত ক্রেতার জন্য (ঐচ্ছিক)')} hint={t('Leave as “Any buyer” for a shop sticker; the salesperson can type the buyer.', 'দোকানের স্টিকারে “যেকোনো ক্রেতা” রাখুন; বিক্রেতা ক্রেতার নাম লিখতে পারবেন।')}>

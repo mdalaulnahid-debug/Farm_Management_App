@@ -11,6 +11,16 @@ import { audit, nextNumber, type Actor } from './common.js';
 import { normalizePhone } from '../lib/phone.js';
 
 export const WALK_IN = 'Walk-in customers';
+export const WALK_IN_KEY = 'WALK_IN';
+/** The walk-in party, found by its system key (older books: by name, then tagged with the key). */
+export async function walkInParty(db: Db) {
+  const keyed = await db.party.findUnique({ where: { systemKey: WALK_IN_KEY } });
+  if (keyed) return keyed;
+  const named = await db.party.findFirst({ where: { name: WALK_IN, kind: { in: ['CUSTOMER', 'BOTH'] } } });
+  if (named) return db.party.update({ where: { id: named.id }, data: { systemKey: WALK_IN_KEY } });
+  return db.party.create({ data: { kind: 'CUSTOMER', name: WALK_IN, systemKey: WALK_IN_KEY, notes: 'Counter / cash sales without a named customer.' } });
+}
+const isWalkIn = (p: { systemKey: string | null; name: string }) => p.systemKey === WALK_IN_KEY || (!p.systemKey && p.name === WALK_IN);
 /** A Bangladeshi mobile number in its canonical form: 11 digits starting 01. */
 export const isMobile = (p: string | null) => !!p && /^01\d{9}$/.test(p);
 
@@ -27,16 +37,16 @@ export async function resolveCustomer(db: Db, actor: Actor | null, c: { name?: s
   if (typed && !isMobile(phone)) throw badRequest('The mobile number must have 11 digits and start with 01, like 01711-223344.');
   if (phone) {
     const customers = await db.party.findMany({ where: { kind: { in: ['CUSTOMER', 'BOTH'] }, phone: { not: null } } });
-    const hit = customers.find(p => normalizePhone(p.phone) === phone);
+    const hits = customers.filter(p => normalizePhone(p.phone) === phone);
+    if (hits.length > 1) throw badRequest(`Two customers have the mobile number ${phone} (${hits.map(h => h.name).join(', ')}). Ask the owner to fix this in Customers first.`);
+    const hit = hits[0];
     if (hit) return { party: hit, created: false, buyerName: null as string | null };
     if (!name) throw badRequest('A new buyer needs a name with the mobile number.');
     const party = await db.party.create({ data: { kind: 'CUSTOMER', name, phone } });
     await audit(db, actor, 'create', 'party', party.id, `Customer ${party.name} (${phone}) added from a sales চালান`);
     return { party, created: true, buyerName: null };
   }
-  const walkIn = (await db.party.findFirst({ where: { name: WALK_IN } }))
-    ?? (await db.party.create({ data: { kind: 'CUSTOMER', name: WALK_IN, notes: 'Counter / cash sales without a named customer.' } }));
-  return { party: walkIn, created: false, buyerName: name };
+  return { party: await walkInParty(db), created: false, buyerName: name };
 }
 
 export interface InvoiceInput {
@@ -78,7 +88,7 @@ export async function createInvoice(db: Db, actor: Actor | null, input: InvoiceI
   if (discount < 0 || discount > subtotal) throw badRequest('Discount must be between zero and the subtotal.');
   const total = round2(subtotal - discount);
   // Walk-in buyers pay in full: money owed must be owed by a known customer (name and mobile number).
-  if (customer.name === WALK_IN && total - money(input.received?.amount ?? 0) > 0.005) {
+  if (isWalkIn(customer) && total - money(input.received?.amount ?? 0) > 0.005) {
     throw badRequest('Walk-in buyers pay in full. To sell on credit, give the buyer\'s name and mobile number.');
   }
   const notes = [input.notes?.trim(), resolved?.buyerName ? `Buyer: ${resolved.buyerName}` : null].filter(Boolean).join(' · ') || null;
