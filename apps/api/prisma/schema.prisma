@@ -224,7 +224,7 @@ model Party {
   notes        String?
   active       Boolean        @default(true)
   /// Set on parties the system relies on, e.g. WALK_IN for "Walk-in customers" (so renaming it changes nothing).
-  systemKey    String?        @unique
+  systemKey    String?
   invoices     SalesInvoice[]
   bills        Bill[]
   payments     Payment[]
@@ -233,6 +233,7 @@ model Party {
   updatedAt    DateTime       @updatedAt
 
   @@index([kind, name])
+  @@index([systemKey])
 }
 
 model Item {
@@ -508,6 +509,7 @@ model Voucher {
   ownerId     String
   partyId     String?   // supplier/payee, so the same voucher number cannot be used twice with them
   number      String?   // as written on the paper, if it has one
+  numberKey   String?   // the number normalised for the reuse check (uppercase, no spaces/dashes)
   date        DateTime
   amount      Decimal
   status      String    @default("UNCHECKED") // UNCHECKED | MATCHES | MISMATCH
@@ -519,6 +521,7 @@ model Voucher {
 
   @@unique([ownerType, ownerId])
   @@index([status])
+  @@index([numberKey])
 }
 
 // ───────────────────────── Daily reminders ─────────────────────────

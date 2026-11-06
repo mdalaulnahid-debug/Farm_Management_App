@@ -19,13 +19,27 @@ export const BACKDATE_DAYS = Number(process.env.VOUCHER_BACKDATE_DAYS || 30);
 export const UPLOADS_PER_MINUTE = 20;
 
 const recent = new Map<string, number[]>();
-/** Count `n` photo uploads for a person; refuses when that passes the per-minute limit. */
+/** Refuse when `n` more photos would pass a person's per-minute limit. Nothing is counted here: the photos are
+ *  counted with notePhotos once the save has succeeded (a refused save never uses up the allowance). */
 export function photoRateLimit(userId: string | undefined, n = 1, now = Date.now()) {
   if (!userId) return;
   const times = (recent.get(userId) ?? []).filter(t => now - t < 60_000);
-  if (times.length + n > UPLOADS_PER_MINUTE) { recent.set(userId, times); throw badRequest(`Too many photos at once. Wait a minute (${UPLOADS_PER_MINUTE} per minute at most).`); }
+  recent.set(userId, times);
+  if (times.length + n > UPLOADS_PER_MINUTE) throw badRequest(`Too many photos at once. Wait a minute (${UPLOADS_PER_MINUTE} per minute at most).`);
+}
+export function notePhotos(userId: string | undefined, n = 1, now = Date.now()) {
+  if (!userId) return;
+  const times = recent.get(userId) ?? [];
   for (let i = 0; i < n; i++) times.push(now);
   recent.set(userId, times);
+}
+/** "No. 0-12 / A" and "012a" are the same voucher number: uppercase, without spaces, dashes, slashes or dots. */
+export const voucherKey = (n: string | null | undefined) => (n ?? '').toUpperCase().replace(/[\s\-_/.]/g, '') || null;
+
+/** Refuse a photo already on another live record: each voucher can be used once. */
+export async function assertPhotoUnused(db: Db, sha256: string, ownerId: string) {
+  const used = await db.attachment.findMany({ where: { sha256, removedAt: null, NOT: { ownerId } }, select: { ownerType: true, ownerId: true } });
+  for (const u of used) if (await isLive(db, u.ownerType, u.ownerId)) throw badRequest('This voucher photo is already used on another entry. Each voucher can be used once.');
 }
 
 /** Is the record behind a voucher or photo still live (not void)? */
@@ -111,17 +125,18 @@ export async function saveVoucher(db: Db, actor: Actor | null, ownerType: OwnerT
   if (day(owner.date) - day(v.date) > BACKDATE_DAYS) throw badRequest(`The voucher is more than ${BACKDATE_DAYS} days older than the entry. The dates must match.`);
   photoRateLimit(actor?.id, v.photos.length);
   const photos = v.photos.map(decodePhoto);
-  for (const p of photos) {
-    const used = await db.attachment.findMany({ where: { sha256: p.sha256, removedAt: null, NOT: { ownerId: owner.id } }, select: { ownerType: true, ownerId: true } });
-    for (const u of used) if (await isLive(db, u.ownerType, u.ownerId)) throw badRequest('This voucher photo is already used on another entry. Each voucher can be used once.');
-  }
+  for (const p of photos) await assertPhotoUnused(db, p.sha256, owner.id);
   const number = v.number?.trim() || null;
-  if (number && owner.partyId) {
-    const same = await db.voucher.findMany({ where: { partyId: owner.partyId, number, NOT: { ownerId: owner.id } }, select: { ownerType: true, ownerId: true } });
-    for (const u of same) if (await isLive(db, u.ownerType, u.ownerId)) throw badRequest(`Voucher no. ${number} from this supplier is already entered. Each voucher can be used once.`);
+  const key = voucherKey(number);
+  if (key) {
+    // Same number from the same supplier; or, with no supplier, the same number for the same amount within 30 days.
+    const near = (d: Date) => Math.abs(d.getTime() - v.date.getTime()) <= 30 * 86_400_000;
+    const same = (await db.voucher.findMany({ where: { numberKey: key, NOT: { ownerId: owner.id } }, select: { ownerType: true, ownerId: true, partyId: true, amount: true, date: true } }))
+      .filter(u => owner.partyId ? u.partyId === owner.partyId : !u.partyId && Math.abs(Number(u.amount) - amount) < 0.011 && near(u.date));
+    for (const u of same) if (await isLive(db, u.ownerType, u.ownerId)) throw badRequest(`Voucher no. ${number} is already entered${owner.partyId ? ' from this supplier' : ' for the same amount'}. Each voucher can be used once.`);
   }
   for (const p of photos) await addPhoto(db, actor, ownerType, owner, p, true);
-  await db.voucher.create({ data: { ownerType, ownerId: owner.id, partyId: owner.partyId ?? null, number, date: v.date, amount, createdById: actor?.id ?? null } });
+  await db.voucher.create({ data: { ownerType, ownerId: owner.id, partyId: owner.partyId ?? null, number, numberKey: key, date: v.date, amount, createdById: actor?.id ?? null } });
   await audit(db, actor, 'create', 'voucher', owner.id, `Voucher${v.number ? ` ${v.number}` : ''} for ${owner.number}: ${amount}`);
 }
 

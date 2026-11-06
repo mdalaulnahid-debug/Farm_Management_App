@@ -153,8 +153,9 @@ if (isMain) {
   // Daily reminders to data-entry staff at the farm's chosen times (Settings → Organization).
   startReminderScheduler(prisma, app.log);
   // One-off, idempotent start-up steps: mark the walk-in customer, and remember the voucher rule's go-live date.
-  await ensureWalkInKey(prisma, app.log);
-  await ensureVoucherRuleFrom(prisma, farmYmd());
+  // Never let these stop the server: warn and carry on.
+  await ensureWalkInKey(prisma, app.log).catch(e => app.log.warn(`Walk-in check skipped: ${(e as Error).message}`));
+  await ensureVoucherRuleFrom(prisma, farmYmd()).catch(e => app.log.warn(`Voucher go-live date not set: ${(e as Error).message}`));
   // Say at start-up what is not set up safely, so it shows in the server window and log.
   securityCheck(prisma).then(r => {
     for (const c of r.checks) if (c.level !== 'ok') app.log.warn(`Security ${c.level === 'fail' ? 'PROBLEM' : 'warning'}: ${c.title.en} ${c.fix?.en ?? ''}`);

@@ -3,7 +3,7 @@
 import type { Db } from '../db.js';
 import { badRequest, conflict, notFound, forbidden } from '../lib/errors.js';
 import { money, num, qty as q3, round2 } from '../lib/money.js';
-import { SYS } from '../lib/constants.js';
+import { SYS, isMoneyAccount } from '../lib/constants.js';
 import { accountBalance, accountId, assertRecentDate, postEntry, reverseEntry } from './ledger.js';
 import { issueStock, receiveStock, reverseStockForSource } from './inventory.js';
 import { audit, type Actor } from './common.js';
@@ -170,7 +170,7 @@ export async function transfer(db: Db, actor: Actor | null, input: { date: Date;
   if (amount <= 0) throw badRequest('Amount must be greater than zero.');
   if (input.fromAccountId === input.toAccountId) throw badRequest('Choose two different accounts.');
   const accounts = await db.account.findMany({ where: { id: { in: [input.fromAccountId, input.toAccountId] } } });
-  if (accounts.length !== 2 || accounts.some(a => !['CASH', 'BANK'].includes(a.subtype))) throw badRequest('Transfers are between cash/bank accounts.');
+  if (accounts.length !== 2 || accounts.some(a => !isMoneyAccount(a))) throw badRequest('Transfers are between cash/bank accounts.');
   const je = await postEntry(db, actor, {
     date: input.date, memo: input.memo || 'Transfer between accounts', sourceType: 'TRANSFER',
     lines: [{ accountId: input.toAccountId, debit: amount }, { accountId: input.fromAccountId, credit: amount }],
@@ -181,7 +181,7 @@ export async function transfer(db: Db, actor: Actor | null, input: { date: Date;
 
 export async function cashCount(db: Db, actor: Actor | null, input: { date: Date; accountId: string; counted: number; notes?: string | null; postVariance?: boolean; ownerApproves?: boolean }) {
   const account = await db.account.findUnique({ where: { id: input.accountId } });
-  if (!account || !['CASH', 'BANK'].includes(account.subtype)) throw badRequest('Choose a cash or bank account.');
+  if (!account || !isMoneyAccount(account)) throw badRequest('Choose a cash or bank account.');
   const book = await accountBalance(db, account.id, new Date(input.date.getTime() + 86_399_999));
   const counted = money(input.counted);
   const variance = round2(counted - book);

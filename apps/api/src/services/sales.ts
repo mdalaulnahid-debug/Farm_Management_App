@@ -15,9 +15,10 @@ export const WALK_IN_KEY = 'WALK_IN';
 /** The walk-in party, by its system key only (tagged at start-up, see ensureWalkInKey). A brand-new book with no
  *  walk-in party gets one; an untagged one is never guessed at. */
 export async function walkInParty(db: Db) {
-  const keyed = await db.party.findUnique({ where: { systemKey: WALK_IN_KEY } });
+  // systemKey is kept unique by this code (not a database constraint, so the live schema change stays additive).
+  const keyed = await db.party.findFirst({ where: { systemKey: WALK_IN_KEY, kind: 'CUSTOMER' }, orderBy: { createdAt: 'asc' } });
   if (keyed) return keyed;
-  if (await db.party.count({ where: { name: WALK_IN } })) throw badRequest('"Walk-in customers" is not set up yet. Restart the server, or ask the admin to check the start-up warning.');
+  if (await db.party.count({ where: { name: WALK_IN, kind: 'CUSTOMER' } })) throw badRequest('"Walk-in customers" is not set up yet. Restart the server, or ask the admin to check the start-up warning.');
   return db.party.create({ data: { kind: 'CUSTOMER', name: WALK_IN, systemKey: WALK_IN_KEY, notes: 'Counter / cash sales without a named customer.' } });
 }
 const isWalkIn = (p: { systemKey: string | null }) => p.systemKey === WALK_IN_KEY;
@@ -25,8 +26,10 @@ const isWalkIn = (p: { systemKey: string | null }) => p.systemKey === WALK_IN_KE
 /** Start-up and seed, idempotent: mark the walk-in party with its system key. One already marked: nothing to do.
  *  Else exactly one party named "Walk-in customers": mark it. None or several: warn and leave it to the admin. */
 export async function ensureWalkInKey(db: Db, log: { warn: (m: string) => void }) {
-  if (await db.party.count({ where: { systemKey: WALK_IN_KEY } }) === 1) return 'ok';
-  const named = await db.party.findMany({ where: { name: WALK_IN, kind: { in: ['CUSTOMER', 'BOTH'] } }, select: { id: true } });
+  const keyed = await db.party.count({ where: { systemKey: WALK_IN_KEY } });
+  if (keyed === 1) return 'ok';
+  if (keyed > 1) { log.warn(`${keyed} parties are marked as the walk-in account; keep one and clear the others.`); return 'ambiguous'; }
+  const named = await db.party.findMany({ where: { name: WALK_IN, kind: 'CUSTOMER' }, select: { id: true } });
   if (named.length === 1) { await db.party.update({ where: { id: named[0].id }, data: { systemKey: WALK_IN_KEY } }); return 'tagged'; }
   if (named.length > 1) log.warn(`${named.length} customers are named "Walk-in customers"; none was marked as the walk-in account. Merge or rename them, then restart.`);
   return named.length ? 'ambiguous' : 'none';

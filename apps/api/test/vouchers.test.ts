@@ -256,3 +256,83 @@ describe('round 2: the walk-in customer is marked once, never guessed', () => {
     }
   });
 });
+
+describe('round 3: no back doors', () => {
+  it('a cash/bank account must be an asset, and a used account cannot become or stop being one', async () => {
+    expect((await send('POST', '/accounts', owner, { code: '6995', name: 'Fake bank', type: 'EXPENSE', subtype: 'BANK' })).statusCode).toBe(400);
+    expect((await send('POST', '/accounts', owner, { code: '4995', name: 'Fake cash', type: 'INCOME', subtype: 'CASH' })).statusCode).toBe(400);
+    const box = (await send('POST', '/accounts', owner, { code: '1095', name: 'Second cash box', type: 'ASSET', subtype: 'CASH' })).json();
+    expect((await send('POST', '/journals', owner, { date: DAY, memo: 'Fill the second box', lines: [{ accountId: box.id, debit: 10 }, { accountId: await acc('1010'), credit: 10 }] })).statusCode).toBe(200);
+    expect((await send('PUT', `/accounts/${box.id}`, owner, { code: '1095', name: 'Second cash box', type: 'ASSET', subtype: 'CURRENT_ASSET' })).statusCode).toBe(409);
+    const prepaid = (await send('POST', '/accounts', owner, { code: '1295', name: 'Prepaid rent', type: 'ASSET', subtype: 'CURRENT_ASSET' })).json();
+    const paid = await send('POST', '/journals', owner, { date: DAY, memo: 'Rent paid ahead', lines: [{ accountId: prepaid.id, debit: 300 }, { accountId: await acc('1010'), credit: 300 }], voucher: voucher(300, { number: null, photos: [uniquePhoto()] }) });
+    expect(paid.statusCode).toBe(200);
+    expect((await send('PUT', `/accounts/${prepaid.id}`, owner, { code: '1295', name: 'Prepaid rent', type: 'ASSET', subtype: 'BANK' })).statusCode).toBe(409);
+  });
+
+  it('"opening balances" skip the voucher only before go-live and only against opening balance equity', async () => {
+    const equity = await acc('3900');
+    await prisma.organization.update({ where: { id: 'org' }, data: { voucherRuleFrom: new Date('2027-01-01T00:00:00Z') } });
+    try {
+      const cash = await acc('1010');
+      const out = (date: string) => ({ date, memo: 'Opening balances', opening: true, lines: [{ accountId: equity, debit: 40 }, { accountId: cash, credit: 40 }] });
+      expect((await send('POST', '/journals', owner, await out('2026-12-01'))).statusCode).toBe(200);
+      expect((await send('POST', '/journals', owner, await out(DAY))).statusCode).toBe(400);
+      const sneaky = { date: '2026-12-01', memo: 'Opening balances', opening: true, lines: [{ accountId: await acc('6090'), debit: 40 }, { accountId: await acc('1010'), credit: 40 }] };
+      expect((await send('POST', '/journals', owner, sneaky)).statusCode).toBe(400);
+    } finally {
+      await prisma.organization.update({ where: { id: 'org' }, data: { voucherRuleFrom: null } });
+    }
+  });
+
+  it('after go-live, importing past records and moving the lock date are the owner\'s', async () => {
+    await prisma.organization.update({ where: { id: 'org' }, data: { voucherRuleFrom: new Date('2027-01-01T00:00:00Z') } });
+    try {
+      expect((await send('PUT', '/settings/lock-date', accountant, { lockDate: null })).statusCode).toBe(403);
+      expect((await send('POST', '/import/workbook/preview', accountant, { fileName: 'x.xlsx', fileBase64: 'AAAA' })).statusCode).toBe(403);
+      expect((await send('PUT', '/settings/lock-date', owner, { lockDate: null })).statusCode).toBe(200);
+    } finally {
+      await prisma.organization.update({ where: { id: 'org' }, data: { voucherRuleFrom: null } });
+    }
+    expect((await send('PUT', '/settings/lock-date', accountant, { lockDate: null })).statusCode).toBe(200); // before go-live: as before
+  });
+
+  it('money received on an earlier day is voided by the owner only', async () => {
+    const pay = (await send('POST', '/payments', owner, { direction: 'IN', date: DAY, cashAccountId: await acc('1010'), counterAccountId: await acc('4500'), amount: 60 })).json();
+    await prisma.payment.update({ where: { id: pay.id }, data: { createdAt: new Date(Date.now() - 3 * 86_400_000) } });
+    expect((await send('POST', `/payments/${pay.id}/void`, manager, { reason: 'entered twice by mistake' })).statusCode).toBe(403);
+    expect((await send('POST', `/payments/${pay.id}/void`, owner, { reason: 'entered twice by mistake' })).statusCode).toBe(200);
+  });
+});
+
+describe('round 3: voucher numbers and photos are used once', () => {
+  it('compares voucher numbers without spaces, dashes or case; without a supplier, same number + amount within 30 days', async () => {
+    const shop = (await send('POST', '/parties', owner, { kind: 'SUPPLIER', name: 'Number Check Traders' })).json();
+    const bill = async (amount: number, number: string, supplierId: string | null, date = DAY) => send('POST', '/bills', owner, {
+      date, supplierId, lines: [{ description: 'Nails', quantity: 1, unitPrice: amount, accountId: await acc('6090') }], paid: { amount, cashAccountId: await acc('1010') },
+      voucher: voucher(amount, { number, date, photos: [uniquePhoto()] }),
+    });
+    expect((await bill(70, '0-12/a', shop.id)).statusCode).toBe(200);
+    expect((await bill(70, '012A', shop.id)).json().message).toMatch(/already entered/);
+    expect((await bill(25, 'CM 900', null)).statusCode).toBe(200);
+    expect((await bill(25, 'cm-900', null)).json().message).toMatch(/already entered/);
+    expect((await bill(26, 'cm-900', null)).statusCode).toBe(200); // a different amount: a different slip
+  });
+
+  it('a photo added later must not be a voucher already used elsewhere', async () => {
+    const photo = uniquePhoto();
+    expect((await expense(12, voucher(12, { number: null, photos: [photo] }))).statusCode).toBe(200);
+    const other = (await expense(13, voucher(13, { number: null, photos: [uniquePhoto()] }))).json();
+    const res = await send('POST', `/bills/${other.id}/attachments`, owner, { dataUrl: photo });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().message).toMatch(/already used/);
+  });
+
+  it('refused saves do not use up the photo allowance', async () => {
+    for (let i = 0; i < 25; i++) {
+      const res = await expense(10, voucher(11, { number: null, photos: [uniquePhoto()] }));
+      expect(res.json().message).toMatch(/match/);
+    }
+    expect((await expense(10, voucher(10, { number: null, photos: [uniquePhoto()] }))).statusCode).toBe(200);
+  });
+});

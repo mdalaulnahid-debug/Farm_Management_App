@@ -2,11 +2,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../db.js';
-import { conflict, notFound } from '../lib/errors.js';
+import { conflict, notFound, badRequest } from '../lib/errors.js';
 import { parse, zDate, zOptDate, zOptText } from '../lib/validate.js';
-import { ACCOUNT_SUBTYPES, ACCOUNT_TYPES, CASH_FLOW, ITEM_CATEGORIES, PARTY_KINDS } from '../lib/constants.js';
+import { ACCOUNT_SUBTYPES, ACCOUNT_TYPES, CASH_FLOW, ITEM_CATEGORIES, PARTY_KINDS, isMoneyAccount, SUBTYPE_TYPE } from '../lib/constants.js';
 import { audit } from '../services/common.js';
-import { actorOf, can } from '../auth/auth.js';
+import { actorOf, can, ownerAfterGoLive } from '../auth/auth.js';
 import { accountBalance, clearAccountCache } from '../services/ledger.js';
 import { round2, num } from '../lib/money.js';
 import { normalizePhone } from '../lib/phone.js';
@@ -25,7 +25,7 @@ export default async function masterRoutes(app: FastifyInstance) {
     return org;
   });
 
-  app.put('/settings/lock-date', { preHandler: can('settings.manage') }, async req => {
+  app.put('/settings/lock-date', { preHandler: ownerAfterGoLive }, async req => {
     const body = parse(z.object({ lockDate: zOptDate }), req.body);
     const org = await prisma.organization.update({ where: { id: 'org' }, data: { lockDate: body.lockDate ?? null } });
     await audit(prisma, actorOf(req), 'update', 'settings', 'org', body.lockDate ? `Closed books up to ${body.lockDate.toISOString().slice(0, 10)}` : 'Reopened all periods');
@@ -48,8 +48,14 @@ export default async function masterRoutes(app: FastifyInstance) {
     parentId: zOptText(40), description: zOptText(300), active: z.boolean().default(true),
   });
 
+  /** The subtype must belong to the type (e.g. BANK only under ASSET), so no account can pass as money wrongly. */
+  const typeMatches = (b: { type: string; subtype: string }) => {
+    const want = SUBTYPE_TYPE[b.subtype];
+    if (want && want !== b.type) throw badRequest(`A ${b.subtype.toLowerCase().replace(/_/g, ' ')} account must be of type ${want.toLowerCase()}.`);
+  };
   app.post('/accounts', { preHandler: can('accounting.manage') }, async req => {
     const body = parse(accountBody, req.body);
+    typeMatches(body);
     if (await prisma.account.findUnique({ where: { code: body.code } })) throw conflict(`Account code ${body.code} is already used.`);
     const acc = await prisma.account.create({ data: body });
     await audit(prisma, actorOf(req), 'create', 'account', acc.id, `Account ${acc.code} ${acc.name}`);
@@ -64,7 +70,10 @@ export default async function masterRoutes(app: FastifyInstance) {
     if (acc.system && (body.code !== acc.code || body.type !== acc.type || body.subtype !== acc.subtype || !body.active)) {
       throw conflict('System accounts can be renamed but their code, type and status are fixed.');
     }
-    if (acc.type !== body.type && (await prisma.journalLine.count({ where: { accountId: id } }))) throw conflict('Cannot change the type of an account that has postings.');
+    typeMatches(body);
+    const used = await prisma.journalLine.count({ where: { accountId: id } });
+    if (acc.type !== body.type && used) throw conflict('Cannot change the type of an account that has postings.');
+    if (used && isMoneyAccount(acc) !== isMoneyAccount(body)) throw conflict('An account with postings cannot become, or stop being, a cash/bank account.');
     const updated = await prisma.account.update({ where: { id }, data: body });
     clearAccountCache();
     await audit(prisma, actorOf(req), 'update', 'account', id, `Account ${updated.code} ${updated.name}`);
@@ -206,7 +215,7 @@ export default async function masterRoutes(app: FastifyInstance) {
   });
 
   app.get('/cash-accounts', { preHandler: can() }, async () => {
-    const accounts = await prisma.account.findMany({ where: { subtype: { in: ['CASH', 'BANK'] }, active: true }, orderBy: { code: 'asc' } });
+    const accounts = await prisma.account.findMany({ where: { type: 'ASSET', subtype: { in: ['CASH', 'BANK'] }, active: true }, orderBy: { code: 'asc' } });
     return { data: await Promise.all(accounts.map(async a => ({ ...a, balance: await accountBalance(prisma, a.id) }))) };
   });
 }

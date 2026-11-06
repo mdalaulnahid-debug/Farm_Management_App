@@ -93,7 +93,7 @@ export async function balanceSheet(asOf: Date) {
 
 /** Direct-method cash flow: every cash/bank movement is classified by its counter accounts. */
 export async function cashFlow(from: Date, to: Date) {
-  const cashAccounts = await prisma.account.findMany({ where: { subtype: { in: ['CASH', 'BANK'] } } });
+  const cashAccounts = await prisma.account.findMany({ where: { type: 'ASSET', subtype: { in: ['CASH', 'BANK'] } } });
   const cashIds = new Set(cashAccounts.map(a => a.id));
   const before = await balances({ to: addDays(from, -1) });
   const openingCash = round2(before.filter(r => cashIds.has(r.id)).reduce((a, r) => a + r.net, 0));

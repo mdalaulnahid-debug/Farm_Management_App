@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { prisma, tx } from '../db.js';
 import { badRequest } from '../lib/errors.js';
 import { parse, zReason } from '../lib/validate.js';
-import { actorOf, can } from '../auth/auth.js';
+import { actorOf, can, ownerAfterGoLive } from '../auth/auth.js';
 import { importWorkbook, parseWorkbook, previewWorkbook, undoBatch } from '../services/importer.js';
 import { buildTemplate, importTemplate, parseTemplate, previewTemplate } from '../services/past-records.js';
 
@@ -24,29 +24,29 @@ const big = { bodyLimit: 15 * 1024 * 1024 };
 const templateUpload = upload.pick({ fileName: true, fileBase64: true }).extend({ confirmOverlap: z.boolean().default(false) });
 
 export default async function importRoutes(app: FastifyInstance) {
-  app.get('/import/template', { preHandler: can('settings.manage') }, async (_req, reply) => {
+  app.get('/import/template', { preHandler: ownerAfterGoLive }, async (_req, reply) => {
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename="FarmLedger-past-records-template.xlsx"');
     return reply.send(buildTemplate());
   });
 
-  app.post('/import/template/preview', { ...big, preHandler: can('settings.manage') }, async req => {
+  app.post('/import/template/preview', { ...big, preHandler: ownerAfterGoLive }, async req => {
     const body = parse(templateUpload, req.body);
     return previewTemplate(actorOf(req), parseTemplate(decode(body.fileBase64)));
   });
 
-  app.post('/import/template', { ...big, preHandler: can('settings.manage') }, async req => {
+  app.post('/import/template', { ...big, preHandler: ownerAfterGoLive }, async req => {
     const body = parse(templateUpload, req.body);
     const parsed = parseTemplate(decode(body.fileBase64));
     return tx(db => importTemplate(db, actorOf(req), parsed, { fileName: body.fileName, confirmOverlap: body.confirmOverlap }), 180_000);
   });
 
-  app.post('/import/workbook/preview', { ...big, preHandler: can('settings.manage') }, async req => {
+  app.post('/import/workbook/preview', { ...big, preHandler: ownerAfterGoLive }, async req => {
     const body = parse(upload, req.body);
     return previewWorkbook(parseWorkbook(decode(body.fileBase64)));
   });
 
-  app.post('/import/workbook', { ...big, preHandler: can('settings.manage') }, async req => {
+  app.post('/import/workbook', { ...big, preHandler: ownerAfterGoLive }, async req => {
     const body = parse(upload, req.body);
     const parsed = parseWorkbook(decode(body.fileBase64));
     const preview = await previewWorkbook(parsed);
@@ -55,12 +55,12 @@ export default async function importRoutes(app: FastifyInstance) {
     return tx(db => importWorkbook(db, actorOf(req), parsed, { replaceExisting: body.replaceExisting, flockId: body.flockId, fileName: body.fileName }), 180_000);
   });
 
-  app.get('/import/batches', { preHandler: can('settings.manage') }, async () => {
+  app.get('/import/batches', { preHandler: ownerAfterGoLive }, async () => {
     const rows = await prisma.importBatch.findMany({ orderBy: { createdAt: 'desc' } });
     return { data: rows.map(({ documents: _d, summary, ...b }) => ({ ...b, summary: JSON.parse(summary) })) };
   });
 
-  app.post('/import/batches/:id/undo', { preHandler: can('settings.manage') }, async req => {
+  app.post('/import/batches/:id/undo', { preHandler: ownerAfterGoLive }, async req => {
     const { reason } = parse(zReason, req.body);
     await tx(db => undoBatch(db, actorOf(req), (req.params as { id: string }).id, reason), 180_000);
     return { ok: true };
