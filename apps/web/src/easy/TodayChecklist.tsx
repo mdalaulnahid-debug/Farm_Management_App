@@ -1,5 +1,6 @@
-// Today's routine at a glance: morning eggs, evening feed, medicine and expenses, each ticking green when done
-// (by anyone on the farm). "None today" answers count, so a quiet day can still be finished.
+// Today's routine at a glance: morning eggs, then sales and money collected, feed, medicine and spending, each
+// ticking green when done (by anyone on the farm), so the books stay up to date every day. "None today" answers
+// count, so a quiet day can still be finished.
 import { Check, Circle } from 'lucide-react';
 import { api } from '../lib/api';
 import { ymd } from '../lib/format';
@@ -8,7 +9,7 @@ import { usePrefs } from '../lib/i18n';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFarmLists, type Flow } from './shared';
 
-interface Item { key: string; label: string; done: boolean; flow: Flow; none?: 'feed' | 'medicine' | 'expenses' }
+interface Item { key: string; label: string; done: boolean; flow: Flow; none?: 'feed' | 'medicine' | 'expenses' | 'sales' }
 
 export function TodayChecklist({ onOpen }: { onOpen: (f: Flow) => void }) {
   const { t } = usePrefs();
@@ -19,6 +20,8 @@ export function TodayChecklist({ onOpen }: { onOpen: (f: Flow) => void }) {
   const logs = useApi<{ data: { flockId: string; eggsCollected: number; feedQty: number }[] }>('/production', { ...range, status: 'POSTED', pageSize: 200 });
   const moves = useApi<{ data: { type: string; voided: boolean; item: { name: string }; itemId: string }[] }>('/stock-moves', { ...range, type: 'CONSUMPTION', pageSize: 200 });
   const bills = useApi<{ data: { status: string }[] }>('/bills', { ...range, pageSize: 50 });
+  const sales = useApi<{ data: { status: string }[] }>('/invoices', { ...range, pageSize: 50 });
+  const received = useApi<{ data: { status: string }[] }>('/payments', { ...range, direction: 'IN', pageSize: 50 });
   const mine = useApi<{ none?: string[] }>('/me/today');
   if (!L.flocks.length || logs.isLoading) return null;
 
@@ -26,9 +29,10 @@ export function TodayChecklist({ onOpen }: { onOpen: (f: Flow) => void }) {
   const sum = (id: string, f: (l: { eggsCollected: number; feedQty: number }) => number) => (logs.data?.data ?? []).filter(l => l.flockId === id).reduce((a, l) => a + Number(f(l)), 0);
   const items: Item[] = [
     { key: 'eggs', label: t('Morning eggs', 'সকালের ডিম'), flow: 'eggs', done: L.flocks.every(f => sum(f.id, l => l.eggsCollected) > 0) },
+    { key: 'sales', label: t('Sales & money collected', 'বিক্রি ও টাকা আদায়'), flow: 'sale', none: 'sales', done: none.has('sales') || [...(sales.data?.data ?? []), ...(received.data?.data ?? [])].some(r => r.status !== 'VOID') },
     { key: 'feed', label: t('Feed used', 'খাদ্য ব্যবহার'), flow: 'evening', none: 'feed', done: none.has('feed') || L.flocks.every(f => sum(f.id, l => l.feedQty) > 0) },
     { key: 'medicine', label: t('Medicine used', 'ওষুধ ব্যবহার'), flow: 'evening', none: 'medicine', done: none.has('medicine') || (moves.data?.data ?? []).some(m => !m.voided && L.medicineIds.has(m.itemId)) },
-    { key: 'expenses', label: t('Expenses', 'খরচ'), flow: 'bought', none: 'expenses', done: none.has('expenses') || (bills.data?.data ?? []).some(b => b.status !== 'VOID') },
+    { key: 'expenses', label: t('Spending (with vouchers)', 'খরচ (ভাউচারসহ)'), flow: 'bought', none: 'expenses', done: none.has('expenses') || (bills.data?.data ?? []).some(b => b.status !== 'VOID') },
   ];
   const left = items.filter(i => !i.done).length;
   const markNone = async (what: string) => { await api.post('/me/today/none', { what }).catch(() => undefined); qc.invalidateQueries({ queryKey: ['/me/today'] }); };

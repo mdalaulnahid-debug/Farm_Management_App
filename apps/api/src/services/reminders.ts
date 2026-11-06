@@ -1,6 +1,9 @@
-// Daily reminders (Web Push). At the farm's morning and evening times (Bangladesh time) data-entry staff are
-// asked for the day's eggs, then for feed, medicine and expenses. One hour later they are asked again if the
-// job is still not done, and two hours later the owner is told. Each slot is handled once per farm day.
+// Daily reminders (Web Push), so the books stay up to date every day (owner, 6 Nov 2026: "keep telling the users
+// to update the daily operations such as recording collection, sales, spendings"). At the farm's morning time
+// data-entry staff are asked for the day's eggs; at the evening time for the day's sales and money collected,
+// spending (with vouchers), feed and medicine. While the job is not done they are asked again after 1 hour and
+// after 2 hours, and at 2 hours the owner is told too. Each item counts as done when recorded, or when staff answer
+// "none today" for it. Each slot is handled once per farm day.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import webpush from 'web-push';
@@ -10,6 +13,8 @@ import { sqliteFile } from './backup.js';
 
 export type Base = 'morning' | 'evening';
 export type Slot = Base | `${Base}-again` | `${Base}-owner`;
+/** What staff can answer "none today" for. */
+export const NONE_ITEMS = ['feed', 'medicine', 'expenses', 'sales'] as const;
 export interface ReminderConfig { on: boolean; morning: string; evening: string }
 export interface Payload { title: string; body: string; url: string }
 export interface Sent { userId: string; endpoint: string; keys: { p256dh: string; auth: string }; payload: Payload }
@@ -35,8 +40,8 @@ export function dueSlots(now: Date, cfg: ReminderConfig): Slot[] {
 
 const none = async (db: Db, day: string, what: string) => !!(await db.reminderLog.findUnique({ where: { day_slot: { day, slot: `none-${what}` } } }));
 
-/** Morning: every active flock has today's eggs. Evening: feed for every active flock, and medicine and expenses
- *  recorded today, each of them or answered "none today". */
+/** Morning: every active flock has today's eggs. Evening: sales or money collected, spending, feed for every
+ *  active flock, and medicine, all recorded today, each of them or answered "none today". */
 export async function isDone(db: Db, base: Base, day: string): Promise<boolean> {
   const date = new Date(`${day}T00:00:00Z`);
   const flocks = await db.flock.findMany({ where: { status: 'ACTIVE' }, select: { id: true } });
@@ -47,25 +52,36 @@ export async function isDone(db: Db, base: Base, day: string): Promise<boolean> 
   const medicine = (await none(db, day, 'medicine'))
     || (await db.stockMove.count({ where: { date, voided: false, type: 'CONSUMPTION', item: { category: 'MEDICINE' } } })) > 0;
   const expenses = (await none(db, day, 'expenses')) || (await db.bill.count({ where: { date, status: { not: 'VOID' } } })) > 0;
-  return feed && medicine && expenses;
+  const sales = (await none(db, day, 'sales'))
+    || (await db.salesInvoice.count({ where: { date, status: { not: 'VOID' } } })) > 0
+    || (await db.payment.count({ where: { date, direction: 'IN', status: { not: 'VOID' } } })) > 0;
+  return feed && medicine && expenses && sales;
 }
 
-const TEXT: Record<Base | 'owner-morning' | 'owner-evening', { en: Payload; bn: Payload }> = {
+const TEXT: Record<Base | 'again-morning' | 'again-evening' | 'owner-morning' | 'owner-evening', { en: Payload; bn: Payload }> = {
   morning: {
     en: { title: 'Today’s eggs', body: 'How many eggs were collected today? Any ducks died? Tap to record.', url: '/?flow=eggs' },
     bn: { title: 'আজকের ডিম', body: 'আজ কতগুলো ডিম সংগ্রহ হলো? কোনো হাঁস মারা গেছে? লিখতে চাপুন।', url: '/?flow=eggs' },
   },
   evening: {
-    en: { title: 'Evening entries', body: 'Please record today’s feed, medicine and expenses. Tap to start.', url: '/?flow=evening' },
-    bn: { title: 'সন্ধ্যার হিসাব', body: 'আজকের খাদ্য, ওষুধ ও খরচ লিখুন। শুরু করতে চাপুন।', url: '/?flow=evening' },
+    en: { title: 'Today’s books', body: 'Please record today’s sales and money collected, spending (with vouchers), feed and medicine, so the books stay up to date. Tap to start.', url: '/' },
+    bn: { title: 'আজকের হিসাব', body: 'আজকের বিক্রি ও টাকা আদায়, খরচ (ভাউচারসহ), খাদ্য ও ওষুধ লিখুন, যাতে হিসাব হালনাগাদ থাকে। শুরু করতে চাপুন।', url: '/' },
+  },
+  'again-morning': {
+    en: { title: 'Still waiting: today’s eggs', body: 'Today’s eggs are not recorded yet. Please record them now so the books stay up to date.', url: '/?flow=eggs' },
+    bn: { title: 'এখনো বাকি: আজকের ডিম', body: 'আজকের ডিম এখনো লেখা হয়নি। হিসাব হালনাগাদ রাখতে এখনই লিখুন।', url: '/?flow=eggs' },
+  },
+  'again-evening': {
+    en: { title: 'Still waiting: today’s books', body: 'Some of today’s sales, collections, spending, feed or medicine are not recorded yet. Tap to see what is left.', url: '/' },
+    bn: { title: 'এখনো বাকি: আজকের হিসাব', body: 'আজকের বিক্রি, আদায়, খরচ, খাদ্য বা ওষুধের কিছু এখনো লেখা হয়নি। কী বাকি দেখতে চাপুন।', url: '/' },
   },
   'owner-morning': {
     en: { title: 'Morning eggs not recorded', body: 'Today’s egg count has not been entered yet.', url: '/production' },
     bn: { title: 'সকালের ডিম লেখা হয়নি', body: 'আজকের ডিমের হিসাব এখনো লেখা হয়নি।', url: '/production' },
   },
   'owner-evening': {
-    en: { title: 'Evening entries missing', body: 'Today’s feed, medicine or expenses are not all recorded yet.', url: '/production' },
-    bn: { title: 'সন্ধ্যার হিসাব বাকি', body: 'আজকের খাদ্য, ওষুধ বা খরচ সব এখনো লেখা হয়নি।', url: '/production' },
+    en: { title: 'Today’s books are not complete', body: 'Today’s sales, collections, spending, feed or medicine are not all recorded yet.', url: '/' },
+    bn: { title: 'আজকের হিসাব অসম্পূর্ণ', body: 'আজকের বিক্রি, আদায়, খরচ, খাদ্য বা ওষুধ সব এখনো লেখা হয়নি।', url: '/' },
   },
 };
 
@@ -95,12 +111,15 @@ export async function runReminders(db: Db, now: Date, send: (s: Sent) => Promise
     const done = await isDone(db, base, day);
     await db.reminderLog.create({ data: { day, slot, kind: done ? 'done' : 'sent' } });
     if (done) continue;
+    // Staff are asked at the time, again at +1 h, and once more at +2 h, when the owner is told as well.
     const toOwner = slot.endsWith('-owner');
-    const users = await db.user.findMany({ where: { active: true, role: { key: toOwner ? 'owner' : 'operator' } }, select: { id: true, locale: true } });
+    const users = await db.user.findMany({ where: { active: true, role: { key: { in: toOwner ? ['owner', 'operator'] : ['operator'] } } }, select: { id: true, locale: true, role: { select: { key: true } } } });
     const subs = await db.pushSubscription.findMany({ where: { userId: { in: users.map(u => u.id) } } });
     for (const s of subs) {
       const lang = users.find(u => u.id === s.userId)?.locale === 'bn' ? 'bn' : 'en';
-      const payload = TEXT[(toOwner ? `owner-${base}` : base) as keyof typeof TEXT][lang];
+      const isOwner = users.find(u => u.id === s.userId)?.role.key === 'owner';
+      const text = isOwner ? `owner-${base}` : slot === base ? base : `again-${base}`;
+      const payload = TEXT[text as keyof typeof TEXT][lang];
       try {
         await send({ userId: s.userId, endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth }, payload });
       } catch (e) {

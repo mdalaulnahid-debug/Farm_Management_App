@@ -8,7 +8,7 @@ import { parse } from '../lib/validate.js';
 import { farmYmd } from '../lib/farm-time.js';
 import { audit } from '../services/common.js';
 import { forbidden } from '../lib/errors.js';
-import { isPushEndpoint, pushSender, reminderConfig, vapidKeys } from '../services/reminders.js';
+import { isPushEndpoint, NONE_ITEMS, pushSender, reminderConfig, vapidKeys } from '../services/reminders.js';
 
 // Reminder times end by 21:59 so the second reminder and the owner's (+1 h, +2 h) stay on the same farm day.
 const hhmm = z.string().regex(/^([01]\d|2[01]):[0-5]\d$/, 'Use a time between 00:00 and 21:59, like 10:00.');
@@ -55,12 +55,12 @@ export default async function reminderRoutes(app: FastifyInstance) {
     preHandler: async (req, reply) => {
       await can()(req, reply);
       const p = req.user!.permissions as readonly string[];
-      if (!p.includes('production.manage') && !p.includes('purchases.create')) throw forbidden();
+      if (!p.includes('production.manage') && !p.includes('purchases.create') && !p.includes('sales.create')) throw forbidden();
     },
   }, async req => {
-    const { what } = parse(z.object({ what: z.enum(['feed', 'medicine', 'expenses']) }), req.body);
+    const { what } = parse(z.object({ what: z.enum(NONE_ITEMS) }), req.body);
     const perms = req.user!.permissions as readonly string[];
-    if (!perms.includes(what === 'expenses' ? 'purchases.create' : 'production.manage')) throw forbidden();
+    if (!perms.includes(what === 'expenses' ? 'purchases.create' : what === 'sales' ? 'sales.create' : 'production.manage')) throw forbidden();
     const day = farmYmd();
     const slot = `none-${what}`;
     const existing = await prisma.reminderLog.findUnique({ where: { day_slot: { day, slot } } });

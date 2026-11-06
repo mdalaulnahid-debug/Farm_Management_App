@@ -164,7 +164,7 @@ const ROUTES: Row[] = [
   // record that does not exist that exception never applies, so these rows still hold.
   row('POST', '/stock-adjustments/:sourceId/void', need('inventory.manage')),
   row('GET', '/me/today', 'signed-in'),
-  row('POST', '/me/today/none', [['production.manage'], ['purchases.create']]),
+  row('POST', '/me/today/none', [['production.manage'], ['purchases.create'], ['sales.create']]),
   row('GET', '/push/key', 'signed-in'),
   row('POST', '/push/subscribe', 'signed-in'),
   row('DELETE', '/push/subscribe', 'signed-in'),
