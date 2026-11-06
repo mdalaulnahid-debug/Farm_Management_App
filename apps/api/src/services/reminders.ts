@@ -74,8 +74,19 @@ export async function reminderConfig(db: Db): Promise<ReminderConfig> {
   return { on: org?.remindersOn ?? true, morning: org?.reminderMorning ?? '10:00', evening: org?.reminderEvening ?? '17:00' };
 }
 
-/** Handle every slot due at `now`: record it (once per day), and if the job is not done, send to the right people. */
-export async function runReminders(db: Db, now: Date, send: (s: Sent) => Promise<void>) {
+/** The push services browsers use. Subscriptions may only point at these, so the server never sends requests to
+ *  an address a user chose (no server-side request forgery into the farm's network). */
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^updates\.push\.services\.mozilla\.com$/, /\.push\.services\.mozilla\.com$/, /\.notify\.windows\.com$/, /\.push\.apple\.com$/];
+export function isPushEndpoint(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    return u.protocol === 'https:' && !u.port && !u.username && !u.password && PUSH_HOSTS.some(h => h.test(u.hostname));
+  } catch { return false; }
+}
+
+/** Handle every slot due at `now`: record it (once per day), and if the job is not done, send to the right people.
+ *  One phone failing never stops the others: each failure is logged and the next phone is tried. */
+export async function runReminders(db: Db, now: Date, send: (s: Sent) => Promise<void>, log?: { error: (m: string) => void }) {
   const slots = dueSlots(now, await reminderConfig(db));
   const day = farmYmd(now);
   for (const slot of slots) {
@@ -90,17 +101,24 @@ export async function runReminders(db: Db, now: Date, send: (s: Sent) => Promise
     for (const s of subs) {
       const lang = users.find(u => u.id === s.userId)?.locale === 'bn' ? 'bn' : 'en';
       const payload = TEXT[(toOwner ? `owner-${base}` : base) as keyof typeof TEXT][lang];
-      await send({ userId: s.userId, endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth }, payload });
+      try {
+        await send({ userId: s.userId, endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth }, payload });
+      } catch (e) {
+        log?.error(`Reminder ${slot} to one phone of user ${s.userId} failed: ${(e as Error).message}`);
+      }
     }
   }
 }
 
 // ───── Web Push keys and sending ─────
 
-/** VAPID keys from VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY, or generated once and kept next to the database. */
+/** VAPID keys from VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY (both or neither), or generated once and kept in
+ *  VAPID_FILE (default: vapid.json next to the database; tests point it at a temp folder). */
 export function vapidKeys(): { publicKey: string; privateKey: string } {
-  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) return { publicKey: process.env.VAPID_PUBLIC_KEY, privateKey: process.env.VAPID_PRIVATE_KEY };
-  const file = join(dirname(sqliteFile()), 'vapid.json');
+  const pub = process.env.VAPID_PUBLIC_KEY, priv = process.env.VAPID_PRIVATE_KEY;
+  if (!!pub !== !!priv) throw new Error('Set both VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY, or neither.');
+  if (pub && priv) return { publicKey: pub, privateKey: priv };
+  const file = process.env.VAPID_FILE || join(dirname(sqliteFile()), 'vapid.json');
   if (existsSync(file)) return JSON.parse(readFileSync(file, 'utf8'));
   const keys = webpush.generateVAPIDKeys();
   writeFileSync(file, JSON.stringify(keys), { mode: 0o600 });
@@ -112,6 +130,7 @@ export const pushSender = (db: Db) => {
   const { publicKey, privateKey } = vapidKeys();
   webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:farmledger@localhost', publicKey, privateKey);
   return async (s: Sent) => {
+    if (!isPushEndpoint(s.endpoint)) { await db.pushSubscription.deleteMany({ where: { endpoint: s.endpoint } }); return; }
     try {
       await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, JSON.stringify(s.payload), { TTL: 3 * 3600 });
     } catch (e: any) {
@@ -123,7 +142,7 @@ export const pushSender = (db: Db) => {
 
 /** Checks every minute. Started by the server only, never by tests. */
 export function startReminderScheduler(db: Db, log: { error: (m: string) => void }) {
-  const send = pushSender(db);
-  const tick = () => runReminders(db, new Date(), send).catch(e => log.error(`Daily reminders failed: ${(e as Error).message}`));
+  const send = pushSender(db); // throws at start-up when only one VAPID key is set
+  const tick = () => runReminders(db, new Date(), send, log).catch(e => log.error(`Daily reminders failed: ${(e as Error).message}`));
   return setInterval(tick, 60_000).unref();
 }

@@ -39,7 +39,8 @@ const operator = async (email: string) => {
 /** Pretend a record was made at 23:50 Bangladesh time yesterday. */
 const yesterday = () => new Date(farmDayStart().getTime() - 10 * 60_000);
 const sale = (cookie: string, received = true) => call('POST', '/invoices', cookie, {
-  date: today(), lines: [{ itemId: eggId, quantity: 30, unitPrice: 15 }], ...(received ? { received: { amount: 450, cashAccountId: cashId } } : {}),
+  // An unpaid sale needs a known customer (walk-in buyers pay in full), so the buyer is a customer with a mobile number.
+  date: today(), customer: { name: 'Fix Test Buyer', phone: '01700-000001' }, lines: [{ itemId: eggId, quantity: 30, unitPrice: 15 }], ...(received ? { received: { amount: 450, cashAccountId: cashId } } : {}),
 });
 
 beforeAll(async () => {

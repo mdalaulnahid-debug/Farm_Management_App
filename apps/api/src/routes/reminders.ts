@@ -7,9 +7,11 @@ import { actorOf, can } from '../auth/auth.js';
 import { parse } from '../lib/validate.js';
 import { farmYmd } from '../lib/farm-time.js';
 import { audit } from '../services/common.js';
-import { pushSender, reminderConfig, vapidKeys } from '../services/reminders.js';
+import { forbidden } from '../lib/errors.js';
+import { isPushEndpoint, pushSender, reminderConfig, vapidKeys } from '../services/reminders.js';
 
-const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use a time like 10:00.');
+// Reminder times end by 21:59 so the second reminder and the owner's (+1 h, +2 h) stay on the same farm day.
+const hhmm = z.string().regex(/^([01]\d|2[01]):[0-5]\d$/, 'Use a time between 00:00 and 21:59, like 10:00.');
 
 export default async function reminderRoutes(app: FastifyInstance) {
   app.get('/settings/reminders', { preHandler: can('settings.manage') }, async () => reminderConfig(prisma));
@@ -25,13 +27,17 @@ export default async function reminderRoutes(app: FastifyInstance) {
   app.post('/settings/reminders/test', { preHandler: can('settings.manage') }, async req => {
     const subs = await prisma.pushSubscription.findMany({ where: { userId: req.user!.id } });
     const send = pushSender(prisma);
-    for (const s of subs) await send({ userId: s.userId, endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth }, payload: { title: 'FarmLedger', body: 'Reminders work on this device.', url: '/' } });
-    return { sent: subs.length };
+    let sent = 0;
+    for (const s of subs) {
+      try { await send({ userId: s.userId, endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth }, payload: { title: 'FarmLedger', body: 'Reminders work on this device.', url: '/' } }); sent++; }
+      catch (e) { req.log.error(`Test reminder to one phone failed: ${(e as Error).message}`); }
+    }
+    return { sent, phones: subs.length };
   });
 
   app.get('/push/key', { preHandler: can() }, async () => ({ publicKey: vapidKeys().publicKey }));
 
-  const subscription = z.object({ endpoint: z.string().url().max(1000), keys: z.object({ p256dh: z.string().min(10).max(200), auth: z.string().min(4).max(100) }) });
+  const subscription = z.object({ endpoint: z.string().url().max(1000).refine(isPushEndpoint, 'Not a browser push service address.'), keys: z.object({ p256dh: z.string().min(10).max(200), auth: z.string().min(4).max(100) }) });
   app.post('/push/subscribe', { preHandler: can() }, async req => {
     const body = parse(subscription, req.body);
     const data = { userId: req.user!.id, p256dh: body.keys.p256dh, auth: body.keys.auth, userAgent: String(req.headers['user-agent'] ?? '').slice(0, 300) };
@@ -44,11 +50,24 @@ export default async function reminderRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.post('/me/today/none', { preHandler: can() }, async req => {
+  // Data-entry staff only: feed and medicine need production rights, expenses need purchase rights. Audited.
+  app.post('/me/today/none', {
+    preHandler: async (req, reply) => {
+      await can()(req, reply);
+      const p = req.user!.permissions as readonly string[];
+      if (!p.includes('production.manage') && !p.includes('purchases.create')) throw forbidden();
+    },
+  }, async req => {
     const { what } = parse(z.object({ what: z.enum(['feed', 'medicine', 'expenses']) }), req.body);
+    const perms = req.user!.permissions as readonly string[];
+    if (!perms.includes(what === 'expenses' ? 'purchases.create' : 'production.manage')) throw forbidden();
     const day = farmYmd();
     const slot = `none-${what}`;
-    await prisma.reminderLog.upsert({ where: { day_slot: { day, slot } }, create: { day, slot, kind: 'none', userId: req.user!.id }, update: {} });
+    const existing = await prisma.reminderLog.findUnique({ where: { day_slot: { day, slot } } });
+    if (!existing) {
+      await prisma.reminderLog.create({ data: { day, slot, kind: 'none', userId: req.user!.id } });
+      await audit(prisma, actorOf(req), 'update', 'reminder', slot, `Marked no ${what} today (${day})`);
+    }
     return { ok: true };
   });
 }
