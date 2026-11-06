@@ -105,7 +105,11 @@ export async function buildApp() {
       preCompressed: true,
       cacheControl: false,
       // Hashed bundles never change; index.html must always be revalidated so new releases load.
-      setHeaders: (res, path) => res.setHeader('Cache-Control', /[\\/]assets[\\/]/.test(path) ? 'public, max-age=31536000, immutable' : 'no-cache'),
+      // Vary: the same address is sent compressed or not depending on the browser, so caches must keep them apart.
+      setHeaders: (res, path) => {
+        res.setHeader('Cache-Control', /[\\/]assets[\\/]/.test(path) ? 'public, max-age=31536000, immutable' : 'no-cache');
+        res.setHeader('Vary', 'Accept-Encoding');
+      },
     });
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith('/api/') || req.url.startsWith('/assets/')) return reply.status(404).send({ error: 'NOT_FOUND', message: 'Not found.' });
