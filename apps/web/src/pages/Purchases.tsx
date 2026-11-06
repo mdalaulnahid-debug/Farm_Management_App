@@ -6,7 +6,8 @@ import { useApi, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtMoney } from '../lib/format';
 import { Card, DataTable, Drawer, Kpi, Loading, PageHeader, RangePicker, SearchBox, Segmented, StatusBadge, thisMonth, VoidDialog, type Column } from '../components/ui';
 import { feedStore } from '../assets/photos';
-import { AllocationsTable, BillDrawer, DocLinesTable, Money, OrgLetterhead, PaymentDrawer } from '../components/forms';
+import { AllocationsTable, BillDrawer, DocLinesTable, Money, PaymentDrawer } from '../components/forms';
+import { DocPaper, docQr, docStatus } from '../components/DocPaper';
 
 interface Bill {
   id: string; number: string; date: string; dueDate: string | null; status: string; total: number; amountPaid: number;
@@ -98,28 +99,21 @@ function BillDetail({ id, onClose }: { id: string; onClose: () => void }) {
         {can('purchases.void') && d.status !== 'VOID' && <button className="btn" onClick={() => setVoiding(true)}>{t('Void', 'বাতিল')}</button>}
         {can('purchases.create') && balance > 0.005 && d.status !== 'VOID' && d.supplierId && <button className="btn primary" onClick={() => setPaying(true)}><HandCoins size={16} />{t('Pay', 'পরিশোধ')}</button>}
       </>}>
-      {bill.isLoading ? <Loading /> : !d ? null : <>
-        <div className="row between align-start">
-          <OrgLetterhead sub={t('Purchase bill', 'ক্রয় বিল')} />
-          <dl className="desc-list">
-            <dt>{t('Date', 'তারিখ')}</dt><dd>{fmtDate(d.date, lang)}</dd>
-            <dt>{t('Due', 'শেষ তারিখ')}</dt><dd>{fmtDate(d.dueDate, lang)}</dd>
-            {d.reference && <><dt>{t('Supplier ref.', 'সরবরাহকারীর বিল নং')}</dt><dd>{d.reference}</dd></>}
-          </dl>
-        </div>
-        <div>
-          <div className="muted small">{t('Supplier', 'সরবরাহকারী')}</div>
-          {d.supplier ? <><b>{d.supplier.name}</b>{d.supplier.phone && <div className="small">{d.supplier.phone}</div>}</> : <span className="muted">{t('No supplier (paid in cash)', 'সরবরাহকারী নেই (নগদে পরিশোধ)')}</span>}
-        </div>
-        <DocLinesTable lines={d.lines} />
-        <div className="totals">
-          <span className="grand">{t('Total', 'মোট')}</span><span className="grand num"><Money v={d.total} /></span>
-          <span className="muted">{t('Paid', 'পরিশোধিত')}</span><Money v={d.amountPaid} />
-          <span><b>{t('Balance due', 'বাকি')}</b></span><b className="num"><Money v={d.status === 'VOID' ? 0 : balance} /></b>
-        </div>
-        <AllocationsTable allocations={d.allocations} />
-        {d.notes && <div className="muted small">{d.notes}</div>}
-      </>}
+      {bill.isLoading ? <Loading /> : !d ? null : (
+        <DocPaper kind={t('Purchase bill', 'ক্রয় বিল')} number={d.number} status={docStatus(t, d.status)}
+          party={{ label: t('Supplier', 'সরবরাহকারী'), name: d.supplier?.name ?? t('No supplier (paid in cash)', 'সরবরাহকারী নেই (নগদে পরিশোধ)'), lines: [d.supplier?.phone] }}
+          meta={[[t('Date', 'তারিখ'), fmtDate(d.date, lang)], [t('Due', 'শেষ তারিখ'), fmtDate(d.dueDate, lang)], ...(d.reference ? [[t('Supplier ref.', 'সরবরাহকারীর বিল নং'), d.reference] as [string, string]] : [])]}
+          qr={docQr(me?.organization.name, 'Bill', d.number, d.date, Number(d.total), balance, d.status)}>
+          <DocLinesTable lines={d.lines} />
+          <div className="totals">
+            <span className="grand">{t('Total', 'মোট')}</span><span className="grand num"><Money v={d.total} /></span>
+            <span className="muted">{t('Paid', 'পরিশোধিত')}</span><Money v={d.amountPaid} />
+            <span className="due">{t('Balance due', 'বাকি')}</span><span className="due num"><Money v={d.status === 'VOID' ? 0 : balance} /></span>
+          </div>
+          <AllocationsTable allocations={d.allocations} />
+          {d.notes && <div className="doc-notes">{d.notes}</div>}
+        </DocPaper>
+      )}
       {voiding && <VoidDialog what={t('bill', 'বিল')} busy={voidIt.isPending} onClose={() => setVoiding(false)} onConfirm={reason => voidIt.mutate({ reason }, { onSuccess: () => { setVoiding(false); onClose(); } })} />}
       {paying && d && <PaymentDrawer direction="OUT" partyId={d.supplierId} onClose={() => setPaying(false)} />}
     </Drawer>

@@ -281,6 +281,19 @@ body { background:
 .kpi-value { font-size: 2.15em; font-weight: 600; letter-spacing: -.02em; line-height: 1.12; margin-top: 6px; }
 .kpi-sub { font-size: .82em; color: var(--text-3); }
 
+.kpi-value-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+/* Change against the earlier period: a soft pill, green when good, red when bad, grey when it is neither. */
+.kpi-delta { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: .78em; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; background: var(--surface-3); color: var(--text-2); }
+.kpi-delta i { font-style: normal; font-weight: 700; }
+.kpi-delta.good { background: var(--success-soft); color: var(--success); }
+.kpi-delta.bad { background: var(--danger-soft); color: var(--danger); }
+.kpi-spark { position: absolute; top: 16px; right: 18px; color: var(--chart-1); opacity: .9; pointer-events: none; }
+.kpi-spark-fill { fill: currentColor; opacity: .1; }
+.kpi:has(> .kpi-spark) { container-type: inline-size; }
+@container (max-width: 205px) { .kpi-spark { display: none; } }
+.kpi:has(.kpi-icon.amber) .kpi-spark { color: var(--chart-2); }
+.kpi:has(.kpi-icon.blue) .kpi-spark { color: var(--chart-3); }
+.kpi:has(.kpi-icon.red) .kpi-spark { color: var(--chart-5); }
 /* Buttons with a little light on top and weight underneath, so they read as something to press. */
 .btn { border-radius: var(--radius-sm); border-color: color-mix(in srgb, var(--border-strong) 85%, transparent); box-shadow: 0 1px 2px rgba(14, 59, 44, .06); transition: background var(--dur-fast), border-color var(--dur-fast), box-shadow var(--dur-fast), transform var(--dur-fast); }
 .btn:active:not(:disabled) { transform: translateY(1px); }
@@ -313,6 +326,16 @@ body { background:
 .rich-tip-row b { margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; }
 .recharts-wrapper:focus, .recharts-surface:focus, .recharts-wrapper *:focus { outline: none; }
 
+/* The saved tick: ring first, then the check. Drawn complete when motion is off. */
+.tick { flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tick circle { opacity: .55; }
+@media (prefers-reduced-motion: no-preference) {
+  .tick circle { stroke-dasharray: 1; animation: tick-draw .45s var(--ease-out) both; }
+  .tick path { stroke-dasharray: 1; animation: tick-draw .35s .3s var(--ease-out) both; }
+  .toast { animation: toast-in .32s var(--ease-out) both; }
+}
+@keyframes tick-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes toast-in { from { transform: translateY(10px) scale(.98); } }
 @media (prefers-reduced-motion: no-preference) {
   .grid:has(> .kpi) .kpi-value { animation: figure-in .7s var(--ease-out) both; }
 }
@@ -343,6 +366,8 @@ body { background:
   .kpi-value { font-size: 1.4em; margin-top: 2px; }
   .kpi-label { font-size: .8em; }
   .kpi-icon { width: 24px; height: 24px; }
+  .kpi-spark { display: none; }
+  .kpi-delta { height: 20px; padding: 0 6px; }
   .card-head { padding: 12px 14px; }
   .card-head > .row { width: 100%; }
   .card-head .row > *, .card-head .search, .page-actions > * { flex: 1 1 auto; }

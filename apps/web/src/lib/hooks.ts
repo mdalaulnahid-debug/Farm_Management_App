@@ -10,12 +10,17 @@ export const useApi = <T = any>(path: string | null, query?: Record<string, any>
  * POST/PUT that shows a toast, and on success refreshes every cached query (documents
  * touch many reports, so a blanket refresh keeps every screen consistent).
  */
+/** A short tap of vibration on a phone when something is saved (Android; iPhones ignore it). */
+export function buzz() {
+  try { if (window.matchMedia?.('(pointer: coarse)').matches && document.documentElement.dataset.motion !== 'reduce') navigator.vibrate?.(18); } catch { /* not supported */ }
+}
+
 export function useSave<TBody = any, TRes = any>(method: 'post' | 'put' | 'patch', path: string | ((b: TBody) => string), success?: string) {
   const qc = useQueryClient();
   const toast = useToast();
   return useMutation<TRes, Error, TBody>({
     mutationFn: body => api[method]<TRes>(typeof path === 'function' ? path(body) : path, body),
-    onSuccess: () => { qc.invalidateQueries(); if (success) toast(success); },
+    onSuccess: () => { qc.invalidateQueries(); if (success) { toast(success); buzz(); } },
     onError: e => toast(e.message, 'error'),
   });
 }
