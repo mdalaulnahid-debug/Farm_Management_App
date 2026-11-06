@@ -3,7 +3,7 @@
 import type { Db } from '../db.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { money, round2, sum, isZero } from '../lib/money.js';
-import { SYS } from '../lib/constants.js';
+import { SYS, isMoneyAccount } from '../lib/constants.js';
 import { accountId, postEntry, reverseEntry } from './ledger.js';
 import { audit, nextNumber, type Actor } from './common.js';
 
@@ -28,7 +28,7 @@ export async function createPayment(db: Db, actor: Actor | null, input: PaymentI
   const amount = money(input.amount);
   if (amount <= 0) throw badRequest('Amount must be greater than zero.');
   const cash = await db.account.findUnique({ where: { id: input.cashAccountId } });
-  if (!cash || !['CASH', 'BANK'].includes(cash.subtype)) throw badRequest('Choose a cash or bank account.');
+  if (!cash || !isMoneyAccount(cash)) throw badRequest('Choose a cash or bank account.');
 
   const allocations = (input.allocations ?? []).filter(a => money(a.amount) > 0);
   const allocated = sum(allocations.map(a => a.amount));

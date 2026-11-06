@@ -10,3 +10,6 @@ apps/api/prisma/*.db*
 coverage/
 backups/
 .DS_Store
+
+# Web Push keys, generated on first use next to the database (secret)
+vapid.json

@@ -93,7 +93,7 @@ export async function balanceSheet(asOf: Date) {
 
 /** Direct-method cash flow: every cash/bank movement is classified by its counter accounts. */
 export async function cashFlow(from: Date, to: Date) {
-  const cashAccounts = await prisma.account.findMany({ where: { subtype: { in: ['CASH', 'BANK'] } } });
+  const cashAccounts = await prisma.account.findMany({ where: { type: 'ASSET', subtype: { in: ['CASH', 'BANK'] } } });
   const cashIds = new Set(cashAccounts.map(a => a.id));
   const before = await balances({ to: addDays(from, -1) });
   const openingCash = round2(before.filter(r => cashIds.has(r.id)).reduce((a, r) => a + r.net, 0));
@@ -178,12 +178,16 @@ export async function productionSummary(from: Date, to: Date) {
   const flocks = await prisma.flock.findMany({ where: { status: 'ACTIVE' } });
   const birds = flocks.reduce((a, f) => a + f.currentCount, 0);
   const byDay = new Map<string, { date: string; eggs: number; broken: number; mortality: number; feedQty: number; feedCost: number; birds: number }>();
+  // A flock may have several records on one day (morning eggs, evening deaths and feed): count its birds once.
+  const flocksOfDay = new Map<string, Set<string>>();
   for (const l of logs) {
     const k = ymd(l.date);
     const d = byDay.get(k) ?? { date: k, eggs: 0, broken: 0, mortality: 0, feedQty: 0, feedCost: 0, birds: 0 };
+    const seen = flocksOfDay.get(k) ?? new Set<string>();
+    flocksOfDay.set(k, seen);
     d.eggs += l.eggsCollected; d.broken += l.eggsBroken; d.mortality += l.mortality + l.culled;
     d.feedQty = round2(d.feedQty + num(l.feedQty)); d.feedCost = round2(d.feedCost + num(l.feedCost));
-    d.birds += l.flock.currentCount;
+    if (!seen.has(l.flockId)) { seen.add(l.flockId); d.birds += l.flock.currentCount; }
     byDay.set(k, d);
   }
   const days = [...byDay.values()].map(d => ({ ...d, layingRate: d.birds ? round2((d.eggs / d.birds) * 100) : null }));

@@ -33,6 +33,13 @@ model Organization {
   lockDate         DateTime? // no posting on or before this date (period close)
   invoiceFooter    String?
   requireTwoStep   Boolean   @default(false) // everyone must use 2-step sign-in (authenticator app)
+  // Daily reminders to data-entry staff (Bangladesh time, "HH:MM"); follow-up +1 h, owner notice +2 h. Owner/admin only.
+  remindersOn      Boolean   @default(true)
+  reminderMorning  String    @default("10:00")
+  reminderEvening  String    @default("17:00")
+  /// The voucher rule's go-live date: imports of past records may not contain anything dated on or after it.
+  /// Set once on the first start of this version (or by VOUCHER_RULE_FROM).
+  voucherRuleFrom  DateTime?
   updatedAt        DateTime  @updatedAt
 }
 
@@ -58,6 +65,7 @@ model User {
   active             Boolean    @default(true)
   mustChangePassword Boolean    @default(false)
   locale             String     @default("en")
+  preferences        String?    // JSON: personal display settings (theme, font set, simple workspace…), see routes/auth.ts
   failedLogins       Int        @default(0)
   lockedUntil        DateTime?
   lastLoginAt        DateTime?
@@ -216,7 +224,7 @@ model Party {
   notes        String?
   active       Boolean        @default(true)
   /// Set on parties the system relies on, e.g. WALK_IN for "Walk-in customers" (so renaming it changes nothing).
-  systemKey    String?        @unique
+  systemKey    String?
   invoices     SalesInvoice[]
   bills        Bill[]
   payments     Payment[]
@@ -225,6 +233,7 @@ model Party {
   updatedAt    DateTime       @updatedAt
 
   @@index([kind, name])
+  @@index([systemKey])
 }
 
 model Item {
@@ -480,6 +489,8 @@ model Attachment {
   size        Int
   data        Bytes
   sha256      String   @default("")
+  /// One of the photos the record was saved with (its voucher), not one added later.
+  isVoucher   Boolean  @default(false)
   createdById String?
   createdAt   DateTime @default(now())
   /// A wrong photo is hidden, never deleted: who removed it and when. The bytes stay as evidence.
@@ -487,4 +498,55 @@ model Attachment {
   removedById String?
 
   @@index([ownerType, ownerId])
+}
+
+// The voucher behind a spending (owner's rule, 6 Nov 2026): every bill/expense and payment out is saved with a photo
+// of the real voucher and its number, date and amount as written; the amount must equal the entry. The owner or
+// accountant then checks it against the entry: MATCHES or MISMATCH, with who and when.
+model Voucher {
+  id          String    @id @default(cuid())
+  ownerType   String    // PAYMENT | BILL | JOURNAL (manual journal or side-project transfer paying money out)
+  ownerId     String
+  partyId     String?   // supplier/payee, so the same voucher number cannot be used twice with them
+  number      String?   // as written on the paper, if it has one
+  numberKey   String?   // the number normalised for the reuse check (uppercase, no spaces/dashes)
+  date        DateTime
+  amount      Decimal
+  status      String    @default("UNCHECKED") // UNCHECKED | MATCHES | MISMATCH
+  note        String?   // what does not match
+  checkedById String?
+  checkedAt   DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  @@unique([ownerType, ownerId])
+  @@index([status])
+  @@index([numberKey])
+}
+
+// ───────────────────────── Daily reminders ─────────────────────────
+
+/** A phone or browser that agreed to receive reminders (Web Push). */
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/** One row per reminder slot handled on a farm day (never sent twice), and "none today" answers. */
+model ReminderLog {
+  id     String   @id @default(cuid())
+  day    String   // YYYY-MM-DD, Bangladesh time
+  slot   String   // morning | morning-again | morning-owner | evening | ... | none-feed | none-medicine | none-expenses
+  kind   String   // sent | done | none
+  userId String?
+  at     DateTime @default(now())
+
+  @@unique([day, slot])
 }

@@ -10,6 +10,7 @@ import { readXlsx, writeXlsx, type Cell } from '../src/lib/xlsx.js';
 import { accountBalance, accountId } from '../src/services/ledger.js';
 import { SYS } from '../src/lib/constants.js';
 import { SHEETS, TEMPLATE_MARK, buildTemplate, parseTemplate } from '../src/services/past-records.js';
+import { withVoucher } from './helpers/voucher.js';
 
 let app: FastifyInstance;
 let cookie = '';
@@ -17,7 +18,7 @@ let handPaymentId = '';
 const PASSWORD = 'PastRecords2026';
 
 const call = async (method: string, url: string, payload?: unknown, c = cookie) => {
-  const res = await app.inject({ method: method as any, url: `/api/v1${url}`, payload: payload as any, headers: c ? { cookie: c } : {} });
+  const res = await app.inject({ method: method as any, url: `/api/v1${url}`, payload: (await withVoucher(method, url, payload)) as any, headers: c ? { cookie: c } : {} });
   return { status: res.statusCode, body: res.headers['content-type']?.toString().includes('json') ? res.json() as any : res.rawPayload, headers: res.headers };
 };
 

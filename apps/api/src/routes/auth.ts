@@ -207,9 +207,18 @@ export default async function authRoutes(app: FastifyInstance) {
     return { recoveryCodes: codes };
   });
 
+  // Display settings follow the person (the office PC is shared). Only known keys with sensible values;
+  // a partial save merges into what is already saved.
+  const prefsSchema = z.object({
+    theme: z.enum(['light', 'dark', 'system']), density: z.enum(['comfortable', 'compact']),
+    fontSize: z.number().int().min(12).max(20), accent: z.enum(['green', 'blue', 'purple', 'amber']),
+    motion: z.enum(['full', 'reduce']), banglaCalendar: z.boolean(), home: z.string().regex(/^\/[a-z-]*$/).max(40),
+    fontSet: z.enum(['clean', 'easy', 'friendly']), simple: z.boolean(), lite: z.boolean(),
+  }).partial().strict();
   app.patch('/auth/preferences', { preHandler: signedIn }, async req => {
-    const body = parse(z.object({ locale: z.enum(['en', 'bn']) }), req.body);
-    await prisma.user.update({ where: { id: req.user!.id }, data: { locale: body.locale } });
+    const body = parse(z.object({ locale: z.enum(['en', 'bn']).optional(), prefs: prefsSchema.optional() }).refine(b => b.locale || b.prefs, 'Nothing to save.'), req.body);
+    const prefs = body.prefs ? JSON.stringify({ ...(req.user!.preferences ?? {}), ...body.prefs }) : undefined;
+    await prisma.user.update({ where: { id: req.user!.id }, data: { ...(body.locale && { locale: body.locale }), ...(prefs && { preferences: prefs }) } });
     return { ok: true };
   });
 

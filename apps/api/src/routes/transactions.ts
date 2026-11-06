@@ -1,20 +1,24 @@
 // Business transactions. Each write runs in one database transaction so a document, its stock
 // movements and its journal entry are saved together or not at all.
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { prisma, tx } from '../db.js';
 import { conflict, forbidden, notFound } from '../lib/errors.js';
+import type { Permission } from '../lib/constants.js';
 import { parse, zDate, zId, zMoney, zOptDate, zOptText, zQty, zRange, zReason } from '../lib/validate.js';
-import { ADJUSTMENT_TYPES, PAYMENT_METHODS } from '../lib/constants.js';
+import { ADJUSTMENT_TYPES, PAYMENT_METHODS, isMoneyAccount, SYS } from '../lib/constants.js';
 import { endOf } from '../lib/dates.js';
-import { actorOf, can } from '../auth/auth.js';
+import { actorOf, can, signedInEarly } from '../auth/auth.js';
 import { createInvoice, voidInvoice } from '../services/sales.js';
 import { createBill, voidBill } from '../services/purchases.js';
 import { createPayment, voidPayment } from '../services/payments.js';
-import { adjustStock, cashCount, recordProduction, transfer, voidProduction } from '../services/operations.js';
+import { adjustStock, cashCount, recordProduction, transfer, voidAdjustment, voidProduction } from '../services/operations.js';
 import { postEntry, reverseEntry } from '../services/ledger.js';
-import { audit } from '../services/common.js';
 import { listAttachments } from './attachments.js';
+import { notePhotos, saveVoucher, voucherMissing, voucherRuleFrom, zVoucher } from '../services/vouchers.js';
+import { isSameFarmDay } from '../lib/farm-time.js';
+import { badRequest } from '../lib/errors.js';
+import { audit, ownSameDay } from '../services/common.js';
 
 const listQuery = zRange.extend({
   search: z.string().optional(), status: z.string().optional(), partyId: z.string().optional(),
@@ -23,6 +27,38 @@ const listQuery = zRange.extend({
 const dateWhere = (q: { from?: Date; to?: Date }) => (q.from || q.to ? { date: { ...(q.from ? { gte: q.from } : {}), ...(q.to ? { lte: endOf(q.to.toISOString().slice(0, 10)) } : {}) } } : {});
 const page = (q: { page: number; pageSize: number }) => ({ skip: (q.page - 1) * q.pageSize, take: q.pageSize });
 const cashReceipt = z.object({ amount: zMoney, cashAccountId: zId, method: z.enum(PAYMENT_METHODS).optional() }).nullish();
+
+type Made = { createdById: string | null; createdAt: Date } | null;
+/**
+ * Who may void (cancel) a record. Everyone except data-entry staff: the usual permission. Data-entry staff
+ * (role `operator`) may fix only their own entries made earlier the same farm day, whatever their permissions;
+ * older entries and other people's stay for the owner or an admin. Returns true on that own-fix path.
+ */
+async function voidGate(req: FastifyRequest, perm: Permission, find: () => Promise<Made>) {
+  const u = req.user!;
+  if (u.role.key !== 'operator') {
+    if (!u.permissions.includes(perm)) throw forbidden();
+    return false;
+  }
+  const rec = await find();
+  if (!rec) {
+    if (u.permissions.includes(perm)) return false; // let the service answer "not found"
+    throw forbidden();
+  }
+  if (!ownSameDay(u, rec)) throw forbidden('Only the owner or an admin can change entries from an earlier day or entered by someone else.');
+  return true;
+}
+
+/** Money a journal takes out of the farm's own money accounts to somewhere else (0 when it only moves money between
+ *  them, or touches no money account). Money accounts are ASSET + CASH/BANK only. */
+export async function moneyOut(lines: { accountId: string; debit?: number; credit?: number }[]) {
+  const accounts = await prisma.account.findMany({ where: { id: { in: lines.map(l => l.accountId) } }, select: { id: true, type: true, subtype: true } });
+  const isMoney = (id: string) => isMoneyAccount(accounts.find(a => a.id === id));
+  const r2 = (v: number) => Math.round(v * 100) / 100;
+  const out = r2(lines.filter(l => isMoney(l.accountId)).reduce((a, l) => a + Number(l.credit ?? 0) - Number(l.debit ?? 0), 0));
+  const elsewhere = lines.some(l => !isMoney(l.accountId) && Number(l.debit ?? 0) > 0);
+  return out > 0 && elsewhere ? out : 0;
+}
 
 export default async function transactionRoutes(app: FastifyInstance) {
   // ───── Sales invoices ─────
@@ -52,9 +88,21 @@ export default async function transactionRoutes(app: FastifyInstance) {
     }), req.body);
     return tx(db => createInvoice(db, actorOf(req), body));
   });
-  app.post('/invoices/:id/void', { preHandler: can('sales.void') }, async req => {
+  app.post('/invoices/:id/void', { preHandler: can() }, async req => {
+    const id = (req.params as any).id;
+    const ownFix = await voidGate(req, 'sales.void', () => prisma.salesInvoice.findUnique({ where: { id } }));
     const { reason } = parse(zReason, req.body);
-    await tx(db => voidInvoice(db, actorOf(req), (req.params as any).id, reason));
+    await tx(async db => {
+      // Fixing your own cash sale: its cash receipt (yours, today, for this sale only) is cancelled with it.
+      if (ownFix) {
+        const allocs = await db.paymentAllocation.findMany({ where: { invoiceId: id, payment: { status: { not: 'VOID' } } }, include: { payment: { include: { allocations: true } } } });
+        for (const a of allocs) {
+          if (!ownSameDay(req.user!, a.payment) || a.payment.allocations.length > 1) throw conflict(`Ask the owner: ${a.payment.number} also covers other records.`);
+          await voidPayment(db, actorOf(req), a.payment.id, reason);
+        }
+      }
+      await voidInvoice(db, actorOf(req), id, reason);
+    });
     return { ok: true };
   });
 
@@ -75,19 +123,39 @@ export default async function transactionRoutes(app: FastifyInstance) {
   app.get('/bills/:id', { preHandler: can('purchases.view') }, async req => {
     const bill = await prisma.bill.findUnique({ where: { id: (req.params as any).id }, include: { lines: true, supplier: true, allocations: { include: { payment: true } } } });
     if (!bill) throw notFound('Bill');
-    return { ...bill, attachments: await listAttachments('BILL', bill.id) };
+    return { ...bill, attachments: await listAttachments('BILL', bill.id), voucher: await prisma.voucher.findUnique({ where: { ownerType_ownerId: { ownerType: 'BILL', ownerId: bill.id } } }) };
   });
-  app.post('/bills', { preHandler: can('purchases.create') }, async req => {
+  // Spending is saved only with its voucher (photo + amount as written), in one transaction: no bill without it.
+  app.post('/bills', { onRequest: signedInEarly, preHandler: can('purchases.create'), bodyLimit: 8 * 1024 * 1024 }, async req => {
     const body = parse(z.object({
       date: zDate, dueDate: zOptDate, supplierId: zOptText(40), reference: zOptText(60), notes: zOptText(500),
       lines: z.array(z.object({ itemId: zOptText(40), accountId: zOptText(40), description: z.string().max(200).optional(), quantity: zQty, unitPrice: zMoney })).min(1).max(100),
       paid: cashReceipt,
+      voucher: zVoucher.nullish(),
     }), req.body);
-    return tx(db => createBill(db, actorOf(req), body));
+    const { voucher, ...bill } = body;
+    if (!voucher) throw voucherMissing();
+    const actor = actorOf(req);
+    return tx(async db => {
+      const made = await createBill(db, actor, bill);
+      await saveVoucher(db, actor, 'BILL', { id: made.id, number: made.number, total: Number(made.total), date: made.date, partyId: made.supplierId }, voucher);
+      return made;
+    }).then(r => { notePhotos(actor?.id, voucher.photos.length); return r; });
   });
-  app.post('/bills/:id/void', { preHandler: can('purchases.void') }, async req => {
+  app.post('/bills/:id/void', { preHandler: can() }, async req => {
+    const id = (req.params as any).id;
+    const ownFix = await voidGate(req, 'purchases.void', () => prisma.bill.findUnique({ where: { id } }));
     const { reason } = parse(zReason, req.body);
-    await tx(db => voidBill(db, actorOf(req), (req.params as any).id, reason));
+    await tx(async db => {
+      if (ownFix) {
+        const allocs = await db.paymentAllocation.findMany({ where: { billId: id, payment: { status: { not: 'VOID' } } }, include: { payment: { include: { allocations: true } } } });
+        for (const a of allocs) {
+          if (!ownSameDay(req.user!, a.payment) || a.payment.allocations.length > 1) throw conflict(`Ask the owner: ${a.payment.number} also covers other records.`);
+          await voidPayment(db, actorOf(req), a.payment.id, reason);
+        }
+      }
+      await voidBill(db, actorOf(req), id, reason);
+    });
     return { ok: true };
   });
 
@@ -115,22 +183,36 @@ export default async function transactionRoutes(app: FastifyInstance) {
     });
     if (!pay) throw notFound('Payment');
     const accounts = await prisma.account.findMany({ where: { id: { in: [pay.cashAccountId, pay.counterAccountId] } }, select: { id: true, code: true, name: true, nameBn: true } });
-    return { ...pay, cashAccount: accounts.find(a => a.id === pay.cashAccountId) ?? null, counterAccount: accounts.find(a => a.id === pay.counterAccountId) ?? null, attachments: await listAttachments('PAYMENT', pay.id) };
+    return { ...pay, cashAccount: accounts.find(a => a.id === pay.cashAccountId) ?? null, counterAccount: accounts.find(a => a.id === pay.counterAccountId) ?? null, attachments: await listAttachments('PAYMENT', pay.id), voucher: await prisma.voucher.findUnique({ where: { ownerType_ownerId: { ownerType: 'PAYMENT', ownerId: pay.id } } }) };
   });
-  app.post('/payments', { preHandler: can('banking.view') }, async req => {
+  app.post('/payments', { onRequest: signedInEarly, preHandler: can('banking.view'), bodyLimit: 8 * 1024 * 1024 }, async req => {
     const body = parse(z.object({
       direction: z.enum(['IN', 'OUT']), date: zDate, partyId: zOptText(40), cashAccountId: zId, counterAccountId: zOptText(40), amount: zMoney,
       method: z.enum(PAYMENT_METHODS).optional(), reference: zOptText(60), notes: zOptText(500),
       allocations: z.array(z.object({ invoiceId: z.string().optional(), billId: z.string().optional(), amount: zMoney })).default([]),
+      voucher: zVoucher.nullish(),
     }), req.body);
     // Receipts need sales rights, payments purchase rights, other money movements banking rights.
     const perm = body.counterAccountId ? 'banking.manage' : body.direction === 'IN' ? 'sales.create' : 'purchases.create';
     await can(perm)(req, undefined as any);
-    return tx(db => createPayment(db, actorOf(req), body));
+    const { voucher, ...payment } = body;
+    // Money out is spending: saved only with its matching voucher. Money in needs none.
+    if (payment.direction === 'OUT' && !voucher) throw voucherMissing();
+    const actor = actorOf(req);
+    return tx(async db => {
+      const made = await createPayment(db, actor, payment);
+      if (payment.direction === 'OUT') await saveVoucher(db, actor, 'PAYMENT', { id: made.id, number: made.number, total: Number(made.amount), date: made.date, partyId: made.partyId }, voucher!);
+      return made;
+    }).then(r => { if (voucher) notePhotos(actor?.id, voucher.photos.length); return r; });
   });
-  app.post('/payments/:id/void', { preHandler: can('banking.manage') }, async req => {
+  app.post('/payments/:id/void', { preHandler: can() }, async req => {
+    const id = (req.params as any).id;
+    await voidGate(req, 'banking.manage', () => prisma.payment.findUnique({ where: { id } }));
     const { reason } = parse(zReason, req.body);
-    await tx(db => voidPayment(db, actorOf(req), (req.params as any).id, reason));
+    // Money that came in is the owner's to undo once the day has passed (cash is easy to take quietly).
+    const pay = await prisma.payment.findUnique({ where: { id }, select: { direction: true, createdAt: true } });
+    if (pay?.direction === 'IN' && !isSameFarmDay(pay.createdAt, new Date()) && req.user!.role.key !== 'owner') throw forbidden('Only the owner can void money received on an earlier day.');
+    await tx(db => voidPayment(db, actorOf(req), id, reason));
     return { ok: true };
   });
 
@@ -142,7 +224,8 @@ export default async function transactionRoutes(app: FastifyInstance) {
   app.get('/cash-counts', { preHandler: can('banking.view') }, async () => ({ data: await prisma.cashCount.findMany({ orderBy: { date: 'desc' }, take: 100 }) }));
   app.post('/cash-counts', { preHandler: can('banking.manage') }, async req => {
     const body = parse(z.object({ date: zDate, accountId: zId, counted: zMoney, notes: zOptText(300), postVariance: z.boolean().default(false) }), req.body);
-    return tx(db => cashCount(db, actorOf(req), body));
+    // A shortage written off has no voucher, so only the owner may approve it, with a reason.
+    return tx(db => cashCount(db, actorOf(req), { ...body, ownerApproves: req.user!.role.key === 'owner' }));
   });
 
   // ───── Manual journals ─────
@@ -158,16 +241,30 @@ export default async function transactionRoutes(app: FastifyInstance) {
     ]);
     return { data, total };
   });
-  app.post('/journals', { preHandler: can('accounting.manage') }, async req => {
+  app.post('/journals', { onRequest: signedInEarly, preHandler: can('accounting.manage'), bodyLimit: 8 * 1024 * 1024 }, async req => {
     const body = parse(z.object({
       date: zDate, memo: z.string().trim().min(3).max(300), opening: z.boolean().default(false),
       lines: z.array(z.object({ accountId: zId, debit: zMoney.default(0), credit: zMoney.default(0), partyId: zOptText(40), memo: zOptText(200) })).min(2).max(100),
+      voucher: zVoucher.nullish(),
     }), req.body);
+    // Money leaving the farm's cash/bank/mobile accounts for anything that is not another of those accounts is
+    // spending, and needs its voucher like a payment. Moves between own accounts and non-cash adjustments do not.
+    // Opening balances are exempt only when they are what they say: dated before the voucher rule went live, and
+    // every line other than the money accounts goes to Opening balance equity. Anything else follows the rule.
+    const goLive = await voucherRuleFrom(prisma);
+    const openingEquity = (await prisma.account.findUnique({ where: { code: SYS.OPENING_EQUITY } }))?.id;
+    const lineAccounts = await prisma.account.findMany({ where: { id: { in: body.lines.map(l => l.accountId) } }, select: { id: true, type: true, subtype: true } });
+    const realOpening = body.opening && (!goLive || body.date < goLive)
+      && body.lines.every(l => l.accountId === openingEquity || isMoneyAccount(lineAccounts.find(a => a.id === l.accountId)));
+    const spent = realOpening ? 0 : await moneyOut(body.lines);
+    if (spent > 0.005 && !body.voucher) throw voucherMissing();
+    const actor = actorOf(req);
     return tx(async db => {
-      const je = await postEntry(db, actorOf(req), { date: body.date, memo: body.memo, sourceType: body.opening ? 'OPENING' : 'MANUAL', lines: body.lines });
-      await audit(db, actorOf(req), 'create', 'journal', je.id, `Journal ${je.number}: ${body.memo}`);
+      const je = await postEntry(db, actor, { date: body.date, memo: body.memo, sourceType: realOpening ? 'OPENING' : body.opening && !spent ? 'OPENING' : 'MANUAL', lines: body.lines });
+      await audit(db, actor, 'create', 'journal', je.id, `Journal ${je.number}: ${body.memo}`);
+      if (spent > 0.005) await saveVoucher(db, actor, 'JOURNAL', { id: je.id, number: je.number, total: spent, date: je.date, partyId: body.lines.find(l => l.partyId)?.partyId ?? null }, body.voucher!);
       return je;
-    });
+    }).then(r => { if (spent > 0.005) notePhotos(actor?.id, body.voucher!.photos.length); return r; });
   });
   app.post('/journals/:id/void', { preHandler: can('accounting.manage') }, async req => {
     const { reason } = parse(zReason, req.body);
@@ -177,6 +274,11 @@ export default async function transactionRoutes(app: FastifyInstance) {
     if (!['MANUAL', 'OPENING', 'TRANSFER', 'PROJECT_TRANSFER'].includes(je.sourceType)) {
       throw conflict('Void the source document (invoice, bill, payment or production record) instead.');
     }
+    // An entry that brought money in (e.g. money back from a side project) is the owner's to undo after the day.
+    const lines = await prisma.journalLine.findMany({ where: { entryId: id }, include: { account: { select: { type: true, subtype: true } } } });
+    const cameIn = lines.filter(l => isMoneyAccount(l.account)).reduce((a, l) => a + Number(l.debit) - Number(l.credit), 0) > 0.005;
+    const otherSide = lines.some(l => !isMoneyAccount(l.account));
+    if (cameIn && otherSide && !isSameFarmDay(je.createdAt, new Date()) && req.user!.role.key !== 'owner') throw forbidden('Only the owner can void money received on an earlier day.');
     await tx(async db => {
       await reverseEntry(db, actorOf(req), id, reason);
       await audit(db, actorOf(req), 'void', 'journal', id, `Voided ${je.number}: ${reason}`);
@@ -191,6 +293,13 @@ export default async function transactionRoutes(app: FastifyInstance) {
     const perms = req.user!.permissions;
     if (!perms.includes('inventory.manage') && !(body.type === 'USAGE' && perms.includes('production.manage'))) throw forbidden();
     return tx(db => adjustStock(db, actorOf(req), body));
+  });
+  app.post('/stock-adjustments/:sourceId/void', { preHandler: can() }, async req => {
+    const sourceId = (req.params as any).sourceId;
+    await voidGate(req, 'inventory.manage', () => prisma.stockMove.findFirst({ where: { sourceType: 'ADJUSTMENT', sourceId }, select: { createdById: true, createdAt: true } }));
+    const { reason } = parse(zReason, req.body);
+    await tx(db => voidAdjustment(db, actorOf(req), sourceId, reason));
+    return { ok: true };
   });
   app.get('/stock-moves', { preHandler: can('inventory.view') }, async req => {
     const q = parse(listQuery.extend({ itemId: z.string().optional(), type: z.string().optional() }), req.query);
@@ -217,12 +326,15 @@ export default async function transactionRoutes(app: FastifyInstance) {
       date: zDate, flockId: zId, eggItemId: zOptText(40), eggsCollected: z.coerce.number().int().min(0), eggsBroken: z.coerce.number().int().min(0).default(0),
       mortality: z.coerce.number().int().min(0).default(0), culled: z.coerce.number().int().min(0).default(0), feedItemId: zOptText(40),
       feedQty: z.coerce.number().min(0).default(0), waterLitres: z.coerce.number().min(0).nullish(), notes: zOptText(300),
+      addToDay: z.boolean().optional(),
     }), req.body);
     return tx(db => recordProduction(db, actorOf(req), body));
   });
-  app.post('/production/:id/void', { preHandler: can('production.manage') }, async req => {
+  app.post('/production/:id/void', { preHandler: can() }, async req => {
+    const id = (req.params as any).id;
+    await voidGate(req, 'production.manage', () => prisma.productionLog.findUnique({ where: { id } }));
     const { reason } = parse(zReason, req.body);
-    await tx(db => voidProduction(db, actorOf(req), (req.params as any).id, reason));
+    await tx(db => voidProduction(db, actorOf(req), id, reason));
     return { ok: true };
   });
 }

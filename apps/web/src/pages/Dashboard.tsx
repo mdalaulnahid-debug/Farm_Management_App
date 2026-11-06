@@ -23,6 +23,7 @@ export default function Dashboard() {
   const prevQ = useApi<any>('/dashboard', cmp.previous);
   const curQ = useApi<any>(cmp.clipped ? '/dashboard' : null, cmp.current);
   const flocks = useApi<any>(can('production.view') ? '/flocks' : null);
+  const vouchers = useApi<{ unchecked: number; mismatched: number }>(can('accounting.manage') ? '/vouchers/summary' : null);
   const d = q.data;
   const k = d?.kpis;
   const showMoney = can('reports.view');
@@ -46,8 +47,10 @@ export default function Dashboard() {
         subtitle={said ?? t(`${me?.organization.name} — business overview from the posted ledger.`, `${me?.organization.nameBn || me?.organization.name} — পোস্ট করা খাতা থেকে ব্যবসার সারসংক্ষেপ।`)}
         actions={<RangePicker value={range} onChange={setRange} />} />
 
-      {(noBirds || (k?.overdueCount ?? 0) > 0 || (d?.lowStock?.length ?? 0) > 0) && (
+      {(noBirds || (k?.overdueCount ?? 0) > 0 || (d?.lowStock?.length ?? 0) > 0 || (vouchers.data?.unchecked ?? 0) > 0 || (vouchers.data?.mismatched ?? 0) > 0) && (
         <div className="stack">
+          {(vouchers.data?.mismatched ?? 0) > 0 && <Alert tone="error">{t(`${vouchers.data!.mismatched} voucher(s) do not match their entry.`, `${vouchers.data!.mismatched}টি ভাউচার হিসাবের সাথে মেলেনি।`)} <Link to="/vouchers">{t('See them', 'দেখুন')}</Link></Alert>}
+          {(vouchers.data?.unchecked ?? 0) > 0 && <Alert>{t(`${vouchers.data!.unchecked} spending voucher(s) to check.`, `${vouchers.data!.unchecked}টি খরচের ভাউচার যাচাই বাকি।`)} <Link to="/vouchers">{t('Check vouchers', 'ভাউচার যাচাই')}</Link></Alert>}
           {noBirds && <Alert tone="warn">{t('An active flock has 0 birds recorded. Set the bird count in Production → Flocks so laying rate and mortality % can be calculated.', 'একটি সক্রিয় ঝাঁকে ০টি পাখি লেখা আছে। ডিম পাড়ার হার হিসাবের জন্য উৎপাদন → ঝাঁক-এ পাখির সংখ্যা দিন।')} <Link to="/production">{t('Open flocks', 'ঝাঁক খুলুন')}</Link></Alert>}
           {(k?.overdueCount ?? 0) > 0 && <Alert tone="warn">{t(`${k.overdueCount} invoice(s) are overdue, totalling ${fmtMoney(k.overdueAmount, lang)}.`, `${k.overdueCount}টি চালান মেয়াদোত্তীর্ণ, মোট ${fmtMoney(k.overdueAmount, lang)}।`)} <Link to="/customers">{t('Review receivables', 'পাওনা দেখুন')}</Link></Alert>}
           {(d?.lowStock?.length ?? 0) > 0 && <Alert tone="warn">{t('Low stock: ', 'মজুদ কম: ')}{d.lowStock.map((i: any) => `${nameOf(i, lang)} (${fmtNum(i.qtyOnHand, lang)} ${unitLabel(t, i.unit)})`).join(', ')}</Alert>}

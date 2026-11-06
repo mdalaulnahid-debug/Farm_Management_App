@@ -4,12 +4,13 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/server.js';
 import { seed } from '../src/seed.js';
 import { prisma } from '../src/db.js';
+import { withVoucher } from './helpers/voucher.js';
 
 let app: FastifyInstance;
 let cookie = '';
 const PASSWORD = 'TestOwner2026';
-const req = (method: string, url: string, payload?: unknown) =>
-  app.inject({ method: method as any, url: `/api/v1${url}`, payload: payload as any, headers: { cookie } });
+const req = async (method: string, url: string, payload?: unknown) =>
+  app.inject({ method: method as any, url: `/api/v1${url}`, payload: (await withVoucher(method, url, payload)) as any, headers: { cookie } });
 const ok = async (method: string, url: string, payload?: unknown) => {
   const res = await req(method, url, payload);
   if (res.statusCode !== 200) throw new Error(`${method} ${url}: ${res.statusCode} ${res.body}`);
@@ -41,7 +42,9 @@ describe('slip photos', () => {
     expect(a).toMatchObject({ mime: 'image/jpeg', size: jpeg.length });
     expect(a.data).toBeUndefined();
     const slip = await ok('GET', `/payments/${paymentId}`);
-    expect(slip.attachments.map((x: any) => x.id)).toEqual([a.id]);
+    // The payment already has its voucher photo (saved with it); this one is added after.
+    expect(slip.attachments.map((x: any) => x.id)).toContain(a.id);
+    expect(slip.attachments).toHaveLength(2);
     const img = await req('GET', `/payments/${paymentId}/attachments/${a.id}`);
     expect(img.statusCode).toBe(200);
     expect(img.headers['content-type']).toBe('image/jpeg');
@@ -54,7 +57,7 @@ describe('slip photos', () => {
 
   it('keeps a photo with a bill, and a photo is only reachable through its own record', async () => {
     const a = await ok('POST', `/bills/${billId}/attachments`, { dataUrl: url('image/png', png) });
-    expect((await ok('GET', `/bills/${billId}`)).attachments).toHaveLength(1);
+    expect((await ok('GET', `/bills/${billId}`)).attachments).toHaveLength(2); // its voucher photo + this one
     expect((await req('GET', `/payments/${paymentId}/attachments/${a.id}`)).statusCode).toBe(404);
     expect((await req('GET', `/bills/${billId}/attachments/${a.id}`)).statusCode).toBe(200);
   });
@@ -89,12 +92,14 @@ describe('slip photos', () => {
 
   it('limits how many photos one person can send per minute', async () => {
     let refused = 0;
+    // Every photo counts: the voucher photo a payment out is saved with, and photos added afterwards.
     for (let i = 0; i < 25 && !refused; i++) {
-      const pay = await ok('POST', '/payments', { direction: 'OUT', date: '2027-08-04', cashAccountId: await acc('1010'), counterAccountId: await acc('6090'), amount: 1, notes: `Rate ${i}` });
-      const res = await req('POST', `/payments/${pay.id}/attachments`, { dataUrl: url('image/jpeg', jpeg) });
+      const made = await req('POST', '/payments', { direction: 'OUT', date: '2027-08-04', cashAccountId: await acc('1010'), counterAccountId: await acc('6090'), amount: 1, notes: `Rate ${i}` });
+      if (made.statusCode === 400 && /Too many/.test(made.body)) { refused = i + 1; break; }
+      const res = await req('POST', `/payments/${made.json().id}/attachments`, { dataUrl: url('image/jpeg', Buffer.concat([jpeg, Buffer.from([i])])) });
       if (res.statusCode === 400 && /Too many/.test(res.body)) refused = i + 1;
     }
     expect(refused).toBeGreaterThan(0);
-    expect(refused).toBeLessThanOrEqual(21);
+    expect(refused).toBeLessThanOrEqual(11); // 2 photos per round, 20 per minute
   });
 });

@@ -112,6 +112,13 @@ const ROUTES: Row[] = [
   // Suppliers and purchases
   row('GET', '/bills', need('purchases.view')),
   row('GET', '/bills/:id', need('purchases.view')),
+  row('GET', '/vouchers', need('accounting.manage')),
+  row('GET', '/vouchers/summary', need('accounting.manage')),
+  row('POST', '/vouchers/:id/check', need('accounting.manage')),
+  row('GET', '/vouchers/:id/photos/:aid', need('accounting.manage')),
+  row('POST', '/journals/:id/attachments', [['banking.view', 'accounting.manage'], ['banking.view', 'banking.manage']]),
+  row('GET', '/journals/:id/attachments/:aid', need('banking.view')),
+  row('DELETE', '/journals/:id/attachments/:aid', need('accounting.manage')),
   row('POST', '/bills/:id/attachments', need('purchases.view', 'purchases.create')),
   row('GET', '/bills/:id/attachments/:aid', need('purchases.view')),
   row('DELETE', '/bills/:id/attachments/:aid', need('purchases.void')),
@@ -153,6 +160,17 @@ const ROUTES: Row[] = [
   row('GET', '/production', need('production.view')),
   row('POST', '/production', need('production.manage')),
   row('POST', '/production/:id/void', need('production.manage')),
+  // Data-entry staff may also void their OWN entries made the same farm day (same-day-fix.test.ts); with a
+  // record that does not exist that exception never applies, so these rows still hold.
+  row('POST', '/stock-adjustments/:sourceId/void', need('inventory.manage')),
+  row('GET', '/me/today', 'signed-in'),
+  row('POST', '/me/today/none', [['production.manage'], ['purchases.create']]),
+  row('GET', '/push/key', 'signed-in'),
+  row('POST', '/push/subscribe', 'signed-in'),
+  row('DELETE', '/push/subscribe', 'signed-in'),
+  row('GET', '/settings/reminders', need('settings.manage')),
+  row('PUT', '/settings/reminders', need('settings.manage')),
+  row('POST', '/settings/reminders/test', need('settings.manage')),
   row('GET', '/reports/production', need('production.view')),
   // Dashboard, reports, audit trail
   row('GET', '/dashboard', need('dashboard.view')),

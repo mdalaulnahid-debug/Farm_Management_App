@@ -15,10 +15,17 @@ import passkeyRoutes from './routes/passkeys.js';
 import masterRoutes from './routes/master.js';
 import transactionRoutes from './routes/transactions.js';
 import attachmentRoutes from './routes/attachments.js';
+import voucherRoutes from './routes/vouchers.js';
 import reportRoutes from './routes/reports.js';
 import importRoutes from './routes/import.js';
 import projectRoutes from './routes/projects.js';
 import backupRoutes from './routes/backup.js';
+import myDayRoutes from './routes/my-day.js';
+import reminderRoutes from './routes/reminders.js';
+import { startReminderScheduler } from './services/reminders.js';
+import { ensureWalkInKey } from './services/sales.js';
+import { ensureVoucherRuleFrom } from './services/vouchers.js';
+import { farmYmd } from './lib/farm-time.js';
 import { ensureReferenceData } from './services/reference.js';
 import { startBackupScheduler } from './services/backup.js';
 import { sealAudit } from './services/audit-chain.js';
@@ -90,10 +97,13 @@ export async function buildApp() {
     await api.register(masterRoutes);
     await api.register(transactionRoutes);
     await api.register(attachmentRoutes);
+    await api.register(voucherRoutes);
     await api.register(reportRoutes);
     await api.register(importRoutes);
     await api.register(projectRoutes);
     await api.register(backupRoutes);
+    await api.register(myDayRoutes);
+    await api.register(reminderRoutes);
   }, { prefix: '/api/v1' });
 
   // In production the API also serves the built web app.
@@ -140,6 +150,12 @@ if (isMain) {
   const seal = () => sealAudit(prisma).catch(e => app.log.error(`Sealing the audit trail failed: ${(e as Error).message}`));
   void seal();
   setInterval(seal, 5 * 60_000).unref();
+  // Daily reminders to data-entry staff at the farm's chosen times (Settings → Organization).
+  startReminderScheduler(prisma, app.log);
+  // One-off, idempotent start-up steps: mark the walk-in customer, and remember the voucher rule's go-live date.
+  // Never let these stop the server: warn and carry on.
+  await ensureWalkInKey(prisma, app.log).catch(e => app.log.warn(`Walk-in check skipped: ${(e as Error).message}`));
+  await ensureVoucherRuleFrom(prisma, farmYmd()).catch(e => app.log.warn(`Voucher go-live date not set: ${(e as Error).message}`));
   // Say at start-up what is not set up safely, so it shows in the server window and log.
   securityCheck(prisma).then(r => {
     for (const c of r.checks) if (c.level !== 'ok') app.log.warn(`Security ${c.level === 'fail' ? 'PROBLEM' : 'warning'}: ${c.title.en} ${c.fix?.en ?? ''}`);

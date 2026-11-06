@@ -5,6 +5,7 @@
 import type { Db } from '../db.js';
 import { prisma } from '../db.js';
 import { badRequest, conflict } from '../lib/errors.js';
+import { importCutoffError } from './vouchers.js';
 import { readXlsx, colLetter, type Sheet } from '../lib/xlsx.js';
 import { round2, num } from '../lib/money.js';
 import { toDate, ymd } from '../lib/dates.js';
@@ -201,6 +202,8 @@ export async function previewWorkbook(p: ParsedWorkbook) {
   if (!(await prisma.flock.findFirst({ where: { status: 'ACTIVE' } }))) errors.push('Create an active flock first (Production → Flocks).');
   const org = await prisma.organization.findUnique({ where: { id: 'org' } });
   if (org?.lockDate && from <= org.lockDate) errors.push(`The books are closed up to ${ymd(org.lockDate)}. Reopen the period before importing.`);
+  const cutoff = await importCutoffError(prisma, to);
+  if (cutoff) errors.push(cutoff);
   if (egg) {
     const before = await prisma.stockMove.aggregate({ where: { itemId: egg.id, voided: false, date: { lt: from } }, _sum: { quantity: true } });
     let stock = num(before._sum.quantity);
@@ -299,6 +302,8 @@ async function party(db: Db, name: string, notes: string) {
 
 export async function importWorkbook(db: Db, actor: Actor | null, p: ParsedWorkbook, opts: { replaceExisting: boolean; flockId?: string | null; fileName?: string | null }) {
   const { from, to } = periodOf(p);
+  const cutoff = await importCutoffError(db, to);
+  if (cutoff) throw badRequest(cutoff);
   if (opts.replaceExisting) {
     const blockers = await outsidePaymentBlockers(from, to);
     if (blockers.length) throw conflict(`Void these later payments first: ${blockers.join('; ')}`);

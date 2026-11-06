@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/server.js';
 import { seed } from '../src/seed.js';
 import { prisma } from '../src/db.js';
+import { withVoucher } from './helpers/voucher.js';
 
 let app: FastifyInstance;
 let ownerCookie = '';
@@ -13,7 +14,7 @@ let managerCookie = '';
 const PASSWORD = 'TestOwner2026';
 
 const call = async (method: string, url: string, cookie: string, payload?: unknown) => {
-  const res = await app.inject({ method: method as any, url: `/api/v1${url}`, payload: payload as any, headers: cookie ? { cookie } : {} });
+  const res = await app.inject({ method: method as any, url: `/api/v1${url}`, payload: (await withVoucher(method, url, payload)) as any, headers: cookie ? { cookie } : {} });
   return { status: res.statusCode, body: res.json() as any };
 };
 const signIn = async (email: string, password: string) => {

@@ -1,9 +1,9 @@
 // Farm operations that touch stock and the books: daily production, stock adjustments,
 // transfers between cash/bank accounts, and physical cash counts.
 import type { Db } from '../db.js';
-import { badRequest, conflict, notFound } from '../lib/errors.js';
+import { badRequest, conflict, notFound, forbidden } from '../lib/errors.js';
 import { money, num, qty as q3, round2 } from '../lib/money.js';
-import { SYS } from '../lib/constants.js';
+import { SYS, isMoneyAccount } from '../lib/constants.js';
 import { accountBalance, accountId, assertRecentDate, postEntry, reverseEntry } from './ledger.js';
 import { issueStock, receiveStock, reverseStockForSource } from './inventory.js';
 import { audit, type Actor } from './common.js';
@@ -22,6 +22,9 @@ export interface ProductionInput {
   feedQty?: number;
   waterLitres?: number | null;
   notes?: string | null;
+  /** A later sitting of the same day (e.g. evening deaths and feed after morning eggs): saved as a further
+   *  record for that flock and day instead of being refused. Reports add the day's records together. */
+  addToDay?: boolean;
 }
 
 export async function recordProduction(db: Db, actor: Actor | null, input: ProductionInput) {
@@ -36,7 +39,7 @@ export async function recordProduction(db: Db, actor: Actor | null, input: Produ
   if (broken > collected) throw badRequest('Broken eggs cannot exceed eggs collected.');
   if (mortality + culled > flock.currentCount) throw badRequest(`Mortality and culls exceed the flock's ${flock.currentCount} birds.`);
   const exists = await db.productionLog.findFirst({ where: { flockId: flock.id, date: input.date, status: 'POSTED' } });
-  if (exists) throw conflict('Production for this flock and date is already recorded. Void it to re-enter.');
+  if (exists && !input.addToDay) throw conflict('Production for this flock and date is already recorded. Void it to re-enter.');
 
   const log = await db.productionLog.create({
     data: {
@@ -147,6 +150,19 @@ export async function adjustStock(db: Db, actor: Actor | null, input: Adjustment
   return { sourceId, value, difference: quantity };
 }
 
+/** Cancel a stock adjustment (e.g. medicine or feed recorded as used by mistake): its stock moves and
+ *  journal entry are reversed, so quantity, average cost and the books return to before. */
+export async function voidAdjustment(db: Db, actor: Actor | null, sourceId: string, reason: string) {
+  const moves = await db.stockMove.findMany({ where: { sourceType: 'ADJUSTMENT', sourceId } });
+  if (!moves.length) throw notFound('Stock adjustment');
+  if (moves.every(m => m.voided)) throw conflict('This stock adjustment is already cancelled.');
+  assertRecentDate(actor, moves[0].date);
+  await reverseStockForSource(db, 'ADJUSTMENT', sourceId);
+  const je = await db.journalEntry.findFirst({ where: { sourceType: 'ADJUSTMENT', sourceId, status: { not: 'VOID' } } });
+  if (je) await reverseEntry(db, actor, je.id, reason);
+  await audit(db, actor, 'void', 'stock_adjustment', sourceId, `Cancelled stock adjustment: ${reason}`);
+}
+
 // ───────────── Cash & bank ─────────────
 
 export async function transfer(db: Db, actor: Actor | null, input: { date: Date; fromAccountId: string; toAccountId: string; amount: number; memo?: string }) {
@@ -154,7 +170,7 @@ export async function transfer(db: Db, actor: Actor | null, input: { date: Date;
   if (amount <= 0) throw badRequest('Amount must be greater than zero.');
   if (input.fromAccountId === input.toAccountId) throw badRequest('Choose two different accounts.');
   const accounts = await db.account.findMany({ where: { id: { in: [input.fromAccountId, input.toAccountId] } } });
-  if (accounts.length !== 2 || accounts.some(a => !['CASH', 'BANK'].includes(a.subtype))) throw badRequest('Transfers are between cash/bank accounts.');
+  if (accounts.length !== 2 || accounts.some(a => !isMoneyAccount(a))) throw badRequest('Transfers are between cash/bank accounts.');
   const je = await postEntry(db, actor, {
     date: input.date, memo: input.memo || 'Transfer between accounts', sourceType: 'TRANSFER',
     lines: [{ accountId: input.toAccountId, debit: amount }, { accountId: input.fromAccountId, credit: amount }],
@@ -163,12 +179,16 @@ export async function transfer(db: Db, actor: Actor | null, input: { date: Date;
   return je;
 }
 
-export async function cashCount(db: Db, actor: Actor | null, input: { date: Date; accountId: string; counted: number; notes?: string | null; postVariance?: boolean }) {
+export async function cashCount(db: Db, actor: Actor | null, input: { date: Date; accountId: string; counted: number; notes?: string | null; postVariance?: boolean; ownerApproves?: boolean }) {
   const account = await db.account.findUnique({ where: { id: input.accountId } });
-  if (!account || !['CASH', 'BANK'].includes(account.subtype)) throw badRequest('Choose a cash or bank account.');
+  if (!account || !isMoneyAccount(account)) throw badRequest('Choose a cash or bank account.');
   const book = await accountBalance(db, account.id, new Date(input.date.getTime() + 86_399_999));
   const counted = money(input.counted);
   const variance = round2(counted - book);
+  // A shortage written off as an expense has no voucher: only the owner may approve it, and must say why.
+  const writesOffShortage = !!input.postVariance && variance <= -0.01;
+  if (writesOffShortage && input.ownerApproves === false) throw forbidden('Only the owner can write off a cash shortage.');
+  if (writesOffShortage && !input.notes?.trim()) throw badRequest('Write the reason for the shortage.');
   const count = await db.cashCount.create({ data: { date: input.date, accountId: account.id, bookBalance: book, counted, variance, notes: input.notes ?? null, createdById: actor?.id ?? null } });
   if (input.postVariance && Math.abs(variance) >= 0.01) {
     const shortage = await accountId(db, SYS.CASH_SHORTAGE);
@@ -179,6 +199,8 @@ export async function cashCount(db: Db, actor: Actor | null, input: { date: Date
         : [{ accountId: shortage, debit: -variance }, { accountId: account.id, credit: -variance }],
     });
   }
-  await audit(db, actor, 'create', 'cash_count', count.id, `Counted ${counted} vs book ${book} (${variance})`);
+  await audit(db, actor, 'create', 'cash_count', count.id, writesOffShortage
+    ? `Cash shortage of ${-variance} written off by the owner: ${input.notes?.trim()}`
+    : `Counted ${counted} vs book ${book} (${variance})`);
   return count;
 }

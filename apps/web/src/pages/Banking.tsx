@@ -9,6 +9,7 @@ import { ledgerDesk } from '../assets/photos';
 import { accountOptions, CashAccountSelect, methodLabel, methodOptions, Money, PaymentDrawer } from '../components/forms';
 import { GrantsTab, ProjectsTab } from './BankingProjects';
 import { PaymentSlip } from '../components/PaymentSlip';
+import { emptyVoucher, VoucherFields, voucherOk, voucherPayload, type VoucherValue } from '../components/VoucherFields';
 
 type Tab = 'accounts' | 'register' | 'transfer' | 'grants' | 'projects' | 'other' | 'count';
 interface Payment {
@@ -239,11 +240,14 @@ function OtherMoneyTab() {
   const recent = useApi<{ data: Payment[] }>('/payments', { pageSize: 200 });
   const others = (recent.data?.data ?? []).filter(p => !p.partyId && !p.party).slice(0, 20);
   const acctName = (id?: string) => { const a = all.find(x => x.id === id); return a ? nameOf(a, lang) : '—'; };
-  const valid = !!f.date && !!f.cashAccountId && !!f.counterAccountId && Number(f.amount) > 0;
+  // Money out is spending: saved only with its matching voucher (owner's rule).
+  const [voucher, setVoucher] = useState<VoucherValue>(emptyVoucher);
+  const valid = !!f.date && !!f.cashAccountId && !!f.counterAccountId && Number(f.amount) > 0 && (f.direction === 'IN' || voucherOk(voucher, round2(Number(f.amount))));
   const submit = () => save.mutate({
     direction: f.direction, date: f.date, cashAccountId: f.cashAccountId, counterAccountId: f.counterAccountId,
     amount: round2(Number(f.amount)), method: f.method, notes: f.notes.trim() || null,
-  }, { onSuccess: () => setF(x => ({ ...x, amount: '', notes: '' })) });
+    ...(f.direction === 'OUT' ? { voucher: voucherPayload(voucher) } : {}),
+  }, { onSuccess: () => { setF(x => ({ ...x, amount: '', notes: '' })); setVoucher(emptyVoucher()); } });
 
   const presets: { label: string; direction: 'IN' | 'OUT'; code: string; note: string }[] = [
     { label: t('Owner puts money in', 'মালিকের মূলধন জমা'), direction: 'IN', code: '3010', note: t('Owner capital', 'মালিকের মূলধন') },
@@ -270,6 +274,7 @@ function OtherMoneyTab() {
             </Field>
             <Field label={t('Notes', 'নোট')} className="full"><textarea className="textarea" maxLength={500} value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} /></Field>
           </div>
+          {f.direction === 'OUT' && <VoucherFields value={voucher} onChange={setVoucher} total={round2(Number(f.amount || 0))} />}
           <div className="row end">
             <button className="btn primary" disabled={!valid || save.isPending} onClick={submit}>{f.direction === 'IN' ? t('Record money in', 'প্রাপ্তি লিখুন') : t('Record money out', 'প্রদান লিখুন')}</button>
           </div>
@@ -302,13 +307,20 @@ function CashCountTab() {
   const cash = useCashAccounts();
   const names = useCashNames();
   const counts = useApi<{ data: CashCount[] }>('/cash-counts');
+  const { me } = useAuth();
+  const isOwner = me?.user.role.key === 'owner';
   const [f, setF] = useState({ date: ymd(), accountId: '', counted: '', notes: '', postVariance: true });
   const save = useSave('post', '/cash-counts', t('Cash count saved.', 'নগদ গণনা সংরক্ষিত হয়েছে।'));
   const acct = cash.data?.data.find(a => a.id === f.accountId);
   const isToday = f.date === ymd();
   const preview = acct && f.counted !== '' && isToday ? round2(Number(f.counted) - Number(acct.balance)) : null;
-  const valid = !!f.date && !!f.accountId && f.counted !== '' && Number(f.counted) >= 0;
-  const submit = () => save.mutate({ date: f.date, accountId: f.accountId, counted: round2(Number(f.counted)), notes: f.notes.trim() || null, postVariance: f.postVariance },
+  // A shortage written off has no voucher: only the owner may do it, and must give the reason. Others record the
+  // count and the difference stays for the owner to look at.
+  const shortage = preview !== null && preview <= -0.01;
+  const postIt = f.postVariance && !(shortage && !isOwner);
+  const needsReason = postIt && shortage && !f.notes.trim();
+  const valid = !!f.date && !!f.accountId && f.counted !== '' && Number(f.counted) >= 0 && !needsReason;
+  const submit = () => save.mutate({ date: f.date, accountId: f.accountId, counted: round2(Number(f.counted)), notes: f.notes.trim() || null, postVariance: postIt },
     { onSuccess: () => setF(x => ({ ...x, counted: '', notes: '' })) });
 
   const columns: Column<CashCount>[] = [
@@ -337,7 +349,9 @@ function CashCountTab() {
             {preview !== null && (Math.abs(preview) < 0.01
               ? <Alert>{t('Matches the books.', 'খাতার সাথে মিলেছে।')}</Alert>
               : <Alert tone="warn">{preview > 0 ? t(`Cash over by ${fmtMoney(preview, lang)}.`, `নগদ ${fmtMoney(preview, lang)} বেশি।`) : t(`Cash short by ${fmtMoney(-preview, lang)}.`, `নগদ ${fmtMoney(-preview, lang)} কম।`)}</Alert>)}
-            <label className="check"><input type="checkbox" checked={f.postVariance} onChange={e => setF({ ...f, postVariance: e.target.checked })} />{t('Post any difference to Cash over / short so the books match the count', 'যেকোনো পার্থক্য নগদ বেশি / কম হিসাবে পোস্ট করুন যাতে খাতা গণনার সাথে মেলে')}</label>
+            {shortage && !isOwner && <Alert tone="warn">{t('Only the owner can write off a shortage. The count is saved and the owner will see the difference.', 'শুধু মালিক ঘাটতি বাদ দিতে পারেন। গণনা সংরক্ষিত হবে, মালিক পার্থক্য দেখবেন।')}</Alert>}
+            {needsReason && <Alert tone="warn">{t('Write the reason for the shortage in Notes.', 'ঘাটতির কারণ নোটে লিখুন।')}</Alert>}
+            <label className="check"><input type="checkbox" checked={f.postVariance} disabled={shortage && !isOwner} onChange={e => setF({ ...f, postVariance: e.target.checked })} />{t('Post any difference to Cash over / short so the books match the count', 'যেকোনো পার্থক্য নগদ বেশি / কম হিসাবে পোস্ট করুন যাতে খাতা গণনার সাথে মেলে')}</label>
             <div className="row end">
               <button className="btn primary" disabled={!valid || save.isPending} onClick={submit}><Calculator size={16} />{t('Save count', 'গণনা সংরক্ষণ')}</button>
             </div>

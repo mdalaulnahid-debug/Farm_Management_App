@@ -103,3 +103,15 @@ export const DEFAULT_ROLES: { key: string; name: string; description: string; pe
     permissions: ALL.filter(p => p.endsWith('.view')),
   },
 ];
+
+/** The farm's own money: cash, bank and mobile-money accounts. Both the type and the subtype must say so, so an
+ *  expense or income account can never pass as "money" (and so skip the voucher rule). */
+export const MONEY_SUBTYPES = ['CASH', 'BANK'] as const;
+export const isMoneyAccount = (a: { type: string; subtype: string } | null | undefined) =>
+  !!a && a.type === 'ASSET' && (MONEY_SUBTYPES as readonly string[]).includes(a.subtype);
+/** Which account types each subtype belongs to. */
+export const SUBTYPE_TYPE: Record<string, string> = {
+  CASH: 'ASSET', BANK: 'ASSET', RECEIVABLE: 'ASSET', INVENTORY: 'ASSET', CURRENT_ASSET: 'ASSET', FIXED_ASSET: 'ASSET', BIOLOGICAL_ASSET: 'ASSET',
+  PAYABLE: 'LIABILITY', CURRENT_LIABILITY: 'LIABILITY', LONG_TERM_LIABILITY: 'LIABILITY',
+  EQUITY: 'EQUITY', SALES: 'INCOME', OTHER_INCOME: 'INCOME', COGS: 'EXPENSE', OPERATING_EXPENSE: 'EXPENSE', OTHER_EXPENSE: 'EXPENSE',
+};

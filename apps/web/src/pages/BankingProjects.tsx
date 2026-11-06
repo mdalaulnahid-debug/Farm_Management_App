@@ -7,6 +7,7 @@ import { useApi, useSave } from '../lib/hooks';
 import { fmtDate, fmtMoney, ymd } from '../lib/format';
 import { Alert, Badge, Card, DataTable, Drawer, Empty, Field, Input, Kpi, Segmented, Select, StatusBadge, VoidDialog, type Column } from '../components/ui';
 import { CashAccountSelect, Money, methodOptions } from '../components/forms';
+import { emptyVoucher, VoucherFields, voucherOk, voucherPayload, type VoucherValue } from '../components/VoucherFields';
 
 interface Project { id: string; code: string; name: string; nameBn?: string | null; kind: string; isMain: boolean; active: boolean; notes?: string | null }
 interface ProjectSum extends Project { sent: number; returned: number; held: number; income: number; expenses: number; profit: number }
@@ -93,10 +94,13 @@ function TransferDrawer({ projects, initialProjectId, onClose }: { projects: Pro
   const [f, setF] = useState({ date: ymd(), projectId: initialProjectId ?? '', direction: 'OUT' as 'OUT' | 'IN', cashAccountId: '', amount: '', memo: '' });
   useEffect(() => { if (!f.projectId && side[0]) setF(x => ({ ...x, projectId: side[0].id })); }, [side, f.projectId]);
   const save = useSave('post', '/project-transfers', t('Transfer recorded.', 'স্থানান্তর লেখা হয়েছে।'));
-  const valid = !!f.projectId && !!f.cashAccountId && Number(f.amount) > 0;
+  // Money sent out to a side project leaves the farm: it needs its voucher (owner's rule).
+  const [voucher, setVoucher] = useState<VoucherValue>(emptyVoucher);
+  const out = f.direction === 'OUT';
+  const valid = !!f.projectId && !!f.cashAccountId && Number(f.amount) > 0 && (!out || voucherOk(voucher, Number(f.amount)));
   return (
     <Drawer narrow title={t('Money to / from a side project', 'সাইড প্রকল্পে টাকা দেওয়া / ফেরত')} subtitle={t('Not an expense of the duck farm: the amount is kept as “Funds with side projects” until it is returned or spent by that project.', 'হাঁসের খামারের খরচ নয়: টাকাটি ফেরত বা সেই প্রকল্পে খরচ না হওয়া পর্যন্ত “সাইড প্রকল্পে দেওয়া অর্থ” হিসেবে থাকে।')} onClose={onClose}
-      footer={<><button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button><button className="btn primary" disabled={!valid || save.isPending} onClick={() => save.mutate({ ...f, amount: Number(f.amount), memo: f.memo.trim() || null }, { onSuccess: onClose })}>{t('Save', 'সংরক্ষণ')}</button></>}>
+      footer={<><button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button><button className="btn primary" disabled={!valid || save.isPending} onClick={() => save.mutate({ ...f, amount: Number(f.amount), memo: f.memo.trim() || null, ...(out ? { voucher: voucherPayload(voucher) } : {}) }, { onSuccess: onClose })}>{t('Save', 'সংরক্ষণ')}</button></>}>
       <Segmented value={f.direction} onChange={v => setF({ ...f, direction: v })} options={[{ value: 'OUT', label: t('Send to project', 'প্রকল্পে পাঠানো') }, { value: 'IN', label: t('Returned from project', 'প্রকল্প থেকে ফেরত') }]} />
       <div className="form-grid">
         <Field label={t('Project', 'প্রকল্প')}><Select value={f.projectId} onChange={e => setF({ ...f, projectId: e.target.value })} options={side.map(p => ({ value: p.id, label: projectName(lang, p) }))} /></Field>
@@ -105,6 +109,7 @@ function TransferDrawer({ projects, initialProjectId, onClose }: { projects: Pro
         <Field label={f.direction === 'OUT' ? t('Paid from', 'যে হিসাব থেকে') : t('Received into', 'যে হিসাবে জমা')}><CashAccountSelect value={f.cashAccountId} onChange={v => setF(x => ({ ...x, cashAccountId: v }))} /></Field>
         <Field label={t('Purpose', 'উদ্দেশ্য')} className="full"><Input value={f.memo} onChange={e => setF({ ...f, memo: e.target.value })} placeholder={t('e.g. cow feed, vaccine, shed repair', 'যেমন: গরুর খাবার, টিকা, শেড মেরামত')} /></Field>
       </div>
+      {out && <VoucherFields value={voucher} onChange={setVoucher} total={Number(f.amount || 0)} />}
     </Drawer>
   );
 }
