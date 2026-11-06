@@ -7,13 +7,14 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pruneBackups } from '../src/services/backup.js';
+import { withVoucher } from './helpers/voucher.js';
 
 let app: FastifyInstance;
 let cookie = '';
 const PASSWORD = 'TestOwner2026';
 
 const call = async (method: string, url: string, payload?: unknown, c = cookie) => {
-  const res = await app.inject({ method: method as any, url: `/api/v1${url}`, payload: payload as any, headers: c ? { cookie: c } : {} });
+  const res = await app.inject({ method: method as any, url: `/api/v1${url}`, payload: withVoucher(method, url, payload) as any, headers: c ? { cookie: c } : {} });
   return { status: res.statusCode, body: res.json() as any };
 };
 const id = async (code: string) => (await prisma.account.findUniqueOrThrow({ where: { code } })).id;

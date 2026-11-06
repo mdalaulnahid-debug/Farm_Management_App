@@ -488,3 +488,24 @@ model Attachment {
 
   @@index([ownerType, ownerId])
 }
+
+// The voucher behind a spending (owner's rule, 6 Nov 2026): every bill/expense and payment out is saved with a photo
+// of the real voucher and its number, date and amount as written; the amount must equal the entry. The owner or
+// accountant then checks it against the entry: MATCHES or MISMATCH, with who and when.
+model Voucher {
+  id          String    @id @default(cuid())
+  ownerType   String    // PAYMENT | BILL
+  ownerId     String
+  number      String?   // as written on the paper, if it has one
+  date        DateTime
+  amount      Decimal
+  status      String    @default("UNCHECKED") // UNCHECKED | MATCHES | MISMATCH
+  note        String?   // what does not match
+  checkedById String?
+  checkedAt   DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  @@unique([ownerType, ownerId])
+  @@index([status])
+}

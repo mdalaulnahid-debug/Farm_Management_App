@@ -112,6 +112,9 @@ const ROUTES: Row[] = [
   // Suppliers and purchases
   row('GET', '/bills', need('purchases.view')),
   row('GET', '/bills/:id', need('purchases.view')),
+  row('GET', '/vouchers', need('accounting.manage')),
+  row('GET', '/vouchers/summary', need('accounting.manage')),
+  row('POST', '/vouchers/:id/check', need('accounting.manage')),
   row('POST', '/bills/:id/attachments', need('purchases.view', 'purchases.create')),
   row('GET', '/bills/:id/attachments/:aid', need('purchases.view')),
   row('DELETE', '/bills/:id/attachments/:aid', need('purchases.void')),

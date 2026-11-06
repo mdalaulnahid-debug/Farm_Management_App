@@ -4,12 +4,13 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/server.js';
 import { seed } from '../src/seed.js';
 import { prisma } from '../src/db.js';
+import { withVoucher } from './helpers/voucher.js';
 
 let app: FastifyInstance;
 let cookie = '';
 const PASSWORD = 'TestOwner2026';
 const req = (method: string, url: string, payload?: unknown) =>
-  app.inject({ method: method as any, url: `/api/v1${url}`, payload: payload as any, headers: { cookie } });
+  app.inject({ method: method as any, url: `/api/v1${url}`, payload: withVoucher(method, url, payload) as any, headers: { cookie } });
 const ok = async (method: string, url: string, payload?: unknown) => {
   const res = await req(method, url, payload);
   if (res.statusCode !== 200) throw new Error(`${method} ${url}: ${res.statusCode} ${res.body}`);
@@ -41,7 +42,9 @@ describe('slip photos', () => {
     expect(a).toMatchObject({ mime: 'image/jpeg', size: jpeg.length });
     expect(a.data).toBeUndefined();
     const slip = await ok('GET', `/payments/${paymentId}`);
-    expect(slip.attachments.map((x: any) => x.id)).toEqual([a.id]);
+    // The payment already has its voucher photo (saved with it); this one is added after.
+    expect(slip.attachments.map((x: any) => x.id)).toContain(a.id);
+    expect(slip.attachments).toHaveLength(2);
     const img = await req('GET', `/payments/${paymentId}/attachments/${a.id}`);
     expect(img.statusCode).toBe(200);
     expect(img.headers['content-type']).toBe('image/jpeg');
@@ -54,7 +57,7 @@ describe('slip photos', () => {
 
   it('keeps a photo with a bill, and a photo is only reachable through its own record', async () => {
     const a = await ok('POST', `/bills/${billId}/attachments`, { dataUrl: url('image/png', png) });
-    expect((await ok('GET', `/bills/${billId}`)).attachments).toHaveLength(1);
+    expect((await ok('GET', `/bills/${billId}`)).attachments).toHaveLength(2); // its voucher photo + this one
     expect((await req('GET', `/payments/${paymentId}/attachments/${a.id}`)).statusCode).toBe(404);
     expect((await req('GET', `/bills/${billId}/attachments/${a.id}`)).statusCode).toBe(200);
   });

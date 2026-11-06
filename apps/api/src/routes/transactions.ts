@@ -15,6 +15,7 @@ import { adjustStock, cashCount, recordProduction, transfer, voidProduction } fr
 import { postEntry, reverseEntry } from '../services/ledger.js';
 import { audit } from '../services/common.js';
 import { listAttachments } from './attachments.js';
+import { saveVoucher, voucherMissing, zVoucher } from '../services/vouchers.js';
 
 const listQuery = zRange.extend({
   search: z.string().optional(), status: z.string().optional(), partyId: z.string().optional(),
@@ -75,15 +76,24 @@ export default async function transactionRoutes(app: FastifyInstance) {
   app.get('/bills/:id', { preHandler: can('purchases.view') }, async req => {
     const bill = await prisma.bill.findUnique({ where: { id: (req.params as any).id }, include: { lines: true, supplier: true, allocations: { include: { payment: true } } } });
     if (!bill) throw notFound('Bill');
-    return { ...bill, attachments: await listAttachments('BILL', bill.id) };
+    return { ...bill, attachments: await listAttachments('BILL', bill.id), voucher: await prisma.voucher.findUnique({ where: { ownerType_ownerId: { ownerType: 'BILL', ownerId: bill.id } } }) };
   });
-  app.post('/bills', { preHandler: can('purchases.create') }, async req => {
+  // Spending is saved only with its voucher (photo + amount as written), in one transaction: no bill without it.
+  app.post('/bills', { preHandler: can('purchases.create'), bodyLimit: 8 * 1024 * 1024 }, async req => {
     const body = parse(z.object({
       date: zDate, dueDate: zOptDate, supplierId: zOptText(40), reference: zOptText(60), notes: zOptText(500),
       lines: z.array(z.object({ itemId: zOptText(40), accountId: zOptText(40), description: z.string().max(200).optional(), quantity: zQty, unitPrice: zMoney })).min(1).max(100),
       paid: cashReceipt,
+      voucher: zVoucher.nullish(),
     }), req.body);
-    return tx(db => createBill(db, actorOf(req), body));
+    const { voucher, ...bill } = body;
+    if (!voucher) throw voucherMissing();
+    const actor = actorOf(req);
+    return tx(async db => {
+      const made = await createBill(db, actor, bill);
+      await saveVoucher(db, actor, 'BILL', { id: made.id, number: made.number, total: Number(made.total) }, voucher);
+      return made;
+    });
   });
   app.post('/bills/:id/void', { preHandler: can('purchases.void') }, async req => {
     const { reason } = parse(zReason, req.body);
@@ -115,18 +125,27 @@ export default async function transactionRoutes(app: FastifyInstance) {
     });
     if (!pay) throw notFound('Payment');
     const accounts = await prisma.account.findMany({ where: { id: { in: [pay.cashAccountId, pay.counterAccountId] } }, select: { id: true, code: true, name: true, nameBn: true } });
-    return { ...pay, cashAccount: accounts.find(a => a.id === pay.cashAccountId) ?? null, counterAccount: accounts.find(a => a.id === pay.counterAccountId) ?? null, attachments: await listAttachments('PAYMENT', pay.id) };
+    return { ...pay, cashAccount: accounts.find(a => a.id === pay.cashAccountId) ?? null, counterAccount: accounts.find(a => a.id === pay.counterAccountId) ?? null, attachments: await listAttachments('PAYMENT', pay.id), voucher: await prisma.voucher.findUnique({ where: { ownerType_ownerId: { ownerType: 'PAYMENT', ownerId: pay.id } } }) };
   });
-  app.post('/payments', { preHandler: can('banking.view') }, async req => {
+  app.post('/payments', { preHandler: can('banking.view'), bodyLimit: 8 * 1024 * 1024 }, async req => {
     const body = parse(z.object({
       direction: z.enum(['IN', 'OUT']), date: zDate, partyId: zOptText(40), cashAccountId: zId, counterAccountId: zOptText(40), amount: zMoney,
       method: z.enum(PAYMENT_METHODS).optional(), reference: zOptText(60), notes: zOptText(500),
       allocations: z.array(z.object({ invoiceId: z.string().optional(), billId: z.string().optional(), amount: zMoney })).default([]),
+      voucher: zVoucher.nullish(),
     }), req.body);
     // Receipts need sales rights, payments purchase rights, other money movements banking rights.
     const perm = body.counterAccountId ? 'banking.manage' : body.direction === 'IN' ? 'sales.create' : 'purchases.create';
     await can(perm)(req, undefined as any);
-    return tx(db => createPayment(db, actorOf(req), body));
+    const { voucher, ...payment } = body;
+    // Money out is spending: saved only with its matching voucher. Money in needs none.
+    if (payment.direction === 'OUT' && !voucher) throw voucherMissing();
+    const actor = actorOf(req);
+    return tx(async db => {
+      const made = await createPayment(db, actor, payment);
+      if (payment.direction === 'OUT') await saveVoucher(db, actor, 'PAYMENT', { id: made.id, number: made.number, total: Number(made.amount) }, voucher!);
+      return made;
+    });
   });
   app.post('/payments/:id/void', { preHandler: can('banking.manage') }, async req => {
     const { reason } = parse(zReason, req.body);
