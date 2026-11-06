@@ -10,6 +10,7 @@ import webpush from 'web-push';
 import type { Db } from '../db.js';
 import { farmMinuteOfDay, farmYmd } from '../lib/farm-time.js';
 import { sqliteFile } from './backup.js';
+import { SYS } from '../lib/constants.js';
 
 export type Base = 'morning' | 'evening';
 export type Slot = Base | `${Base}-again` | `${Base}-owner`;
@@ -52,9 +53,12 @@ export async function isDone(db: Db, base: Base, day: string): Promise<boolean> 
   const medicine = (await none(db, day, 'medicine'))
     || (await db.stockMove.count({ where: { date, voided: false, type: 'CONSUMPTION', item: { category: 'MEDICINE' } } })) > 0;
   const expenses = (await none(db, day, 'expenses')) || (await db.bill.count({ where: { date, status: { not: 'VOID' } } })) > 0;
+  // Sales done: an invoice, or money collected from a customer (a receipt against receivables). Owner capital,
+  // loans, grants and other money in are not sales.
+  const ar = (await db.account.findUnique({ where: { code: SYS.AR }, select: { id: true } }))?.id ?? '-';
   const sales = (await none(db, day, 'sales'))
     || (await db.salesInvoice.count({ where: { date, status: { not: 'VOID' } } })) > 0
-    || (await db.payment.count({ where: { date, direction: 'IN', status: { not: 'VOID' } } })) > 0;
+    || (await db.payment.count({ where: { date, direction: 'IN', status: { not: 'VOID' }, counterAccountId: ar, party: { kind: { in: ['CUSTOMER', 'BOTH'] } } } })) > 0;
   return feed && medicine && expenses && sales;
 }
 

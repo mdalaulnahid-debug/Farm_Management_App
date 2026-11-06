@@ -127,10 +127,15 @@ describe('sending', () => {
     await runReminders(prisma, evening('17:00'), send); // feed, medicine, spending done; sales not
     expect(sent.map(s => s.endpoint)).toEqual(['https://fcm.googleapis.com/fcm/send/op-phone']);
     expect(sent[0].payload.body).toMatch(/sales and money collected/);
-    await prisma.reminderLog.create({ data: { day: '2026-11-10', slot: 'none-sales', kind: 'none' } });
+    // Owner capital coming in is not a sale: still asked.
+    await prisma.payment.create({ data: { number: 'REM-CAP-1', date: new Date('2026-11-10T00:00:00Z'), direction: 'IN', cashAccountId: (await prisma.account.findUniqueOrThrow({ where: { code: '1010' } })).id, counterAccountId: (await prisma.account.findUniqueOrThrow({ where: { code: '3010' } })).id, amount: 5000 } });
     sent = [];
     await runReminders(prisma, evening('18:00'), send);
-    expect(sent).toEqual([]);
+    expect(sent.map(s => s.endpoint)).toEqual(['https://fcm.googleapis.com/fcm/send/op-phone']);
+    await prisma.reminderLog.create({ data: { day: '2026-11-10', slot: 'none-sales', kind: 'none' } });
+    sent = [];
+    await runReminders(prisma, evening('19:00'), send);
+    expect(sent.filter(s => s.endpoint.endsWith('op-phone'))).toEqual([]);
   });
 });
 

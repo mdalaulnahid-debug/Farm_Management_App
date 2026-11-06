@@ -21,7 +21,8 @@ export function TodayChecklist({ onOpen }: { onOpen: (f: Flow) => void }) {
   const moves = useApi<{ data: { type: string; voided: boolean; item: { name: string }; itemId: string }[] }>('/stock-moves', { ...range, type: 'CONSUMPTION', pageSize: 200 });
   const bills = useApi<{ data: { status: string }[] }>('/bills', { ...range, pageSize: 50 });
   const sales = useApi<{ data: { status: string }[] }>('/invoices', { ...range, pageSize: 50 });
-  const received = useApi<{ data: { status: string }[] }>('/payments', { ...range, direction: 'IN', pageSize: 50 });
+  // Money collected from customers counts (receipts against what they owe); owner capital or loans do not.
+  const received = useApi<{ data: { status: string; partyId: string | null; party?: { kind?: string } | null; allocations?: unknown[] }[] }>('/payments', { ...range, direction: 'IN', pageSize: 50 });
   const mine = useApi<{ none?: string[] }>('/me/today');
   if (!L.flocks.length || logs.isLoading) return null;
 
@@ -29,7 +30,7 @@ export function TodayChecklist({ onOpen }: { onOpen: (f: Flow) => void }) {
   const sum = (id: string, f: (l: { eggsCollected: number; feedQty: number }) => number) => (logs.data?.data ?? []).filter(l => l.flockId === id).reduce((a, l) => a + Number(f(l)), 0);
   const items: Item[] = [
     { key: 'eggs', label: t('Morning eggs', 'সকালের ডিম'), flow: 'eggs', done: L.flocks.every(f => sum(f.id, l => l.eggsCollected) > 0) },
-    { key: 'sales', label: t('Sales & money collected', 'বিক্রি ও টাকা আদায়'), flow: 'sale', none: 'sales', done: none.has('sales') || [...(sales.data?.data ?? []), ...(received.data?.data ?? [])].some(r => r.status !== 'VOID') },
+    { key: 'sales', label: t('Sales & money collected', 'বিক্রি ও টাকা আদায়'), flow: 'sale', none: 'sales', done: none.has('sales') || (sales.data?.data ?? []).some(r => r.status !== 'VOID') || (received.data?.data ?? []).some(r => r.status !== 'VOID' && !!r.partyId) },
     { key: 'feed', label: t('Feed used', 'খাদ্য ব্যবহার'), flow: 'evening', none: 'feed', done: none.has('feed') || L.flocks.every(f => sum(f.id, l => l.feedQty) > 0) },
     { key: 'medicine', label: t('Medicine used', 'ওষুধ ব্যবহার'), flow: 'evening', none: 'medicine', done: none.has('medicine') || (moves.data?.data ?? []).some(m => !m.voided && L.medicineIds.has(m.itemId)) },
     { key: 'expenses', label: t('Spending (with vouchers)', 'খরচ (ভাউচারসহ)'), flow: 'bought', none: 'expenses', done: none.has('expenses') || (bills.data?.data ?? []).some(b => b.status !== 'VOID') },
