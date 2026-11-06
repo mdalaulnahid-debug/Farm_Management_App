@@ -103,6 +103,19 @@ export default async function transactionRoutes(app: FastifyInstance) {
     ]);
     return { data, total };
   });
+  // One receipt or payment, for its printable slip: who, which accounts, and which invoices or bills it settled.
+  app.get('/payments/:id', { preHandler: can('banking.view') }, async req => {
+    const pay = await prisma.payment.findUnique({
+      where: { id: (req.params as any).id },
+      include: {
+        party: { select: { id: true, name: true, phone: true, address: true } },
+        allocations: { include: { invoice: { select: { id: true, number: true, date: true, total: true } }, bill: { select: { id: true, number: true, date: true, total: true } } } },
+      },
+    });
+    if (!pay) throw notFound('Payment');
+    const accounts = await prisma.account.findMany({ where: { id: { in: [pay.cashAccountId, pay.counterAccountId] } }, select: { id: true, code: true, name: true, nameBn: true } });
+    return { ...pay, cashAccount: accounts.find(a => a.id === pay.cashAccountId) ?? null, counterAccount: accounts.find(a => a.id === pay.counterAccountId) ?? null };
+  });
   app.post('/payments', { preHandler: can('banking.view') }, async req => {
     const body = parse(z.object({
       direction: z.enum(['IN', 'OUT']), date: zDate, partyId: zOptText(40), cashAccountId: zId, counterAccountId: zOptText(40), amount: zMoney,
