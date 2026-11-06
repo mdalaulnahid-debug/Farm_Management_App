@@ -78,6 +78,7 @@ describe('October workbook history', () => {
 });
 
 describe('order-to-cash and procure-to-pay', () => {
+  let eggsBefore = 0;
   it('posts a feed purchase to inventory, consumes it through production and expenses it at average cost', async () => {
     const feed = await prisma.item.findUniqueOrThrow({ where: { sku: 'FEED-LAYER' } });
     const flock = await prisma.flock.findUniqueOrThrow({ where: { code: 'FLK-01' } });
@@ -108,6 +109,8 @@ describe('order-to-cash and procure-to-pay', () => {
 
   it('sells eggs on credit, collects, and blocks selling more eggs than in stock', async () => {
     const eggs = await prisma.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
+    // Other test files share this database and add eggs too, so stock is checked as a change, not a total.
+    eggsBefore = Number(eggs.qtyOnHand);
     const customer = (await call('POST', '/parties', { kind: 'CUSTOMER', name: 'Rahim Store', paymentTerms: 7 })).body;
     const tooMany = await call('POST', '/invoices', { date: '2026-11-03', customerId: customer.id, lines: [{ itemId: eggs.id, quantity: 100000, unitPrice: 16 }] });
     expect(tooMany.status).toBe(400);
@@ -117,7 +120,7 @@ describe('order-to-cash and procure-to-pay', () => {
     const fresh = (await call('GET', `/invoices/${inv.body.id}`)).body;
     expect(fresh.status).toBe('PARTIAL');
     expect(fresh.amountPaid).toBe(2000);
-    expect(Number((await prisma.item.findUniqueOrThrow({ where: { id: eggs.id } })).qtyOnHand)).toBe(90);
+    expect(Number((await prisma.item.findUniqueOrThrow({ where: { id: eggs.id } })).qtyOnHand)).toBe(eggsBefore - 300);
   });
 
   it('voiding requires voiding receipts first and then fully reverses the invoice', async () => {
@@ -127,7 +130,7 @@ describe('order-to-cash and procure-to-pay', () => {
     for (const a of detail.allocations) expect((await call('POST', `/payments/${a.paymentId}/void`, { reason: 'entered twice' })).status).toBe(200);
     expect((await call('POST', `/invoices/${inv.id}/void`, { reason: 'entered twice' })).status).toBe(200);
     const eggs = await prisma.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
-    expect(Number(eggs.qtyOnHand)).toBe(390);
+    expect(Number(eggs.qtyOnHand)).toBe(eggsBefore);
     const tb = (await call('GET', '/reports/trial-balance?asOf=2026-11-30')).body;
     expect(tb.balanced).toBe(true);
   });

@@ -1,4 +1,5 @@
 import type { Db } from '../db.js';
+import { isSameFarmDay } from '../lib/farm-time.js';
 
 /** Gap-free, human-readable document numbers per prefix: INV-000123. Runs inside the caller's transaction. */
 export async function nextNumber(db: Db, prefix: string, width = 6) {
@@ -12,6 +13,10 @@ export async function nextNumber(db: Db, prefix: string, width = 6) {
 
 /** Who is acting. `mayBackdate`: may post or void beyond the recent-days window (owner, accountant). */
 export interface Actor { id: string; ip?: string; mayBackdate?: boolean }
+
+/** The record was made by this person earlier today (Bangladesh time): data-entry staff may still fix it. */
+export const ownSameDay = (actor: { id: string }, rec: { createdById: string | null; createdAt: Date }, now: Date = new Date()) =>
+  rec.createdById === actor.id && isSameFarmDay(rec.createdAt, now);
 
 export async function audit(db: Db, actor: Actor | null, action: string, entity: string, entityId: string | null, summary: string, data?: unknown) {
   await db.auditLog.create({

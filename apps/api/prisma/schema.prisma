@@ -33,6 +33,10 @@ model Organization {
   lockDate         DateTime? // no posting on or before this date (period close)
   invoiceFooter    String?
   requireTwoStep   Boolean   @default(false) // everyone must use 2-step sign-in (authenticator app)
+  // Daily reminders to data-entry staff (Bangladesh time, "HH:MM"); follow-up +1 h, owner notice +2 h. Owner/admin only.
+  remindersOn      Boolean   @default(true)
+  reminderMorning  String    @default("10:00")
+  reminderEvening  String    @default("17:00")
   updatedAt        DateTime  @updatedAt
 }
 
@@ -58,6 +62,7 @@ model User {
   active             Boolean    @default(true)
   mustChangePassword Boolean    @default(false)
   locale             String     @default("en")
+  preferences        String?    // JSON: personal display settings (theme, font set, simple workspace…), see routes/auth.ts
   failedLogins       Int        @default(0)
   lockedUntil        DateTime?
   lastLoginAt        DateTime?
@@ -508,4 +513,31 @@ model Voucher {
 
   @@unique([ownerType, ownerId])
   @@index([status])
+}
+
+// ───────────────────────── Daily reminders ─────────────────────────
+
+/** A phone or browser that agreed to receive reminders (Web Push). */
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/** One row per reminder slot handled on a farm day (never sent twice), and "none today" answers. */
+model ReminderLog {
+  id     String   @id @default(cuid())
+  day    String   // YYYY-MM-DD, Bangladesh time
+  slot   String   // morning | morning-again | morning-owner | evening | ... | none-feed | none-medicine | none-expenses
+  kind   String   // sent | done | none
+  userId String?
+  at     DateTime @default(now())
+
+  @@unique([day, slot])
 }

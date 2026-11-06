@@ -22,6 +22,9 @@ export interface ProductionInput {
   feedQty?: number;
   waterLitres?: number | null;
   notes?: string | null;
+  /** A later sitting of the same day (e.g. evening deaths and feed after morning eggs): saved as a further
+   *  record for that flock and day instead of being refused. Reports add the day's records together. */
+  addToDay?: boolean;
 }
 
 export async function recordProduction(db: Db, actor: Actor | null, input: ProductionInput) {
@@ -36,7 +39,7 @@ export async function recordProduction(db: Db, actor: Actor | null, input: Produ
   if (broken > collected) throw badRequest('Broken eggs cannot exceed eggs collected.');
   if (mortality + culled > flock.currentCount) throw badRequest(`Mortality and culls exceed the flock's ${flock.currentCount} birds.`);
   const exists = await db.productionLog.findFirst({ where: { flockId: flock.id, date: input.date, status: 'POSTED' } });
-  if (exists) throw conflict('Production for this flock and date is already recorded. Void it to re-enter.');
+  if (exists && !input.addToDay) throw conflict('Production for this flock and date is already recorded. Void it to re-enter.');
 
   const log = await db.productionLog.create({
     data: {
@@ -145,6 +148,19 @@ export async function adjustStock(db: Db, actor: Actor | null, input: Adjustment
   }
   await audit(db, actor, 'create', 'stock_adjustment', sourceId, `${input.type} ${quantity} ${item.unit} ${item.name}`);
   return { sourceId, value, difference: quantity };
+}
+
+/** Cancel a stock adjustment (e.g. medicine or feed recorded as used by mistake): its stock moves and
+ *  journal entry are reversed, so quantity, average cost and the books return to before. */
+export async function voidAdjustment(db: Db, actor: Actor | null, sourceId: string, reason: string) {
+  const moves = await db.stockMove.findMany({ where: { sourceType: 'ADJUSTMENT', sourceId } });
+  if (!moves.length) throw notFound('Stock adjustment');
+  if (moves.every(m => m.voided)) throw conflict('This stock adjustment is already cancelled.');
+  assertRecentDate(actor, moves[0].date);
+  await reverseStockForSource(db, 'ADJUSTMENT', sourceId);
+  const je = await db.journalEntry.findFirst({ where: { sourceType: 'ADJUSTMENT', sourceId, status: { not: 'VOID' } } });
+  if (je) await reverseEntry(db, actor, je.id, reason);
+  await audit(db, actor, 'void', 'stock_adjustment', sourceId, `Cancelled stock adjustment: ${reason}`);
 }
 
 // ───────────── Cash & bank ─────────────
