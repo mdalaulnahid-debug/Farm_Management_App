@@ -151,7 +151,7 @@ export default function MyAccount() {
                   <button type="button" className="btn sm" disabled={fontSize >= 20} onClick={() => set({ fontSize: fontSize + 1 })} aria-label={t('Larger text', 'বড় লেখা')}>A+</button>
                 </div>
               </Row>
-              <Row label={t('Lite mode', 'লাইট মোড')} hint={t('For slow internet or older phones: no photos and no movement. Turns on by itself when the phone’s data saver is on.', 'ধীর ইন্টারনেট বা পুরোনো ফোনের জন্য: ছবি ও নড়াচড়া নেই। ফোনের ডেটা সেভার চালু থাকলে নিজে থেকেই চালু হয়।')}>
+              <Row label={t('Lite mode', 'লাইট মোড')} hint={t('For slow internet or older phones: no photos, no movement and lighter charts. Turns on by itself when the phone’s data saver is on; charts also go light by themselves on a 2G/3G line.', 'ধীর ইন্টারনেট বা পুরোনো ফোনের জন্য: ছবি ও নড়াচড়া নেই, চার্ট হালকা। ফোনের ডেটা সেভার চালু থাকলে নিজে থেকেই চালু হয়।')}>
                 <Switch checked={lite} onChange={v => set({ lite: v })} label={lite ? t('On', 'চালু') : t('Off', 'বন্ধ')} />
               </Row>
               <Row label={t('Motion', 'অ্যানিমেশন')} hint={t('“Reduced” turns off fades and movement, e.g. for slower phones.', '“কম” বেছে নিলে নড়াচড়া ও ফেড বন্ধ থাকে, যেমন ধীর ফোনের জন্য।')}>
