@@ -78,3 +78,6 @@
 :root[data-theme='dark'][data-accent='purple'] { --brand: #b18cff; --brand-2: #c4a8ff; --brand-soft: #2a1a4a; --brand-ink: #12071f; }
 :root[data-theme='dark'][data-accent='amber'] { --brand: #f0b351; --brand-2: #f5c473; --brand-soft: #3a2a0d; --brand-ink: #1f1405; }
 :root { --swatch-green: #157347; --swatch-blue: #2563eb; --swatch-purple: #7c3aed; --swatch-amber: #d97706; }
+/* Reading font sets (My settings › Appearance). Headings keep --font-display. The files load on demand. */
+:root[data-font='easy'] { --font: 'Atkinson Hyperlegible', 'Noto Sans Bengali', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+:root[data-font='friendly'] { --font: 'Nunito', 'Baloo Da 2', system-ui, -apple-system, 'Segoe UI', sans-serif; }
