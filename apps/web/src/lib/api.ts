@@ -38,7 +38,7 @@ export const api = {
   post: <T = any>(path: string, body?: unknown) => request<T>('POST', path, body ?? {}),
   put: <T = any>(path: string, body?: unknown) => request<T>('PUT', path, body ?? {}),
   patch: <T = any>(path: string, body?: unknown) => request<T>('PATCH', path, body ?? {}),
-  del: <T = any>(path: string) => request<T>('DELETE', path),
+  del: <T = any>(path: string, body?: unknown) => request<T>('DELETE', path, body),
 };
 
 export interface List<T> { data: T[]; total?: number; totals?: Record<string, number> }

@@ -193,6 +193,57 @@ table.table { width: 100%; border-collapse: collapse; }
 .state-action { margin-top: 8px; }
 .toast-action { margin-left: auto; border: 0; background: none; color: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0 0 0 8px; }
 
+/* ───────── Step-by-step forms (wizard) ───────── */
+.btn.lg { height: 56px; padding: 0 22px; font-size: 1.08em; border-radius: 12px; gap: 10px; }
+.wizard { --fs-wizard: 30px; display: flex; flex-direction: column; min-height: min(640px, calc(100dvh - 120px)); background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
+.wizard-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.wizard-head small { display: block; color: var(--text-3); font-size: .86em; }
+.wizard-head b { display: block; font-family: var(--font-display); font-size: 1.1em; font-weight: 600; }
+.wizard-dots { margin-left: auto; display: flex; gap: 6px; }
+.wizard-dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--surface-3); }
+.wizard-dots i.done { background: var(--brand-2); }
+.wizard-dots i.on { background: var(--gold); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 30%, transparent); }
+.wizard-body { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 26px 18px 18px; text-align: center; animation: fade var(--dur) var(--ease-out); }
+.wizard-pic { width: 84px; height: 84px; border-radius: 26px; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); }
+.wizard-pic.ok { background: var(--success-soft); color: var(--success); border-radius: 50%; }
+.wizard-pic svg { width: 46px; height: 46px; }
+.wizard-title { display: flex; align-items: center; gap: 8px; justify-content: center; }
+.wizard-title h2 { font-size: 1.55em; line-height: 1.25; text-wrap: balance; }
+.help-btn { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--surface); color: var(--brand-2); display: grid; place-items: center; cursor: pointer; }
+.help-btn.on { background: var(--brand-soft); border-color: var(--brand-2); }
+.wizard-help { margin: 0; max-width: 46ch; padding: 12px 14px; border-radius: 12px; background: var(--info-soft); color: var(--text); font-size: 1.02em; line-height: 1.55; text-align: left; }
+.wizard-control { width: min(440px, 100%); display: flex; flex-direction: column; gap: 12px; }
+.wizard-sentence { margin: 0; max-width: 34ch; font-family: var(--font-display); font-size: 1.45em; line-height: 1.4; text-wrap: balance; }
+.wizard-q { margin: 0; color: var(--text-2); }
+.wizard-error { max-width: 44ch; padding: 12px 14px; border-radius: 12px; background: var(--danger-soft); color: var(--text); text-align: left; }
+.wizard-foot { display: flex; justify-content: space-between; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--border); background: var(--surface-2); }
+.wizard-foot .btn { flex: 1 1 0; max-width: 260px; }
+.numpad { display: grid; gap: 12px; }
+.numpad-value { display: flex; justify-content: center; align-items: baseline; gap: 8px; min-height: 64px; padding: 8px 14px; border-radius: 14px; border: 2px solid var(--brand-2); background: var(--surface); font-family: var(--font-display); font-size: var(--fs-wizard); font-weight: 650; font-variant-numeric: tabular-nums; }
+.numpad-value small { font-size: .5em; color: var(--text-3); font-weight: 500; }
+.numpad-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.numpad-keys button { height: 60px; border-radius: 14px; border: 1px solid var(--border-strong); background: var(--surface-2); font-size: 1.6em; font-weight: 650; cursor: pointer; display: grid; place-items: center; color: var(--text); }
+.numpad-keys button:active { background: var(--brand-soft); transform: scale(.97); }
+.choices { display: grid; gap: 10px; }
+.choice { display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 16px; border-radius: 14px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); text-align: left; cursor: pointer; font-size: 1.06em; }
+.choice b { display: block; font-weight: 650; }
+.choice small { display: block; color: var(--text-3); font-size: .86em; }
+.choice-pic { flex: none; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); }
+.choice.on { border-color: var(--brand); background: var(--brand-soft); box-shadow: 0 0 0 2px var(--brand-soft); }
+@media (max-width: 600px) {
+  /* Phones: the whole step fits one screen and Back/Next stay at the thumb, above the keyboard edge. */
+  .wizard { border-radius: 0; border-left: 0; border-right: 0; margin: -16px -16px 0; min-height: calc(100dvh - 60px); overflow: visible; }
+  .wizard-body { padding: 16px 16px 12px; gap: 10px; }
+  .wizard-pic { width: 56px; height: 56px; border-radius: 18px; }
+  .wizard-pic svg { width: 30px; height: 30px; }
+  .wizard-title h2 { font-size: 1.3em; }
+  .numpad-value { min-height: 56px; }
+  .numpad-keys { gap: 8px; }
+  .numpad-keys button { height: 54px; }
+  .wizard-foot { position: sticky; bottom: 0; z-index: 2; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+  .btn.lg { height: 52px; }
+}
+
 /* ───────── Responsive ───────── */
 @media (max-width: 1180px) { .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 920px) {

@@ -6,6 +6,7 @@ import { useApi, useSave } from '../lib/hooks';
 import { downloadCsv, fmtDate, fmtDateTime, fmtNum, monthStart, ymd } from '../lib/format';
 import ImportData from './ImportData';
 import { Alert, Badge, Card, DataTable, Dialog, Drawer, Empty, Field, Input, Loading, PageHeader, SearchBox, Select, Switch, Tabs, useToast, type Column } from '../components/ui';
+import { RemindersCard } from './RemindersCard';
 
 type T = (en: string, bn: string) => string;
 type TabKey = 'users' | 'roles' | 'org' | 'close' | 'import' | 'audit';
@@ -276,7 +277,7 @@ function OrgTab() {
   const { can } = useAuth();
   const q = useApi<Org>('/settings');
   if (!q.data) return <Card><Loading /></Card>;
-  return <>{can('users.manage') && <SecurityCard />}<OrgForm org={q.data} /><BackupCard /></>;
+  return <>{can('users.manage') && <SecurityCard />}<OrgForm org={q.data} /><RemindersCard /><BackupCard /></>;
 }
 
 interface SecurityReport { ok: boolean; warnings: number; failures: number; checks: { key: string; level: 'ok' | 'warn' | 'fail'; title: { en: string; bn: string }; fix: { en: string; bn: string } | null }[] }

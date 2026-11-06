@@ -31,7 +31,7 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
 }
 
 export default function MyAccount() {
-  const { t, lang, theme, density, fontSize, accent, motion, banglaCalendar, home, fontSet, set, reset } = usePrefs();
+  const { t, lang, theme, density, fontSize, accent, motion, banglaCalendar, home, fontSet, simple, set, reset } = usePrefs();
   const { me, can, logout } = useAuth();
   const toast = useToast();
   const setLang = useSetLanguage();
@@ -182,6 +182,9 @@ export default function MyAccount() {
 
           {section === 'startup' && (
             <Card title={t('Start-up', 'শুরুর পাতা')} pad>
+              <Row label={t('Simple workspace', 'সহজ কাজের পাতা')} hint={t('Big picture buttons for the everyday jobs and one question per screen. On for data-entry staff unless they turn it off.', 'প্রতিদিনের কাজের জন্য বড় ছবির বোতাম, প্রতি পাতায় একটি প্রশ্ন। ডেটা এন্ট্রির কর্মীদের জন্য চালু থাকে, যদি না তারা বন্ধ করেন।')}>
+                <Switch checked={simple} onChange={v => set({ simple: v })} label={simple ? t('On', 'চালু') : t('Off', 'বন্ধ')} />
+              </Row>
               <Row label={t('Open after sign-in', 'সাইন ইনের পর খুলবে')} hint={t('Data-entry staff can go straight to the page they use most. Saved on this device.', 'ডেটা এন্ট্রির কর্মীরা সবচেয়ে বেশি ব্যবহৃত পাতায় সরাসরি যেতে পারেন। এই ডিভাইসে সংরক্ষিত।')}>
                 <Select value={startPages.some(p => p.value === home) ? home : startPages[0]?.value ?? '/'} onChange={e => set({ home: e.target.value })} options={startPages} aria-label={t('Open after sign-in', 'সাইন ইনের পর খুলবে')} />
               </Row>

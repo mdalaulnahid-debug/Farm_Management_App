@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, type ReactNode } from 're
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from './api';
 import { DEFAULTS, setRemoteSaver, usePrefs, type Prefs } from './i18n';
+import { disableReminders } from './push';
 
 export interface Me {
   user: { id: string; name: string; email: string; locale: string; mustChangePassword: boolean; twoStepEnabled: boolean; mustSetUpTwoStep: boolean; role: { key: string; name: string }; permissions: string[]; preferences?: Partial<Prefs> | null };
@@ -53,6 +54,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Mark signed-out first, then drop everything else. qc.clear() would detach the ['me'] query from
     // its observer, so the screen never saw the sign-out and stayed signed in.
     logout: async () => {
+      // A shared phone or PC stops getting this person's reminders once they sign out (they turn them on again
+      // after signing back in). Done first, while still signed in, and never allowed to block signing out.
+      await Promise.race([disableReminders().catch(() => undefined), new Promise(r => setTimeout(r, 2500))]);
       try { await api.post('/auth/logout'); } finally {
         // Back to the defaults for whoever signs in next (the language stays).
         adopt({ ...DEFAULTS, lang: langRef.current });

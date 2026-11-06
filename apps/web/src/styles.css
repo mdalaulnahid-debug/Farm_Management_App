@@ -223,3 +223,54 @@
 /* No-internet notice at the top of the page */
 .offline-banner { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: var(--radius); background: var(--warning-soft); color: var(--text); border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent); }
 .offline-banner svg { color: var(--warning); flex: none; }
+
+/* ───────── Simple workspace (easy/) ───────── */
+.easy { display: flex; flex-direction: column; gap: var(--gap); max-width: 880px; width: 100%; margin: 0 auto; }
+.easy-hello small { color: var(--text-3); font-weight: 600; }
+.easy-hello h1 { font-size: 1.9em; margin-top: 2px; }
+.easy-hello p { margin: 6px 0 0; font-size: 1.15em; color: var(--text-2); }
+.easy-jobs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.easy-job { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-height: 150px; padding: 18px; border-radius: 18px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-sm); color: var(--text); text-align: left; cursor: pointer; transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), border-color var(--dur-fast); }
+.easy-job:hover { border-color: var(--brand-2); box-shadow: var(--shadow); }
+.easy-job:active { transform: scale(.98); }
+.easy-job b { font-family: var(--font-display); font-size: 1.25em; font-weight: 600; line-height: 1.2; }
+.easy-job small { color: var(--text-3); font-size: .95em; }
+.easy-job-pic { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); margin-bottom: 6px; }
+.easy-job:nth-child(2) .easy-job-pic { background: var(--accent-soft); color: var(--accent); }
+.easy-job:nth-child(3) .easy-job-pic { background: var(--info-soft); color: var(--info); }
+.easy-job:nth-child(4) .easy-job-pic { background: var(--warning-soft); color: var(--warning); }
+.checklist, .recorded, .steps { list-style: none; margin: 0; padding: 0; }
+.checklist li { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-top: 1px solid var(--border); font-size: 1.05em; }
+.checklist li:first-child { border-top: 0; }
+.check-mark { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-3); color: var(--text-3); flex: none; }
+.checklist li.done .check-mark { background: var(--success-soft); color: var(--success); }
+.checklist li.done .check-label { color: var(--text-3); }
+.check-label { flex: 1; font-weight: 600; }
+.check-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.recorded li { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-top: 1px solid var(--border); }
+.recorded li:first-child { border-top: 0; }
+.recorded-time { width: 64px; color: var(--text-3); font-variant-numeric: tabular-nums; flex: none; }
+.recorded-what { flex: 1; min-width: 0; }
+.recorded-what b { display: block; }
+.recorded-what small { display: block; color: var(--text-2); overflow-wrap: anywhere; }
+.recorded-amount { font-weight: 650; font-variant-numeric: tabular-nums; }
+.easy-empty { margin: 0; padding: 16px 18px; color: var(--text-3); }
+.easy-remind { display: flex; gap: 16px; align-items: flex-start; }
+.easy-remind h2 { font-size: 1.15em; }
+.easy-remind p { margin: 0; color: var(--text-2); }
+.easy-remind-pic { flex: none; width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.steps { display: grid; gap: 8px; }
+.steps li { display: flex; gap: 10px; align-items: center; }
+.wizard-total { margin: 0; font-size: 1.15em; color: var(--text-2); }
+.wizard-total b { color: var(--text); font-family: var(--font-display); font-size: 1.2em; }
+.wizard-note { display: block; margin-top: 10px; font-family: var(--font); font-size: .62em; color: var(--text-2); }
+.input.input-lg { height: 56px; font-size: 1.15em; border-radius: 12px; }
+@media (max-width: 600px) {
+  .easy-hello h1 { font-size: 1.5em; }
+  .easy-job { min-height: 132px; padding: 14px; }
+  .easy-job b { font-size: 1.08em; }
+  .easy-job-pic { width: 54px; height: 54px; }
+  .checklist li { flex-wrap: wrap; }
+  .check-actions { width: 100%; padding-left: 42px; justify-content: flex-start; }
+  .recorded li { flex-wrap: wrap; }
+}

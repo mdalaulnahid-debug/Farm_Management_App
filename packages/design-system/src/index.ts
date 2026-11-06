@@ -7,3 +7,4 @@ export { Field, Input, Select, SearchBox, Segmented, Switch, Tabs } from './cont
 export { Drawer, Dialog } from './overlays';
 export { DataTable, type Column } from './data-table';
 export { Skeleton, EmptyState, ErrorState, ErrorBoundary } from './states';
+export { Wizard, NumberPad, ChoiceButtons, type WizardStep } from './wizard';
