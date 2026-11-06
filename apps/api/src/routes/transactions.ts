@@ -6,7 +6,7 @@ import { prisma, tx } from '../db.js';
 import { conflict, forbidden, notFound } from '../lib/errors.js';
 import type { Permission } from '../lib/constants.js';
 import { parse, zDate, zId, zMoney, zOptDate, zOptText, zQty, zRange, zReason } from '../lib/validate.js';
-import { ADJUSTMENT_TYPES, PAYMENT_METHODS } from '../lib/constants.js';
+import { ADJUSTMENT_TYPES, PAYMENT_METHODS, isMoneyAccount, SYS } from '../lib/constants.js';
 import { endOf } from '../lib/dates.js';
 import { actorOf, can, signedInEarly } from '../auth/auth.js';
 import { createInvoice, voidInvoice } from '../services/sales.js';
@@ -15,7 +15,8 @@ import { createPayment, voidPayment } from '../services/payments.js';
 import { adjustStock, cashCount, recordProduction, transfer, voidAdjustment, voidProduction } from '../services/operations.js';
 import { postEntry, reverseEntry } from '../services/ledger.js';
 import { listAttachments } from './attachments.js';
-import { saveVoucher, voucherMissing, zVoucher } from '../services/vouchers.js';
+import { notePhotos, saveVoucher, voucherMissing, voucherRuleFrom, zVoucher } from '../services/vouchers.js';
+import { isSameFarmDay } from '../lib/farm-time.js';
 import { badRequest } from '../lib/errors.js';
 import { audit, ownSameDay } from '../services/common.js';
 
@@ -48,13 +49,11 @@ async function voidGate(req: FastifyRequest, perm: Permission, find: () => Promi
   return true;
 }
 
-/** Cash, bank and mobile-money accounts: the farm's own money. */
-export const MONEY_SUBTYPES = ['CASH', 'BANK'];
 /** Money a journal takes out of the farm's own money accounts to somewhere else (0 when it only moves money between
- *  them, or touches no money account). */
+ *  them, or touches no money account). Money accounts are ASSET + CASH/BANK only. */
 export async function moneyOut(lines: { accountId: string; debit?: number; credit?: number }[]) {
-  const accounts = await prisma.account.findMany({ where: { id: { in: lines.map(l => l.accountId) } }, select: { id: true, subtype: true } });
-  const isMoney = (id: string) => MONEY_SUBTYPES.includes(accounts.find(a => a.id === id)?.subtype ?? '');
+  const accounts = await prisma.account.findMany({ where: { id: { in: lines.map(l => l.accountId) } }, select: { id: true, type: true, subtype: true } });
+  const isMoney = (id: string) => isMoneyAccount(accounts.find(a => a.id === id));
   const r2 = (v: number) => Math.round(v * 100) / 100;
   const out = r2(lines.filter(l => isMoney(l.accountId)).reduce((a, l) => a + Number(l.credit ?? 0) - Number(l.debit ?? 0), 0));
   const elsewhere = lines.some(l => !isMoney(l.accountId) && Number(l.debit ?? 0) > 0);
@@ -141,7 +140,7 @@ export default async function transactionRoutes(app: FastifyInstance) {
       const made = await createBill(db, actor, bill);
       await saveVoucher(db, actor, 'BILL', { id: made.id, number: made.number, total: Number(made.total), date: made.date, partyId: made.supplierId }, voucher);
       return made;
-    });
+    }).then(r => { notePhotos(actor?.id, voucher.photos.length); return r; });
   });
   app.post('/bills/:id/void', { preHandler: can() }, async req => {
     const id = (req.params as any).id;
@@ -204,12 +203,15 @@ export default async function transactionRoutes(app: FastifyInstance) {
       const made = await createPayment(db, actor, payment);
       if (payment.direction === 'OUT') await saveVoucher(db, actor, 'PAYMENT', { id: made.id, number: made.number, total: Number(made.amount), date: made.date, partyId: made.partyId }, voucher!);
       return made;
-    });
+    }).then(r => { if (voucher) notePhotos(actor?.id, voucher.photos.length); return r; });
   });
   app.post('/payments/:id/void', { preHandler: can() }, async req => {
     const id = (req.params as any).id;
     await voidGate(req, 'banking.manage', () => prisma.payment.findUnique({ where: { id } }));
     const { reason } = parse(zReason, req.body);
+    // Money that came in is the owner's to undo once the day has passed (cash is easy to take quietly).
+    const pay = await prisma.payment.findUnique({ where: { id }, select: { direction: true, createdAt: true } });
+    if (pay?.direction === 'IN' && !isSameFarmDay(pay.createdAt, new Date()) && req.user!.role.key !== 'owner') throw forbidden('Only the owner can void money received on an earlier day.');
     await tx(db => voidPayment(db, actorOf(req), id, reason));
     return { ok: true };
   });
@@ -247,15 +249,22 @@ export default async function transactionRoutes(app: FastifyInstance) {
     }), req.body);
     // Money leaving the farm's cash/bank/mobile accounts for anything that is not another of those accounts is
     // spending, and needs its voucher like a payment. Moves between own accounts and non-cash adjustments do not.
-    const spent = body.opening ? 0 : await moneyOut(body.lines);
+    // Opening balances are exempt only when they are what they say: dated before the voucher rule went live, and
+    // every line other than the money accounts goes to Opening balance equity. Anything else follows the rule.
+    const goLive = await voucherRuleFrom(prisma);
+    const openingEquity = (await prisma.account.findUnique({ where: { code: SYS.OPENING_EQUITY } }))?.id;
+    const lineAccounts = await prisma.account.findMany({ where: { id: { in: body.lines.map(l => l.accountId) } }, select: { id: true, type: true, subtype: true } });
+    const realOpening = body.opening && (!goLive || body.date < goLive)
+      && body.lines.every(l => l.accountId === openingEquity || isMoneyAccount(lineAccounts.find(a => a.id === l.accountId)));
+    const spent = realOpening ? 0 : await moneyOut(body.lines);
     if (spent > 0.005 && !body.voucher) throw voucherMissing();
     const actor = actorOf(req);
     return tx(async db => {
-      const je = await postEntry(db, actor, { date: body.date, memo: body.memo, sourceType: body.opening ? 'OPENING' : 'MANUAL', lines: body.lines });
+      const je = await postEntry(db, actor, { date: body.date, memo: body.memo, sourceType: realOpening ? 'OPENING' : body.opening && !spent ? 'OPENING' : 'MANUAL', lines: body.lines });
       await audit(db, actor, 'create', 'journal', je.id, `Journal ${je.number}: ${body.memo}`);
       if (spent > 0.005) await saveVoucher(db, actor, 'JOURNAL', { id: je.id, number: je.number, total: spent, date: je.date, partyId: body.lines.find(l => l.partyId)?.partyId ?? null }, body.voucher!);
       return je;
-    });
+    }).then(r => { if (spent > 0.005) notePhotos(actor?.id, body.voucher!.photos.length); return r; });
   });
   app.post('/journals/:id/void', { preHandler: can('accounting.manage') }, async req => {
     const { reason } = parse(zReason, req.body);
@@ -265,6 +274,11 @@ export default async function transactionRoutes(app: FastifyInstance) {
     if (!['MANUAL', 'OPENING', 'TRANSFER', 'PROJECT_TRANSFER'].includes(je.sourceType)) {
       throw conflict('Void the source document (invoice, bill, payment or production record) instead.');
     }
+    // An entry that brought money in (e.g. money back from a side project) is the owner's to undo after the day.
+    const lines = await prisma.journalLine.findMany({ where: { entryId: id }, include: { account: { select: { type: true, subtype: true } } } });
+    const cameIn = lines.filter(l => isMoneyAccount(l.account)).reduce((a, l) => a + Number(l.debit) - Number(l.credit), 0) > 0.005;
+    const otherSide = lines.some(l => !isMoneyAccount(l.account));
+    if (cameIn && otherSide && !isSameFarmDay(je.createdAt, new Date()) && req.user!.role.key !== 'owner') throw forbidden('Only the owner can void money received on an earlier day.');
     await tx(async db => {
       await reverseEntry(db, actorOf(req), id, reason);
       await audit(db, actorOf(req), 'void', 'journal', id, `Voided ${je.number}: ${reason}`);

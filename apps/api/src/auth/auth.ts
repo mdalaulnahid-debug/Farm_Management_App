@@ -116,6 +116,13 @@ export const can = (...perms: Permission[]) => async (req: FastifyRequest, reply
   if (perms.length && !perms.every(p => req.user!.permissions.includes(p))) throw forbidden();
 };
 export const authed = can();
+/** settings.manage, and once the voucher rule is live (voucherRuleFrom set) the owner only: importing past records
+ *  or moving the lock date could otherwise bring in spending without vouchers. */
+export const ownerAfterGoLive = async (req: FastifyRequest, reply: FastifyReply) => {
+  await can('settings.manage')(req, reply);
+  const live = process.env.VOUCHER_RULE_FROM || (await prisma.organization.findUnique({ where: { id: 'org' }, select: { voucherRuleFrom: true } }))?.voucherRuleFrom;
+  if (live && req.user!.role.key !== 'owner') throw forbidden('Since the voucher rule went live, only the owner can import past records or change the lock date.');
+};
 /** For routes that accept large uploads: refuse anyone not signed in before the body is even read (onRequest). */
 export const signedInEarly = async (req: FastifyRequest) => {
   if (!req.user) throw unauthorized();

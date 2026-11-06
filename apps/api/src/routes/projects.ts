@@ -6,7 +6,7 @@ import { conflict, notFound } from '../lib/errors.js';
 import { parse, zDate, zId, zMoney, zOptText } from '../lib/validate.js';
 import { PAYMENT_METHODS, PROJECT_KINDS, SYS } from '../lib/constants.js';
 import { actorOf, can, signedInEarly } from '../auth/auth.js';
-import { saveVoucher, voucherMissing, zVoucher } from '../services/vouchers.js';
+import { notePhotos, saveVoucher, voucherMissing, zVoucher } from '../services/vouchers.js';
 import { audit } from '../services/common.js';
 import { projectSummary, projectTransfer, recordGrant } from '../services/projects.js';
 
@@ -60,7 +60,7 @@ export default async function projectRoutes(app: FastifyInstance) {
       const je = await projectTransfer(db, actor, b);
       if (b.direction === 'OUT') await saveVoucher(db, actor, 'JOURNAL', { id: je.id, number: je.number, total: b.amount, date: je.date }, voucher!);
       return je;
-    });
+    }).then(r => { if (voucher) notePhotos(actor?.id, voucher.photos.length); return r; });
   });
 
   app.get('/grants', { preHandler: can('banking.view') }, async () => {

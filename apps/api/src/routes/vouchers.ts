@@ -9,6 +9,7 @@ import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { parse, zOptText } from '../lib/validate.js';
 import { actorOf, can } from '../auth/auth.js';
 import { audit } from '../services/common.js';
+import { isMoneyAccount } from '../lib/constants.js';
 
 const STATUSES = ['UNCHECKED', 'MISMATCH', 'MATCHES'] as const;
 
@@ -19,7 +20,7 @@ async function withEntries(vouchers: { id: string; ownerType: string; ownerId: s
   const [bills, pays, journals, photos] = await Promise.all([
     prisma.bill.findMany({ where: { id: { in: ids('BILL') } }, include: { supplier: { select: { name: true } }, lines: { select: { description: true, quantity: true, amount: true } } } }),
     prisma.payment.findMany({ where: { id: { in: ids('PAYMENT') } }, include: { party: { select: { name: true } } } }),
-    prisma.journalEntry.findMany({ where: { id: { in: ids('JOURNAL') } }, include: { lines: { include: { account: { select: { name: true, subtype: true } } } } } }),
+    prisma.journalEntry.findMany({ where: { id: { in: ids('JOURNAL') } }, include: { lines: { include: { account: { select: { name: true, type: true, subtype: true } } } } } }),
     prisma.attachment.findMany({ where: { ownerId: { in: vouchers.map(v => v.ownerId) } }, select: { id: true, ownerId: true, isVoucher: true, removedAt: true }, orderBy: { createdAt: 'asc' } }),
   ]);
   return vouchers.flatMap(v => {
@@ -35,7 +36,7 @@ async function withEntries(vouchers: { id: string; ownerType: string; ownerId: s
         ? { kind: 'payment', id: p.id, number: p.number, date: p.date, total: Number(p.amount), party: p.party?.name ?? null, method: p.method, reference: p.reference, notes: p.notes }
         : {
           kind: 'journal', id: j!.id, number: j!.number, date: j!.date, party: null, notes: j!.memo,
-          total: Math.round(j!.lines.filter(l => ['CASH', 'BANK'].includes(l.account.subtype)).reduce((a, l) => a + Number(l.credit) - Number(l.debit), 0) * 100) / 100,
+          total: Math.round(j!.lines.filter(l => isMoneyAccount(l.account)).reduce((a, l) => a + Number(l.credit) - Number(l.debit), 0) * 100) / 100,
           lines: j!.lines.filter(l => Number(l.debit) > 0).map(l => ({ description: l.account.name, quantity: 1, amount: Number(l.debit) })),
         };
     return [{

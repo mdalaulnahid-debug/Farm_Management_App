@@ -4,7 +4,7 @@ import { prisma } from '../db.js';
 import { badRequest } from '../lib/errors.js';
 import { money, num, round2 } from '../lib/money.js';
 import { normalizePhone } from '../lib/phone.js';
-import { SYS } from '../lib/constants.js';
+import { SYS, isMoneyAccount } from '../lib/constants.js';
 import { accountId, mainProjectId, postEntry } from './ledger.js';
 import { createPayment } from './payments.js';
 import { audit, type Actor } from './common.js';
@@ -53,7 +53,7 @@ export async function projectTransfer(db: Db, actor: Actor | null, input: Projec
   const project = await db.project.findUnique({ where: { id: input.projectId } });
   if (!project || project.isMain) throw badRequest('Choose a side project.');
   const cash = await db.account.findUnique({ where: { id: input.cashAccountId } });
-  if (!cash || !['CASH', 'BANK'].includes(cash.subtype)) throw badRequest('Choose a cash or bank account.');
+  if (!cash || !isMoneyAccount(cash)) throw badRequest('Choose a cash or bank account.');
   const main = await mainProjectId(db);
   const side = await accountId(db, SYS.SIDE_PROJECTS);
   const memo = input.memo?.trim() || (input.direction === 'OUT' ? `Transfer to ${project.name}` : `Returned from ${project.name}`);

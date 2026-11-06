@@ -10,7 +10,7 @@ import { parse } from '../lib/validate.js';
 import { actorOf, can, signedInEarly } from '../auth/auth.js';
 import { audit } from '../services/common.js';
 import type { Permission } from '../lib/constants.js';
-import { addPhoto, decodePhoto, MAX_PHOTO_BYTES, photoRateLimit, UPLOADS_PER_MINUTE } from '../services/vouchers.js';
+import { addPhoto, assertPhotoUnused, decodePhoto, MAX_PHOTO_BYTES, notePhotos, photoRateLimit, UPLOADS_PER_MINUTE } from '../services/vouchers.js';
 
 export const MAX_BYTES = MAX_PHOTO_BYTES;
 export { UPLOADS_PER_MINUTE };
@@ -63,7 +63,10 @@ export default async function attachmentRoutes(app: FastifyInstance) {
       if (await checkedVoucher(k.type, owner.id)) throw badRequest('This voucher has been checked; its photos are locked.');
       const photo = decodePhoto(dataUrl);
       // Count and create together, so two uploads at once cannot pass the limit.
-      return prisma.$transaction(db => addPhoto(db, actor, k.type as 'PAYMENT' | 'BILL' | 'JOURNAL', owner, photo));
+      return prisma.$transaction(async db => {
+        await assertPhotoUnused(db, photo.sha256, owner.id);
+        return addPhoto(db, actor, k.type as 'PAYMENT' | 'BILL' | 'JOURNAL', owner, photo);
+      }).then(r => { notePhotos(req.user!.id); return r; });
     });
 
     app.get(`/${path}/:id/attachments/:aid`, { preHandler: can(k.view as Permission) }, async (req, reply: FastifyReply) => {
