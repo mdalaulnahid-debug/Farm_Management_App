@@ -35,7 +35,7 @@ export default async function reminderRoutes(app: FastifyInstance) {
     return { sent, phones: subs.length };
   });
 
-  app.get('/push/key', { preHandler: can() }, async () => ({ publicKey: vapidKeys().publicKey }));
+  app.get('/push/key', { preHandler: can() }, async () => ({ publicKey: (await vapidKeys(prisma)).publicKey }));
 
   const subscription = z.object({ endpoint: z.string().url().max(1000).refine(isPushEndpoint, 'Not a browser push service address.'), keys: z.object({ p256dh: z.string().min(10).max(200), auth: z.string().min(4).max(100) }) });
   app.post('/push/subscribe', { preHandler: can() }, async req => {
