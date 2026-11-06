@@ -22,7 +22,8 @@ const signIn = async (email: string, password: string) => {
 };
 
 beforeAll(async () => {
-  await seed({ adminEmail: 'owner@test.local', adminPassword: 'TestOwner2026' });
+  // All test files share one database and only the first seed() runs, so every file seeds the same way (with history).
+  await seed({ history: true, adminEmail: 'owner@test.local', adminPassword: 'TestOwner2026' });
   await prisma.user.update({ where: { email: 'owner@test.local' }, data: { mustChangePassword: false } });
   app = await buildApp();
   owner = await signIn('owner@test.local', 'TestOwner2026');

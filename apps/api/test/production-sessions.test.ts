@@ -23,7 +23,8 @@ const flock = () => prisma.flock.findUniqueOrThrow({ where: { id: flockId } });
 const feed = () => prisma.item.findUniqueOrThrow({ where: { id: feedId } });
 
 beforeAll(async () => {
-  await seed({ adminEmail: 'owner@test.local', adminPassword: 'TestOwner2026' });
+  // All test files share one database and only the first seed() runs, so every file seeds the same way (with history).
+  await seed({ history: true, adminEmail: 'owner@test.local', adminPassword: 'TestOwner2026' });
   await prisma.user.update({ where: { email: 'owner@test.local' }, data: { mustChangePassword: false } });
   app = await buildApp();
   const res = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email: 'owner@test.local', password: 'TestOwner2026' }, remoteAddress: '10.8.0.1' });

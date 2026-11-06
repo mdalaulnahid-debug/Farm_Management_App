@@ -30,7 +30,8 @@ const signIn = async (email: string, password: string) => {
 const subscribe = (cookie: string, n: string) => call('POST', '/push/subscribe', cookie, { endpoint: `https://fcm.googleapis.com/fcm/send/${n}`, keys: { p256dh: `key-${n}`, auth: `auth-${n}` } });
 
 beforeAll(async () => {
-  await seed({ adminEmail: 'owner@test.local', adminPassword: 'TestOwner2026' });
+  // All test files share one database and only the first seed() runs, so every file seeds the same way (with history).
+  await seed({ history: true, adminEmail: 'owner@test.local', adminPassword: 'TestOwner2026' });
   await prisma.user.update({ where: { email: 'owner@test.local' }, data: { mustChangePassword: false } });
   app = await buildApp();
   owner = await signIn('owner@test.local', 'TestOwner2026');
