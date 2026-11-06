@@ -87,7 +87,7 @@ describe('unusual activity report', () => {
     const eggs = await prisma.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
     // Exactly the eggs used below (10 sold + 2 wasted), at zero cost like produced eggs, so other tests' stock and costs are unchanged.
     await ok(call('POST', '/stock-adjustments', ownerCookie, { date: day(0), itemId: eggs.id, type: 'OPENING', quantity: 12, unitCost: 0 }));
-    await ok(call('POST', '/invoices', managerCookie, { date: day(0), customer: {}, discount: 40, lines: [{ itemId: eggs.id, quantity: 10, unitPrice: 16 }] }));
+    await ok(call('POST', '/invoices', managerCookie, { date: day(0), customer: {}, discount: 40, lines: [{ itemId: eggs.id, quantity: 10, unitPrice: 16 }], received: { amount: 120, cashAccountId: await acc('1010') } }));
     await ok(call('POST', '/stock-adjustments', managerCookie, { date: day(0), itemId: eggs.id, type: 'WASTE', quantity: 2 }));
     // Plenty of cash on the books, then a count that finds none of it.
     const cashIn = await ok(call('POST', '/payments', managerCookie, { direction: 'IN', date: day(0), cashAccountId: await acc('1010'), counterAccountId: await acc('4500'), amount: 500000 }));

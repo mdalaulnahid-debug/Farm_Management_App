@@ -8,6 +8,7 @@ import { useAccounts, useApi, useCashAccounts, useFlocks, useItems, useParties, 
 import type { Account } from '../lib/api';
 import { LogoMark } from '../brand/Logo';
 import { SlipPhotoPicker, useAttachAfterSave } from './SlipPhotos';
+import { isMobile } from '../lib/phone';
 import { Alert, Drawer, Field, Input, Segmented, Select, StatusBadge } from './ui';
 
 /** Farm name at the top of a printed document: Bangla and English together, like a letterhead. */
@@ -108,7 +109,10 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
   const phoneDigits = buyer.phone.replace(/[০-৯]/g, d => String('০১২৩৪৫৬৭৮৯'.indexOf(d))).replace(/\D/g, '');
   const lookup = useApi<{ match: { id: string; name: string; phone: string } | null }>(buyer.mode === 'phone' && phoneDigits.length >= 11 ? '/parties/lookup' : null, { phone: buyer.phone });
   const match = phoneDigits.length >= 11 ? lookup.data?.match ?? null : null;
-  const buyerOk = buyer.mode === 'list' ? !!form.customerId : !buyer.phone.trim() || !!match || buyer.name.trim().length >= 2;
+  const phoneBad = buyer.mode === 'phone' && !!buyer.phone.trim() && !isMobile(buyer.phone);
+  const buyerOk = buyer.mode === 'list' ? !!form.customerId : !buyer.phone.trim() || (!phoneBad && (!!match || buyer.name.trim().length >= 2));
+  // Walk-in buyers (no mobile number, or the Walk-in customers entry) pay in full; credit needs a known customer.
+  const walkIn = buyer.mode === 'phone' ? !buyer.phone.trim() : customers.data?.data.find(c => c.id === form.customerId)?.name === 'Walk-in customers';
   useEffect(() => {
     const eggs = items.data?.data.find(i => i.category === 'PRODUCE');
     if (eggs && lines.length === 1 && !lines[0].itemId) setLines([{ ...blank(), itemId: eggs.id, unitPrice: String(eggs.salePrice || '') }]);
@@ -129,7 +133,7 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
 
   return (
     <Drawer title={t('New sales invoice', 'নতুন বিক্রয় চালান')} subtitle={t('Posts revenue and receivable, reduces stock, and records cash received.', 'আয় ও পাওনা পোস্ট করে, মজুদ কমায় এবং প্রাপ্ত নগদ লেখে।')} onClose={onClose}
-      footer={<><div className="left">{t('Total', 'মোট')}: <b><Money v={total} /></b></div><button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button><button className="btn primary" disabled={save.isPending || !buyerOk || total < 0} onClick={submit}>{t('Save & post', 'সংরক্ষণ ও পোস্ট')}</button></>}>
+      footer={<><div className="left">{t('Total', 'মোট')}: <b><Money v={total} /></b></div><button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button><button className="btn primary" disabled={save.isPending || !buyerOk || total < 0 || (walkIn && received < total - 0.005)} onClick={submit}>{t('Save & post', 'সংরক্ষণ ও পোস্ট')}</button></>}>
       <div className="form-grid three">
         <div className="full stack gap-8">
           <div className="row between">
@@ -138,12 +142,13 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
           </div>
           {buyer.mode === 'phone' ? (
             <div className="form-grid">
-              <Field label={t('Mobile number', 'মোবাইল নম্বর')} hint={match ? undefined : t('Existing customers are recognised automatically.', 'পুরোনো ক্রেতা স্বয়ংক্রিয়ভাবে চেনা যাবে।')}>
+              <Field label={t('Mobile number', 'মোবাইল নম্বর')} error={phoneBad ? t('11 digits starting 01, like 01711-223344.', '০১ দিয়ে শুরু ১১ সংখ্যা, যেমন ০১৭১১-২২৩৩৪৪।') : undefined}
+                hint={match ? undefined : t('The mobile number identifies the customer, even if the name is spelt differently.', 'মোবাইল নম্বর দিয়েই ক্রেতা চেনা যায়, নামের বানান ভিন্ন হলেও।')}>
                 <Input type="tel" inputMode="tel" autoFocus value={buyer.phone} onChange={e => setBuyer({ ...buyer, phone: e.target.value })} placeholder="01XXXXXXXXX" />
               </Field>
               {match
                 ? <Field label={t('Customer', 'ক্রেতা')}><div className="badge green match">✓ {match.name}</div></Field>
-                : <Field label={t('Buyer name', 'ক্রেতার নাম')} hint={buyer.phone.trim() ? t('New buyer — will be added to the customer list.', 'নতুন ক্রেতা — ক্রেতা তালিকায় যোগ হবে।') : t('Leave both blank for a walk-in sale.', 'খুচরা বিক্রিতে দুটোই খালি রাখুন।')}>
+                : <Field label={t('Buyer name', 'ক্রেতার নাম')} hint={buyer.phone.trim() ? t('New buyer — will be added to the customer list.', 'নতুন ক্রেতা — ক্রেতা তালিকায় যোগ হবে।') : t('No mobile number = walk-in sale, cash only. A name alone is just noted on the invoice.', 'মোবাইল নম্বর না দিলে খুচরা বিক্রি, শুধু নগদ। শুধু নাম দিলে চালানে লেখা থাকবে।')}>
                     <Input value={buyer.name} onChange={e => setBuyer({ ...buyer, name: e.target.value })} />
                   </Field>}
             </div>
@@ -201,6 +206,7 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
             <Field label={t('Received into', 'যে হিসাবে জমা')}><CashAccountSelect value={receive.cashAccountId} onChange={v => setReceive(r => ({ ...r, cashAccountId: v }))} /></Field>
           </div>
         )}
+        {walkIn && receive.mode !== 'full' && <Alert tone="warn">{t('Walk-in buyers pay in full. To sell on credit, enter the buyer’s mobile number and name.', 'খুচরা ক্রেতা পুরো টাকা দেবেন। বাকিতে বিক্রি করতে ক্রেতার মোবাইল নম্বর ও নাম দিন।')}</Alert>}
         {receive.mode !== 'full' && <small className="muted">{t(`Balance due ${fmtMoney(total - received, lang)} will appear in receivables.`, `বাকি ${fmtMoney(total - received, lang)} পাওনা হিসেবে থাকবে।`)}</small>}
       </div>
     </Drawer>

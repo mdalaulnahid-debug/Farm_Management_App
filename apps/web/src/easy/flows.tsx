@@ -6,6 +6,7 @@ import { fmtMoney, ymd } from '../lib/format';
 import { useParties } from '../lib/hooks';
 import { nameOf, unitLabel, usePrefs } from '../lib/i18n';
 import { Pic, useEasySave, useFarmLists, useItemLabel, useTodayProduction } from './shared';
+import { isMobile } from '../lib/phone';
 
 const n = (v: string) => Number(v || 0);
 const NoFlock = () => {
@@ -151,8 +152,9 @@ export function SaleFlow({ onClose, preset }: { onClose: () => void; preset?: Sa
   if (L.loading) return <Loading />;
   const item = (id: string) => L.produce.find(i => i.id === id);
   const total = (d: SaleData) => Math.round(n(d.qty) * n(d.price) * 100) / 100;
-  /** Money still owed must be owed by someone: credit and part-paid need a named buyer. */
-  const hasBuyer = (d: SaleData) => !!(preset?.customerId || d.buyer.trim() || d.phone.trim());
+  /** Money still owed must be owed by a known customer: credit and part-paid need the buyer's mobile number and
+   *  name (the number is their identity), or a customer sticker. Walk-in buyers pay in full. */
+  const hasBuyer = (d: SaleData) => !!(preset?.customerId || (isMobile(d.phone) && d.buyer.trim()));
   const howOptions = (credit: boolean) => [
     { value: 'cash' as const, label: t('Cash', 'নগদ'), picture: <Pic name="cash" /> },
     { value: 'mobile' as const, label: t('bKash / Nagad', 'বিকাশ / নগদ'), picture: <Pic name="mobile" /> },
@@ -191,7 +193,8 @@ export function SaleFlow({ onClose, preset }: { onClose: () => void; preset?: Sa
     },
     {
       key: 'buyer', title: t('Who bought it?', 'কে কিনেছেন?'), picture: <Pic name="sale" />, skip: d => d.kind !== 'sale' || !!preset?.customerId,
-      help: t('Optional. Leave both empty for a walk-in sale. With a mobile number, a known customer is recognised.', 'ঐচ্ছিক। সাধারণ বিক্রিতে দুটোই খালি রাখুন। মোবাইল নম্বর দিলে পরিচিত ক্রেতা চেনা যাবে।'),
+      valid: d => !d.phone.trim() || (isMobile(d.phone) && !!d.buyer.trim()),
+      help: t('Leave both empty for a walk-in sale (cash only). For a known customer, or to sell on credit, write the mobile number and the name: the number is how the customer is recognised.', 'খুচরা বিক্রিতে (শুধু নগদ) দুটোই খালি রাখুন। পরিচিত ক্রেতা বা বাকিতে বিক্রির জন্য মোবাইল নম্বর ও নাম লিখুন: নম্বর দিয়েই ক্রেতা চেনা যায়।'),
       render: (d, set) => <>
         <Input className="input-lg" inputMode="tel" placeholder={t('Mobile number (optional)', 'মোবাইল নম্বর (ঐচ্ছিক)')} value={d.phone} onChange={e => set({ phone: e.target.value })} />
         <Input className="input-lg" placeholder={t('Name (optional)', 'নাম (ঐচ্ছিক)')} value={d.buyer} onChange={e => set({ buyer: e.target.value })} />
@@ -212,7 +215,7 @@ export function SaleFlow({ onClose, preset }: { onClose: () => void; preset?: Sa
       help: t('Cash in hand, by bKash/Nagad, or not paid yet (the buyer owes it).', 'হাতে নগদ, বিকাশ/নগদে, অথবা এখনো দেননি (ক্রেতার বাকি)।'),
       render: (d, set, next) => <>
         <ChoiceButtons value={d.how || undefined} onChange={v => set({ how: v })} onPick={next} options={howOptions(d.kind === 'sale' && hasBuyer(d))} />
-        {d.kind === 'sale' && !hasBuyer(d) && <p className="wizard-q">{t('To sell on credit, go back and write the buyer’s name or mobile number.', 'বাকিতে বিক্রি করতে পেছনে গিয়ে ক্রেতার নাম বা মোবাইল নম্বর লিখুন।')}</p>}
+        {d.kind === 'sale' && !hasBuyer(d) && <p className="wizard-q">{t('Walk-in buyers pay in full. To sell on credit, go back and write the buyer’s mobile number and name.', 'খুচরা ক্রেতা পুরো টাকা দেবেন। বাকিতে বিক্রি করতে পেছনে গিয়ে ক্রেতার মোবাইল নম্বর ও নাম লিখুন।')}</p>}
       </>,
     },
     {

@@ -147,8 +147,33 @@ describe('customer by name + phone on the চালান', () => {
   });
   it('uses Walk-in customers when no name or phone is given', async () => {
     const eggs = await prisma.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
-    const r = await call('POST', '/invoices', { date: '2026-11-12', customer: {}, lines: [{ itemId: eggs.id, quantity: 1, unitPrice: 16 }] });
+    const r = await call('POST', '/invoices', { date: '2026-11-12', customer: {}, lines: [{ itemId: eggs.id, quantity: 1, unitPrice: 16 }], received: { amount: 16, cashAccountId: await id('1010') } });
     expect(r.body.customer.name).toBe('Walk-in customers');
+  });
+  it('walk-in buyers pay in full: no credit and no part payment without a known customer', async () => {
+    const eggs = await prisma.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
+    const line = [{ itemId: eggs.id, quantity: 2, unitPrice: 16 }];
+    expect((await call('POST', '/invoices', { date: '2026-11-12', customer: {}, lines: line })).status).toBe(400);
+    expect((await call('POST', '/invoices', { date: '2026-11-12', customer: {}, lines: line, received: { amount: 20, cashAccountId: await id('1010') } })).status).toBe(400);
+    const walkIn = await prisma.party.findFirstOrThrow({ where: { name: 'Walk-in customers' } });
+    expect((await call('POST', '/invoices', { date: '2026-11-12', customerId: walkIn.id, lines: line })).status).toBe(400);
+  });
+  it('a name without a mobile number is a walk-in sale, with the name noted on the invoice', async () => {
+    const eggs = await prisma.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
+    const before = await prisma.party.count();
+    const r = await call('POST', '/invoices', { date: '2026-11-12', customer: { name: 'Jamal Bhai' }, lines: [{ itemId: eggs.id, quantity: 1, unitPrice: 16 }], received: { amount: 16, cashAccountId: await id('1010') } });
+    expect(r.body.customer.name).toBe('Walk-in customers');
+    expect(r.body.notes).toContain('Buyer: Jamal Bhai');
+    expect(await prisma.party.count()).toBe(before);
+  });
+  it('the mobile number is the identity: a bad number or a new number without a name is refused', async () => {
+    const eggs = await prisma.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } });
+    const line = [{ itemId: eggs.id, quantity: 1, unitPrice: 16 }];
+    expect((await call('POST', '/invoices', { date: '2026-11-12', customer: { name: 'Rafiq', phone: '01711-2233' }, lines: line })).status).toBe(400);
+    expect((await call('POST', '/invoices', { date: '2026-11-12', customer: { phone: '01819-000111' }, lines: line })).status).toBe(400);
+    // The known number with a misspelt name still finds the same customer.
+    const r = await call('POST', '/invoices', { date: '2026-11-12', customer: { name: 'Karem Mia', phone: '01711 223344' }, lines: line });
+    expect(r.body.customer.name).toBe('Karim Mia');
   });
 });
 
