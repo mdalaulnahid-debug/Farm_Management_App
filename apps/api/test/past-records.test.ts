@@ -213,9 +213,11 @@ describe('preview', () => {
   });
 
   it('lists the problems the import itself would hit, row by row', async () => {
+    // More eggs than are in stock, however many other test files (same database) have added already.
+    const eggsNow = Number((await prisma.item.findUniqueOrThrow({ where: { sku: 'EGG-DUCK' } })).qtyOnHand);
     const r = await call('POST', '/import/template/preview', upload(fill({
       ...GOOD,
-      daily: [{ date: '02/03/2025', flock: 'PR-T1', collected: 10, sold: 500, price: 16 }, { date: '03/03/2025', flock: 'PR-T1', sold: 5, price: 16, received: 0 }],
+      daily: [{ date: '02/03/2025', flock: 'PR-T1', collected: 10, sold: Math.max(500, Math.ceil(eggsNow) + 500), price: 16 }, { date: '03/03/2025', flock: 'PR-T1', sold: 5, price: 16, received: 0 }],
       purchases: [{ date: '02/03/2025', amount: 100 }],
       payments: [{ date: '05/03/2025', direction: 'Out', party: 'Nobody Ltd', amount: 10 }, { date: '05/03/2025', direction: 'In', purpose: 'Owner drawings', amount: 10 }],
     })));
