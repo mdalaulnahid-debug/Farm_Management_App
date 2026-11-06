@@ -1,9 +1,9 @@
 // Design reference: every token and component of @farmledger/design-system as it looks in this theme.
 // Admins (settings.manage) use it to check the look; future sites copy from it.
 import { Fragment, useState } from 'react';
-import { CircleDollarSign, Egg, Wallet } from 'lucide-react';
+import { CircleDollarSign, Egg, FileText, Wallet } from 'lucide-react';
 import tokens from '@farmledger/design-system/tokens.json';
-import { Alert, Badge, Card, DataTable, Empty, Field, Input, Kpi, Loading, PageHeader, SearchBox, Segmented, Select, Switch, Tabs, useToast } from '../components/ui';
+import { Alert, Badge, Card, DataTable, Empty, EmptyState, ErrorState, Field, Input, Kpi, Loading, PageHeader, SearchBox, Segmented, Select, Switch, Tabs, useToast } from '../components/ui';
 import { usePrefs } from '../lib/i18n';
 
 const COLOR_GROUPS: { title: string; names: string[] }[] = [
@@ -78,7 +78,7 @@ export default function SystemReference() {
             <button className="btn danger">{t('Danger', 'বিপদ')}</button>
             <button className="btn sm">{t('Small', 'ছোট')}</button>
             <button className="btn" disabled>{t('Disabled', 'নিষ্ক্রিয়')}</button>
-            <button className="btn" onClick={() => toast(t('Saved', 'সংরক্ষিত'))}>{t('Show a toast', 'টোস্ট দেখান')}</button>
+            <button className="btn" onClick={() => toast(t('Theme changed to dark.', 'থিম অন্ধকার করা হয়েছে।'), 'ok', { label: t('Undo', 'ফিরিয়ে নিন'), onClick: () => {} })}>{t('Show a toast', 'টোস্ট দেখান')}</button>
           </div>
           <div className="form-grid">
             <Field label={t('Text field', 'লেখার ঘর')} hint={t('A hint under the field.', 'ঘরের নিচে একটি ইঙ্গিত।')}><Input placeholder="Karim Mia" /></Field>
@@ -121,6 +121,10 @@ export default function SystemReference() {
       <div className="grid g2">
         <Card title={t('Empty', 'খালি')}><Empty>{t('Nothing recorded for this period yet.', 'এই সময়ে এখনো কিছু লেখা হয়নি।')}</Empty></Card>
         <Card title={t('Loading', 'লোড হচ্ছে')}><Loading /></Card>
+      </div>
+      <div className="grid g2">
+        <Card title={t('Nothing here yet', 'এখনো কিছু নেই')}><EmptyState icon={FileText} title={t('No invoices yet', 'এখনো কোনো চালান নেই')} body={t('Your first sale will appear here.', 'প্রথম বিক্রয় এখানে দেখা যাবে।')} action={<button className="btn primary">{t('New invoice', 'নতুন চালান')}</button>} /></Card>
+        <Card title={t('Something went wrong', 'সমস্যা')}><ErrorState onRetry={() => {}} /></Card>
       </div>
     </>
   );

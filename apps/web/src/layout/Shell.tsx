@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  BarChart3, BookOpen, Bird, Gift, ChevronDown, ClipboardList, Contact, Egg, FileText, LayoutDashboard, Leaf, LogOut, Menu,
+  BarChart3, BookOpen, Bird, Gift, ChevronDown, ClipboardList, Contact, Egg, FileText, LayoutDashboard, LogOut, Menu,
   KeyRound, Monitor, Moon, Package, Palette, Plus, Receipt, Settings, ShieldCheck, ShoppingCart, Sun, Truck, UserRound, Wallet,
 } from 'lucide-react';
+import { LogoMark } from '../brand/Logo';
 import { nameOf, usePrefs } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { BillDrawer, InvoiceDrawer, PaymentDrawer, ProductionDrawer } from '../components/forms';
@@ -84,7 +85,7 @@ export default function Shell({ children }: { children: ReactNode }) {
     <div className={`shell ${navOpen ? 'nav-open' : ''}`}>
       <aside className="sidebar" aria-label={t('Main navigation', 'প্রধান নেভিগেশন')}>
         <div className="brand">
-          <span className="brand-mark"><Leaf size={19} /></span>
+          <span className="brand-mark"><LogoMark size={36} variant="egg" /></span>
           <div><b className="brand-org">{me ? nameOf(me.organization, lang) : 'FarmLedger'}</b><small>FarmLedger ERP</small></div>
         </div>
         {visible.map((g, i) => (

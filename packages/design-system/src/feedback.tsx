@@ -1,17 +1,20 @@
 // Messages and states: toasts, alerts, badges, empty and loading.
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
-import { AlertTriangle, CheckCircle2, Inbox, Info, Loader2, XCircle } from 'lucide-react';
-import { useDSText } from './text';
+import { AlertTriangle, CheckCircle2, Inbox, Info, XCircle } from 'lucide-react';
+import { Skeleton } from './states';
 
-type ToastFn = (message: string, kind?: 'ok' | 'error') => void;
+/** `action` adds one button to the toast, e.g. Undo for a setting (never for money records). */
+export interface ToastAction { label: string; onClick: () => void }
+type ToastFn = (message: string, kind?: 'ok' | 'error', action?: ToastAction) => void;
 const ToastContext = createContext<ToastFn>(() => {});
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<{ id: number; message: string; kind: 'ok' | 'error' }[]>([]);
-  const push = useCallback<ToastFn>((message, kind = 'ok') => {
+  const [items, setItems] = useState<{ id: number; message: string; kind: 'ok' | 'error'; action?: ToastAction }[]>([]);
+  const drop = (id: number) => setItems(xs => xs.filter(x => x.id !== id));
+  const push = useCallback<ToastFn>((message, kind = 'ok', action) => {
     const id = Date.now() + Math.random();
-    setItems(xs => [...xs, { id, message, kind }]);
-    setTimeout(() => setItems(xs => xs.filter(x => x.id !== id)), kind === 'error' ? 7000 : 3500);
+    setItems(xs => [...xs, { id, message, kind, action }]);
+    setTimeout(() => drop(id), kind === 'error' ? 7000 : action ? 6000 : 3500);
   }, []);
   return (
     <ToastContext.Provider value={push}>
@@ -20,6 +23,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {items.map(i => (
           <div key={i.id} className={`toast ${i.kind === 'error' ? 'error' : ''}`}>
             {i.kind === 'error' ? <XCircle size={18} /> : <CheckCircle2 size={18} />}<span>{i.message}</span>
+            {i.action && <button className="toast-action" onClick={() => { i.action!.onClick(); drop(i.id); }}>{i.action.label}</button>}
           </div>
         ))}
       </div>
@@ -41,7 +45,7 @@ export function Empty({ children, icon: Icon = Inbox }: { children: ReactNode; i
   return <div className="empty"><Icon size={28} />{children}</div>;
 }
 
+/** Placeholder while data loads (grey lines, not a spinner). */
 export function Loading() {
-  const t = useDSText();
-  return <div className="empty"><Loader2 size={22} className="spin" />{t('Loading…', 'লোড হচ্ছে…')}</div>;
+  return <Skeleton lines={4} />;
 }

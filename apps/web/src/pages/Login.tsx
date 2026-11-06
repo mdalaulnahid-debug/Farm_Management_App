@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Leaf } from 'lucide-react';
+import { LogoMark } from '../brand/Logo';
 import dawn from '../assets/signin-dawn.webp';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -44,7 +44,7 @@ export default function Login() {
     <div className="auth-page">
       <section className="auth-hero">
         <div className="auth-crest">
-          <span className="brand-mark"><Leaf size={20} /></span>
+          <span className="brand-mark"><LogoMark size={46} variant="egg" /></span>
           <div><small>{farmOther || 'FarmLedger ERP'}</small><b>{farm || 'FarmLedger ERP'}</b></div>
         </div>
         <div className="auth-title">

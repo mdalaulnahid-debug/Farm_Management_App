@@ -179,6 +179,20 @@ table.table { width: 100%; border-collapse: collapse; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ───────── Page states ───────── */
+.skeleton { display: grid; gap: 10px; padding: 18px; }
+.skeleton i { display: block; height: 14px; border-radius: 6px; background: linear-gradient(90deg, var(--surface-3), var(--surface-2), var(--surface-3)); background-size: 200% 100%; animation: shimmer 1.4s var(--ease-out) infinite; }
+.skeleton i:nth-child(3n+2) { width: 82%; }
+.skeleton i:nth-child(3n+3) { width: 64%; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.state { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 40px 20px; }
+.state-pic { width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); margin-bottom: 4px; }
+.state.error .state-pic { background: var(--danger-soft); color: var(--danger); }
+.state h3 { font-family: var(--font-display); font-size: 1.15em; font-weight: 600; }
+.state p { margin: 0; max-width: 46ch; color: var(--text-2); text-wrap: pretty; }
+.state-action { margin-top: 8px; }
+.toast-action { margin-left: auto; border: 0; background: none; color: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0 0 0 8px; }
+
 /* ───────── Responsive ───────── */
 @media (max-width: 1180px) { .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 920px) {
