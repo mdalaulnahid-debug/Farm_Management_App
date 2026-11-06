@@ -85,7 +85,7 @@ export async function seed(opts: { history?: boolean; adminEmail?: string; admin
   await prisma.item.create({ data: { sku: 'DUCK-LIVE', name: 'Live ducks', nameBn: 'জীবন্ত হাঁস', category: 'LIVESTOCK', unit: 'head', salePrice: 450, trackInventory: false, valued: false, incomeAccountId: await acc(SYS.SALES_LIVESTOCK) } });
   const site = await prisma.site.create({ data: { name: 'Main farm', kind: 'FARM' } });
   await prisma.flock.create({ data: { code: 'FLK-01', name: 'Main laying flock', species: 'DUCK', siteId: site.id, startDate: toDate('2026-10-01'), openingCount: 0, currentCount: 0, notes: 'Set the actual number of birds in Production → Flocks so laying rate can be calculated.' } });
-  await prisma.party.create({ data: { kind: 'CUSTOMER', name: 'Walk-in customers', notes: 'Counter / cash sales without a named customer.' } });
+  await prisma.party.create({ data: { kind: 'CUSTOMER', name: 'Walk-in customers', systemKey: 'WALK_IN', notes: 'Counter / cash sales without a named customer.' } });
 
   await ensureReferenceData();
   if (opts.history) await importOctober(admin.id);

@@ -215,6 +215,8 @@ model Party {
   paymentTerms Int            @default(0) // days
   notes        String?
   active       Boolean        @default(true)
+  /// Set on parties the system relies on, e.g. WALK_IN for "Walk-in customers" (so renaming it changes nothing).
+  systemKey    String?        @unique
   invoices     SalesInvoice[]
   bills        Bill[]
   payments     Payment[]
@@ -466,4 +468,23 @@ model ImportBatch {
   createdAt   DateTime @default(now())
 
   @@index([fileHash])
+}
+
+// A photo kept with a money record as proof: the handwritten voucher or receipt slip behind a payment or a
+// bill. Stored in the database (not loose files) so backups and restores carry it with the record it proves.
+model Attachment {
+  id          String   @id @default(cuid())
+  ownerType   String   // PAYMENT | BILL
+  ownerId     String
+  mime        String   // image/jpeg | image/png | image/webp
+  size        Int
+  data        Bytes
+  sha256      String   @default("")
+  createdById String?
+  createdAt   DateTime @default(now())
+  /// A wrong photo is hidden, never deleted: who removed it and when. The bytes stay as evidence.
+  removedAt   DateTime?
+  removedById String?
+
+  @@index([ownerType, ownerId])
 }

@@ -7,6 +7,8 @@ import { fmtDate, fmtMoney, fmtNum, fmtPct, round2, ymd } from '../lib/format';
 import { useAccounts, useApi, useCashAccounts, useFlocks, useItems, useParties, useSave } from '../lib/hooks';
 import type { Account } from '../lib/api';
 import { LogoMark } from '../brand/Logo';
+import { SlipPhotoPicker, useAttachAfterSave } from './SlipPhotos';
+import { isMobile } from '../lib/phone';
 import { Alert, Drawer, Field, Input, Segmented, Select, StatusBadge } from './ui';
 
 /** Farm name at the top of a printed document: Bangla and English together, like a letterhead. */
@@ -105,9 +107,15 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
 
   const [buyer, setBuyer] = useState({ mode: 'phone' as 'phone' | 'list', phone: '', name: '' });
   const phoneDigits = buyer.phone.replace(/[০-৯]/g, d => String('০১২৩৪৫৬৭৮৯'.indexOf(d))).replace(/\D/g, '');
-  const lookup = useApi<{ match: { id: string; name: string; phone: string } | null }>(buyer.mode === 'phone' && phoneDigits.length >= 11 ? '/parties/lookup' : null, { phone: buyer.phone });
+  const lookup = useApi<{ match: { id: string; name: string; phone: string } | null; count?: number }>(buyer.mode === 'phone' && phoneDigits.length >= 11 ? '/parties/lookup' : null, { phone: buyer.phone });
   const match = phoneDigits.length >= 11 ? lookup.data?.match ?? null : null;
-  const buyerOk = buyer.mode === 'list' ? !!form.customerId : !buyer.phone.trim() || !!match || buyer.name.trim().length >= 2;
+  // Older books may hold two customers on one number: they cannot be told apart until the owner fixes it.
+  const shared = phoneDigits.length >= 11 && (lookup.data?.count ?? 0) > 1;
+  const phoneBad = buyer.mode === 'phone' && !!buyer.phone.trim() && !isMobile(buyer.phone);
+  const buyerOk = buyer.mode === 'list' ? !!form.customerId : !buyer.phone.trim() || (!phoneBad && !shared && (!!match || buyer.name.trim().length >= 2));
+  // Walk-in buyers (no mobile number, or the Walk-in customers entry) pay in full; credit needs a known customer.
+  const picked = customers.data?.data.find(c => c.id === form.customerId);
+  const walkIn = buyer.mode === 'phone' ? !buyer.phone.trim() : !!picked && (picked.systemKey === 'WALK_IN' || (!picked.systemKey && picked.name === 'Walk-in customers'));
   useEffect(() => {
     const eggs = items.data?.data.find(i => i.category === 'PRODUCE');
     if (eggs && lines.length === 1 && !lines[0].itemId) setLines([{ ...blank(), itemId: eggs.id, unitPrice: String(eggs.salePrice || '') }]);
@@ -128,7 +136,7 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
 
   return (
     <Drawer title={t('New sales invoice', 'নতুন বিক্রয় চালান')} subtitle={t('Posts revenue and receivable, reduces stock, and records cash received.', 'আয় ও পাওনা পোস্ট করে, মজুদ কমায় এবং প্রাপ্ত নগদ লেখে।')} onClose={onClose}
-      footer={<><div className="left">{t('Total', 'মোট')}: <b><Money v={total} /></b></div><button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button><button className="btn primary" disabled={save.isPending || !buyerOk || total < 0} onClick={submit}>{t('Save & post', 'সংরক্ষণ ও পোস্ট')}</button></>}>
+      footer={<><div className="left">{t('Total', 'মোট')}: <b><Money v={total} /></b></div><button className="btn" onClick={onClose}>{t('Cancel', 'বাতিল')}</button><button className="btn primary" disabled={save.isPending || !buyerOk || total < 0 || (walkIn && received < total - 0.005)} onClick={submit}>{t('Save & post', 'সংরক্ষণ ও পোস্ট')}</button></>}>
       <div className="form-grid three">
         <div className="full stack gap-8">
           <div className="row between">
@@ -137,12 +145,13 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
           </div>
           {buyer.mode === 'phone' ? (
             <div className="form-grid">
-              <Field label={t('Mobile number', 'মোবাইল নম্বর')} hint={match ? undefined : t('Existing customers are recognised automatically.', 'পুরোনো ক্রেতা স্বয়ংক্রিয়ভাবে চেনা যাবে।')}>
+              <Field label={t('Mobile number', 'মোবাইল নম্বর')} error={phoneBad ? t('11 digits starting 01, like 01711-223344.', '০১ দিয়ে শুরু ১১ সংখ্যা, যেমন ০১৭১১-২২৩৩৪৪।') : shared ? t('Two customers have this number. Ask the owner to fix it in Customers, or pick from the list.', 'দুজন ক্রেতার একই নম্বর। মালিককে ক্রেতা তালিকায় ঠিক করতে বলুন, অথবা তালিকা থেকে বাছুন।') : undefined}
+                hint={match ? undefined : t('The mobile number identifies the customer, even if the name is spelt differently.', 'মোবাইল নম্বর দিয়েই ক্রেতা চেনা যায়, নামের বানান ভিন্ন হলেও।')}>
                 <Input type="tel" inputMode="tel" autoFocus value={buyer.phone} onChange={e => setBuyer({ ...buyer, phone: e.target.value })} placeholder="01XXXXXXXXX" />
               </Field>
               {match
                 ? <Field label={t('Customer', 'ক্রেতা')}><div className="badge green match">✓ {match.name}</div></Field>
-                : <Field label={t('Buyer name', 'ক্রেতার নাম')} hint={buyer.phone.trim() ? t('New buyer — will be added to the customer list.', 'নতুন ক্রেতা — ক্রেতা তালিকায় যোগ হবে।') : t('Leave both blank for a walk-in sale.', 'খুচরা বিক্রিতে দুটোই খালি রাখুন।')}>
+                : <Field label={t('Buyer name', 'ক্রেতার নাম')} hint={buyer.phone.trim() ? t('New buyer — will be added to the customer list.', 'নতুন ক্রেতা — ক্রেতা তালিকায় যোগ হবে।') : t('No mobile number = walk-in sale, cash only. A name alone is just noted on the invoice.', 'মোবাইল নম্বর না দিলে খুচরা বিক্রি, শুধু নগদ। শুধু নাম দিলে চালানে লেখা থাকবে।')}>
                     <Input value={buyer.name} onChange={e => setBuyer({ ...buyer, name: e.target.value })} />
                   </Field>}
             </div>
@@ -200,6 +209,7 @@ export function InvoiceDrawer({ onClose }: { onClose: () => void }) {
             <Field label={t('Received into', 'যে হিসাবে জমা')}><CashAccountSelect value={receive.cashAccountId} onChange={v => setReceive(r => ({ ...r, cashAccountId: v }))} /></Field>
           </div>
         )}
+        {walkIn && receive.mode !== 'full' && <Alert tone="warn">{t('Walk-in buyers pay in full. To sell on credit, enter the buyer’s mobile number and name.', 'খুচরা ক্রেতা পুরো টাকা দেবেন। বাকিতে বিক্রি করতে ক্রেতার মোবাইল নম্বর ও নাম দিন।')}</Alert>}
         {receive.mode !== 'full' && <small className="muted">{t(`Balance due ${fmtMoney(total - received, lang)} will appear in receivables.`, `বাকি ${fmtMoney(total - received, lang)} পাওনা হিসেবে থাকবে।`)}</small>}
       </div>
     </Drawer>
@@ -220,12 +230,14 @@ export function BillDrawer({ onClose, expense }: { onClose: () => void; expense?
   const total = round2(lines.reduce((a, l) => a + Number(l.quantity || 0) * Number(l.unitPrice || 0), 0));
   const paid = pay.mode === 'full' ? total : pay.mode === 'partial' ? Number(pay.amount || 0) : 0;
   const needsSupplier = paid < total && !form.supplierId;
+  const [photo, setPhoto] = useState<string | null>(null);
+  const attach = useAttachAfterSave();
 
   const submit = () => save.mutate({
     ...form, supplierId: form.supplierId || null, dueDate: form.dueDate || null,
     lines: lines.filter(l => Number(l.quantity) > 0 && Number(l.unitPrice) >= 0).map(l => ({ itemId: l.itemId || null, accountId: l.accountId || null, description: l.description || undefined, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice || 0) })),
     paid: paid > 0 ? { amount: paid, cashAccountId: pay.cashAccountId } : null,
-  }, { onSuccess: onClose });
+  }, { onSuccess: (res: any) => { attach('bills', res?.id, photo); onClose(); } });
 
   return (
     <Drawer title={expense ? t('Record expense', 'খরচ লিখুন') : t('New purchase bill', 'নতুন ক্রয় বিল')}
@@ -265,6 +277,7 @@ export function BillDrawer({ onClose, expense }: { onClose: () => void; expense?
         </table>
       </div>
       <Field label={t('Notes', 'নোট')}><textarea className="textarea" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></Field>
+      <SlipPhotoPicker value={photo} onChange={setPhoto} />
       <div className="card card-pad stack soft">
         <h3>{t('Paid now', 'এখন পরিশোধ')}</h3>
         <div className="row">{(['full', 'partial', 'none'] as const).map(m => <label key={m} className="check"><input type="radio" checked={pay.mode === m} onChange={() => setPay({ ...pay, mode: m })} />{m === 'full' ? t('Paid in full', 'সম্পূর্ণ পরিশোধ') : m === 'partial' ? t('Part payment', 'আংশিক') : t('Pay later', 'পরে পরিশোধ')}</label>)}</div>
@@ -295,10 +308,12 @@ export function PaymentDrawer({ direction, onClose, partyId: initialParty }: { d
   }, [form.amount, docs]);
   const allocated = round2(Object.values(alloc).reduce((a, v) => a + Number(v || 0), 0));
   const save = useSave('post', '/payments', direction === 'IN' ? t('Receipt recorded.', 'আদায় লেখা হয়েছে।') : t('Payment recorded.', 'পরিশোধ লেখা হয়েছে।'));
+  const [photo, setPhoto] = useState<string | null>(null);
+  const attach = useAttachAfterSave();
   const submit = () => save.mutate({
     direction, date: form.date, partyId: form.partyId, cashAccountId: form.cashAccountId, amount: Number(form.amount), method: form.method, reference: form.reference || null, notes: form.notes || null,
     allocations: Object.entries(alloc).filter(([, v]) => Number(v) > 0).map(([id, v]) => (direction === 'IN' ? { invoiceId: id, amount: Number(v) } : { billId: id, amount: Number(v) })),
-  }, { onSuccess: onClose });
+  }, { onSuccess: (res: any) => { attach('payments', res?.id, photo); onClose(); } });
 
   return (
     <Drawer narrow title={direction === 'IN' ? t('Receive payment', 'টাকা আদায়') : t('Pay supplier', 'সরবরাহকারীকে পরিশোধ')} onClose={onClose}
@@ -310,6 +325,7 @@ export function PaymentDrawer({ direction, onClose, partyId: initialParty }: { d
         <Field label={direction === 'IN' ? t('Deposit to', 'জমা হিসাব') : t('Pay from', 'যে হিসাব থেকে')}><CashAccountSelect value={form.cashAccountId} onChange={v => setForm(f => ({ ...f, cashAccountId: v }))} /></Field>
         <Field label={t('Method', 'মাধ্যম')}><Select value={form.method} onChange={e => setForm({ ...form, method: e.target.value })} options={methodOptions(t)} /></Field>
         <Field label={t('Reference', 'রেফারেন্স')} className="full"><Input value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })} placeholder={t('Transaction ID / cheque no.', 'লেনদেন আইডি / চেক নং')} /></Field>
+        <SlipPhotoPicker value={photo} onChange={setPhoto} />
       </div>
       {form.partyId && (
         <div className="lines">

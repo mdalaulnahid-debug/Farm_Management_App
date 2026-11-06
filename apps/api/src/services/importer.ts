@@ -11,7 +11,7 @@ import { toDate, ymd } from '../lib/dates.js';
 import { SYS } from '../lib/constants.js';
 import { accountId, postEntry, reverseEntry } from './ledger.js';
 import { reverseStockForSource } from './inventory.js';
-import { createInvoice, voidInvoice } from './sales.js';
+import { createInvoice, voidInvoice, walkInParty } from './sales.js';
 import { createBill, voidBill } from './purchases.js';
 import { createPayment, voidPayment } from './payments.js';
 import { adjustStock, recordProduction, voidProduction } from './operations.js';
@@ -313,7 +313,7 @@ export async function importWorkbook(db: Db, actor: Actor | null, p: ParsedWorkb
 
   const monthName = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(from);
   const tag = `Imported from ${monthName} workbook.`;
-  const walkIn = (await db.party.findFirst({ where: { name: 'Walk-in customers' } })) ?? (await db.party.create({ data: { kind: 'CUSTOMER', name: 'Walk-in customers', notes: 'Counter / cash sales without a named customer.' } }));
+  const walkIn = await walkInParty(db);
   const creditParty = p.rows.some(r => r.creditEggs > 0) ? await party(db, `Credit customers (${monthName} workbook)`, 'Aggregated credit sales from the workbook. Record collections against this customer, or split into named customers.') : null;
   const cash = await accountId(db, SYS.CASH);
   const acc = (code: string) => accountId(db, code);

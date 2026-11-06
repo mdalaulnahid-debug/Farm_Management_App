@@ -14,6 +14,7 @@ import authRoutes from './routes/auth.js';
 import passkeyRoutes from './routes/passkeys.js';
 import masterRoutes from './routes/master.js';
 import transactionRoutes from './routes/transactions.js';
+import attachmentRoutes from './routes/attachments.js';
 import reportRoutes from './routes/reports.js';
 import importRoutes from './routes/import.js';
 import projectRoutes from './routes/projects.js';
@@ -88,6 +89,7 @@ export async function buildApp() {
     await api.register(passkeyRoutes);
     await api.register(masterRoutes);
     await api.register(transactionRoutes);
+    await api.register(attachmentRoutes);
     await api.register(reportRoutes);
     await api.register(importRoutes);
     await api.register(projectRoutes);

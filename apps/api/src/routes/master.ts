@@ -94,8 +94,10 @@ export default async function masterRoutes(app: FastifyInstance) {
     const phone = normalizePhone((req.query as { phone?: string }).phone);
     if (!phone || phone.length < 6) return { match: null };
     const parties = await prisma.party.findMany({ where: { kind: { in: ['CUSTOMER', 'BOTH'] }, phone: { not: null } } });
-    const match = parties.find(p => normalizePhone(p.phone) === phone);
-    return { match: match ? { id: match.id, name: match.name, phone: match.phone } : null, phone };
+    const hits = parties.filter(p => normalizePhone(p.phone) === phone);
+    // Two customers on one number cannot be told apart: no match, and the screen says so.
+    const match = hits.length === 1 ? hits[0] : null;
+    return { match: match ? { id: match.id, name: match.name, phone: match.phone } : null, phone, count: hits.length };
   });
 
   app.get('/parties/:id', { preHandler: can() }, async req => {
@@ -115,8 +117,16 @@ export default async function masterRoutes(app: FastifyInstance) {
     taxId: zOptText(60), creditLimit: z.coerce.number().min(0).nullish(), paymentTerms: z.coerce.number().int().min(0).max(365).default(0),
     notes: zOptText(500), active: z.boolean().default(true),
   });
+  /** A customer is known by their mobile number, so two customers may never share one. */
+  const phoneTaken = async (kind: string, phone: string | null, exceptId?: string) => {
+    if (!phone || !['CUSTOMER', 'BOTH'].includes(kind)) return;
+    const others = await prisma.party.findMany({ where: { kind: { in: ['CUSTOMER', 'BOTH'] }, phone: { not: null }, ...(exceptId ? { id: { not: exceptId } } : {}) } });
+    const same = others.find(o => normalizePhone(o.phone) === phone);
+    if (same) throw conflict(`The mobile number ${phone} already belongs to ${same.name}.`);
+  };
   app.post('/parties', { preHandler: can('parties.manage') }, async req => {
     const body = parse(partyBody, req.body);
+    await phoneTaken(body.kind, normalizePhone(body.phone));
     const p = await prisma.party.create({ data: { ...body, phone: normalizePhone(body.phone) } });
     await audit(prisma, actorOf(req), 'create', 'party', p.id, `${p.kind.toLowerCase()} ${p.name}`);
     return p;
@@ -124,6 +134,7 @@ export default async function masterRoutes(app: FastifyInstance) {
   app.put('/parties/:id', { preHandler: can('parties.manage') }, async req => {
     const { id } = req.params as { id: string };
     const body = parse(partyBody, req.body);
+    await phoneTaken(body.kind, normalizePhone(body.phone), id);
     const p = await prisma.party.update({ where: { id }, data: { ...body, phone: normalizePhone(body.phone) } });
     await audit(prisma, actorOf(req), 'update', 'party', id, `Updated ${p.name}`);
     return p;

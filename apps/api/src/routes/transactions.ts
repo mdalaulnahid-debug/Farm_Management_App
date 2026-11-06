@@ -14,6 +14,7 @@ import { createPayment, voidPayment } from '../services/payments.js';
 import { adjustStock, cashCount, recordProduction, transfer, voidProduction } from '../services/operations.js';
 import { postEntry, reverseEntry } from '../services/ledger.js';
 import { audit } from '../services/common.js';
+import { listAttachments } from './attachments.js';
 
 const listQuery = zRange.extend({
   search: z.string().optional(), status: z.string().optional(), partyId: z.string().optional(),
@@ -74,7 +75,7 @@ export default async function transactionRoutes(app: FastifyInstance) {
   app.get('/bills/:id', { preHandler: can('purchases.view') }, async req => {
     const bill = await prisma.bill.findUnique({ where: { id: (req.params as any).id }, include: { lines: true, supplier: true, allocations: { include: { payment: true } } } });
     if (!bill) throw notFound('Bill');
-    return bill;
+    return { ...bill, attachments: await listAttachments('BILL', bill.id) };
   });
   app.post('/bills', { preHandler: can('purchases.create') }, async req => {
     const body = parse(z.object({
@@ -114,7 +115,7 @@ export default async function transactionRoutes(app: FastifyInstance) {
     });
     if (!pay) throw notFound('Payment');
     const accounts = await prisma.account.findMany({ where: { id: { in: [pay.cashAccountId, pay.counterAccountId] } }, select: { id: true, code: true, name: true, nameBn: true } });
-    return { ...pay, cashAccount: accounts.find(a => a.id === pay.cashAccountId) ?? null, counterAccount: accounts.find(a => a.id === pay.counterAccountId) ?? null };
+    return { ...pay, cashAccount: accounts.find(a => a.id === pay.cashAccountId) ?? null, counterAccount: accounts.find(a => a.id === pay.counterAccountId) ?? null, attachments: await listAttachments('PAYMENT', pay.id) };
   });
   app.post('/payments', { preHandler: can('banking.view') }, async req => {
     const body = parse(z.object({
