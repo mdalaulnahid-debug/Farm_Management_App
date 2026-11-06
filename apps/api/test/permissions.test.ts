@@ -117,6 +117,7 @@ const ROUTES: Row[] = [
   row('GET', '/reports/ap-aging', need('purchases.view')),
   // Cash and bank
   row('GET', '/payments', need('banking.view')),
+  row('GET', '/payments/:id', need('banking.view')),
   row('POST', '/payments', need('banking.view', 'sales.create'), { label: 'POST /payments (receipt from a customer)', payload: receipt }),
   row('POST', '/payments', need('banking.view', 'purchases.create'), { label: 'POST /payments (payment to a supplier)', payload: supplierPayment }),
   row('POST', '/payments', need('banking.view', 'banking.manage'), { label: 'POST /payments (other money movement)', payload: moneyMove }),

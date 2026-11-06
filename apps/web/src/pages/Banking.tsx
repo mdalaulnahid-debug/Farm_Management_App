@@ -8,6 +8,7 @@ import { Alert, Badge, Card, DataTable, Empty, Field, Input, Kpi, Loading, PageH
 import { ledgerDesk } from '../assets/photos';
 import { accountOptions, CashAccountSelect, methodLabel, methodOptions, Money, PaymentDrawer } from '../components/forms';
 import { GrantsTab, ProjectsTab } from './BankingProjects';
+import { PaymentSlip } from '../components/PaymentSlip';
 
 type Tab = 'accounts' | 'register' | 'transfer' | 'grants' | 'projects' | 'other' | 'count';
 interface Payment {
@@ -130,6 +131,7 @@ function RegisterTab() {
   const [dir, setDir] = useState<'all' | 'IN' | 'OUT'>('all');
   const [page, setPage] = useState(1);
   const [voiding, setVoiding] = useState<Payment | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   const list = useApi<{ data: Payment[]; total: number }>('/payments', { ...range, search, direction: dir === 'all' ? undefined : dir, page, pageSize: 50 });
   const voidIt = useSave<{ id: string; reason: string }>('post', b => `/payments/${b.id}/void`, t('Payment voided.', 'লেনদেন বাতিল হয়েছে।'));
   const live = (list.data?.data ?? []).filter(p => p.status !== 'VOID');
@@ -165,8 +167,9 @@ function RegisterTab() {
         <RangePicker value={range} onChange={r => { setRange(r); setPage(1); }} />
         <button className="btn" onClick={exportCsv} disabled={!list.data?.data.length}><Download size={16} />{t('Export', 'ডাউনলোড')}</button>
       </>}>
-      <DataTable rows={list.data?.data} columns={columns} page={page} pageSize={50} total={list.data?.total} onPage={setPage}
+      <DataTable rows={list.data?.data} columns={columns} onRow={r => setOpenId(r.id)} page={page} pageSize={50} total={list.data?.total} onPage={setPage}
         empty={search || dir !== 'all' ? t('No transactions match these filters.', 'এই ফিল্টারে কোনো লেনদেন নেই।') : t('No receipts or payments in this period.', 'এই সময়ে কোনো আদায় বা পরিশোধ নেই।')} />
+      {openId && <PaymentSlip id={openId} onClose={() => setOpenId(null)} />}
       {voiding && <VoidDialog what={t('payment', 'লেনদেন')} busy={voidIt.isPending} onClose={() => setVoiding(null)}
         onConfirm={reason => voidIt.mutate({ id: voiding.id, reason }, { onSuccess: () => setVoiding(null) })} />}
     </Card>

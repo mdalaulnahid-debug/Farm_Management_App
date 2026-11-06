@@ -18,7 +18,7 @@ function Qr({ text, label }: { text: string; label: string }) {
   return <div className="doc-qr" role="img" aria-label={label} dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
-export function DocPaper({ kind, number, status, party, meta, qr, children }: {
+export function DocPaper({ kind, number, status, party, meta, qr, thanks, signLabel, children }: {
   /** The document's name, e.g. "Invoice". */
   kind: string; number: string;
   status?: { label: string; tone: 'paid' | 'open' | 'void' };
@@ -26,6 +26,10 @@ export function DocPaper({ kind, number, status, party, meta, qr, children }: {
   meta: [string, ReactNode][];
   /** Plain text for the QR code; leave out for no code. */
   qr?: string;
+  /** The closing line; the farm's invoice footer or a thank-you when left out, none when null. */
+  thanks?: string | null;
+  /** Under the signature line; "Authorised signature" when left out. */
+  signLabel?: string;
   children: ReactNode;
 }) {
   const { me } = useAuth();
@@ -61,8 +65,8 @@ export function DocPaper({ kind, number, status, party, meta, qr, children }: {
       <div className="doc-content">{children}</div>
       <footer className="doc-foot">
         <div className="doc-thanks">
-          {org?.invoiceFooter ? <p>{org.invoiceFooter}</p> : <p>{t('Thank you for your business.', 'আপনার সাথে ব্যবসার জন্য ধন্যবাদ।')}</p>}
-          <div className="doc-sign"><i />{t('Authorised signature', 'অনুমোদিত স্বাক্ষর')}</div>
+          {thanks !== null && <p>{thanks ?? (org?.invoiceFooter || t('Thank you for your business.', 'আপনার সাথে ব্যবসার জন্য ধন্যবাদ।'))}</p>}
+          <div className="doc-sign"><i />{signLabel ?? t('Authorised signature', 'অনুমোদিত স্বাক্ষর')}</div>
         </div>
         {qr && <Qr text={qr} label={t('QR code with this document’s details', 'এই কাগজের তথ্যসহ কিউআর কোড')} />}
       </footer>

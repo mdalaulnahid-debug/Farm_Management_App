@@ -96,6 +96,11 @@ describe('order-to-cash and procure-to-pay', () => {
     const pay = await call('POST', '/payments', { direction: 'OUT', date: '2026-11-05', partyId: supplier.id, cashAccountId: await id('1010'), amount: 4000, allocations: [{ billId: bill.body.id, amount: 4000 }] });
     expect(pay.status).toBe(200);
     expect((await call('GET', `/bills/${bill.body.id}`)).body.status).toBe('PARTIAL');
+    const slip = (await call('GET', `/payments/${pay.body.id}`)).body;
+    expect(slip.party.id).toBe(supplier.id);
+    expect(slip.cashAccount.code).toBe('1010');
+    expect(slip.allocations[0].bill.number).toBe(bill.body.number);
+    expect((await call('GET', '/payments/nope')).status).toBe(404);
     const ap = (await call('GET', '/reports/ap-aging?asOf=2026-11-30')).body;
     expect(ap.totals.total).toBe(7000);
   });
