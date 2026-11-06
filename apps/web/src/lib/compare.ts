@@ -21,6 +21,31 @@ export function previousRange(r: Range): Range {
   return { from: iso(new Date(f.getTime() - days * 864e5)), to: iso(new Date(f.getTime() - 864e5)) };
 }
 
+/** The two periods to compare, fairly. A period still in progress (e.g. "this month" on the 6th) is compared
+ *  only up to today, against the same days of the earlier period: 1–6 Nov with 1–6 Oct, never 1–6 Nov with all
+ *  of October. A finished period is compared whole, as `previousRange` gives it. `today` is YYYY-MM-DD. */
+export function comparison(t: T, r: Range, today: string): { current: Range; previous: Range; clipped: boolean; vs: string } {
+  const d = (v: string) => new Date(`${v.slice(0, 10)}T00:00:00Z`);
+  const iso = (v: Date) => v.toISOString().slice(0, 10);
+  const f = d(r.from), to = d(r.to), now = d(today);
+  if (now < f || now >= to) return { current: r, previous: previousRange(r), clipped: false, vs: periodWord(t, r) };
+  const whole = f.getUTCDate() === 1 && to.getUTCDate() === new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth() + 1, 0)).getUTCDate();
+  const current = { from: r.from.slice(0, 10), to: today };
+  if (whole) {
+    const months = (to.getUTCFullYear() - f.getUTCFullYear()) * 12 + to.getUTCMonth() - f.getUTCMonth() + 1;
+    const back = (v: Date) => {
+      // Same day number `months` earlier, kept inside that month (31 Mar → 28/29 Feb).
+      const y = v.getUTCFullYear(), m = v.getUTCMonth() - months;
+      const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+      return new Date(Date.UTC(y, m, Math.min(v.getUTCDate(), last)));
+    };
+    const vs = months === 12 ? t('the same days last year', 'গত বছরের একই দিনগুলোর') : months === 1 ? t('the same days last month', 'গত মাসের একই দিনগুলোর') : t('the same days before', 'আগের একই দিনগুলোর');
+    return { current, previous: { from: iso(back(f)), to: iso(back(now)) }, clipped: true, vs };
+  }
+  const days = Math.round((now.getTime() - f.getTime()) / 864e5) + 1;
+  return { current, previous: { from: iso(new Date(f.getTime() - days * 864e5)), to: iso(new Date(f.getTime() - 864e5)) }, clipped: true, vs: t('the days before', 'আগের দিনগুলোর') };
+}
+
 /** What to call the earlier period in "vs …". */
 export function periodWord(t: T, r: Range) {
   const f = new Date(`${r.from.slice(0, 10)}T00:00:00Z`), to = new Date(`${r.to.slice(0, 10)}T00:00:00Z`);
