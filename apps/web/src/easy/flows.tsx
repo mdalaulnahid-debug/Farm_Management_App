@@ -3,7 +3,7 @@
 import { ChoiceButtons, Empty, Input, Loading, NumberPad, Wizard, type WizardStep } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtMoney, ymd } from '../lib/format';
-import { useParties } from '../lib/hooks';
+import { useApi, useParties } from '../lib/hooks';
 import { nameOf, unitLabel, usePrefs } from '../lib/i18n';
 import { Pic, useEasySave, useFarmLists, useItemLabel, useTodayProduction } from './shared';
 import { isMobile } from '../lib/phone';
@@ -140,7 +140,7 @@ export function EveningFlow({ onClose }: { onClose: () => void }) {
 }
 
 // ───── Sale & money received ─────
-interface SaleData { kind: 'sale' | 'due' | ''; itemId: string; qty: string; price: string; buyer: string; phone: string; how: 'cash' | 'mobile' | 'credit' | 'part' | ''; partyId: string; amount: string; paidNow: string; partHow: 'cash' | 'mobile' | '' }
+interface SaleData { kind: 'sale' | 'due' | ''; itemId: string; qty: string; price: string; buyer: string; phone: string; how: 'cash' | 'mobile' | 'credit' | 'part' | ''; partyId: string; amount: string; paidNow: string; partHow: 'cash' | 'mobile' | ''; matchId: string }
 /** A sale QR sticker (pages/QuickSale) opens this with the item, and optionally the customer, already chosen. */
 export interface SalePreset { itemId?: string; customerId?: string; customerName?: string }
 export function SaleFlow({ onClose, preset }: { onClose: () => void; preset?: SalePreset }) {
@@ -154,7 +154,7 @@ export function SaleFlow({ onClose, preset }: { onClose: () => void; preset?: Sa
   const total = (d: SaleData) => Math.round(n(d.qty) * n(d.price) * 100) / 100;
   /** Money still owed must be owed by a known customer: credit and part-paid need the buyer's mobile number and
    *  name (the number is their identity), or a customer sticker. Walk-in buyers pay in full. */
-  const hasBuyer = (d: SaleData) => !!(preset?.customerId || (isMobile(d.phone) && d.buyer.trim()));
+  const hasBuyer = (d: SaleData) => !!(preset?.customerId || (isMobile(d.phone) && (d.matchId || d.buyer.trim())));
   const howOptions = (credit: boolean) => [
     { value: 'cash' as const, label: t('Cash', 'নগদ'), picture: <Pic name="cash" /> },
     { value: 'mobile' as const, label: t('bKash / Nagad', 'বিকাশ / নগদ'), picture: <Pic name="mobile" /> },
@@ -193,12 +193,9 @@ export function SaleFlow({ onClose, preset }: { onClose: () => void; preset?: Sa
     },
     {
       key: 'buyer', title: t('Who bought it?', 'কে কিনেছেন?'), picture: <Pic name="sale" />, skip: d => d.kind !== 'sale' || !!preset?.customerId,
-      valid: d => !d.phone.trim() || (isMobile(d.phone) && !!d.buyer.trim()),
-      help: t('Leave both empty for a walk-in sale (cash only). For a known customer, or to sell on credit, write the mobile number and the name: the number is how the customer is recognised.', 'খুচরা বিক্রিতে (শুধু নগদ) দুটোই খালি রাখুন। পরিচিত ক্রেতা বা বাকিতে বিক্রির জন্য মোবাইল নম্বর ও নাম লিখুন: নম্বর দিয়েই ক্রেতা চেনা যায়।'),
-      render: (d, set) => <>
-        <Input className="input-lg" inputMode="tel" placeholder={t('Mobile number (optional)', 'মোবাইল নম্বর (ঐচ্ছিক)')} value={d.phone} onChange={e => set({ phone: e.target.value })} />
-        <Input className="input-lg" placeholder={t('Name (optional)', 'নাম (ঐচ্ছিক)')} value={d.buyer} onChange={e => set({ buyer: e.target.value })} />
-      </>,
+      valid: d => !d.phone.trim() || (isMobile(d.phone) && (!!d.matchId || !!d.buyer.trim())),
+      help: t('Write the mobile number first. A known customer appears: tap their name. A new number asks for the name. Leave the number empty for a walk-in sale (cash only).', 'আগে মোবাইল নম্বর লিখুন। পরিচিত ক্রেতা হলে নাম দেখাবে: নামে চাপুন। নতুন নম্বর হলে নাম লিখতে বলবে। খুচরা বিক্রিতে (শুধু নগদ) নম্বর খালি রাখুন।'),
+      render: (d, set, next) => <BuyerByPhone phone={d.phone} name={d.buyer} matchId={d.matchId} set={set} next={next} />,
     },
     {
       key: 'party', title: t('Who paid?', 'কে টাকা দিলেন?'), picture: <Pic name="money" />, skip: d => d.kind !== 'due', valid: d => !!d.partyId,
@@ -242,7 +239,7 @@ export function SaleFlow({ onClose, preset }: { onClose: () => void; preset?: Sa
   const buyerName = (d: SaleData) => d.buyer || preset?.customerName || '';
   return (
     <Wizard<SaleData> title={t('Sale & money received', 'বিক্রি ও টাকা আদায়')} steps={steps} key={lang}
-      initial={{ kind: preset?.itemId ? 'sale' : '', itemId: preset?.itemId ?? '', qty: '', price: preset?.itemId ? String(item(preset.itemId)?.salePrice || '') : '', buyer: '', phone: '', how: '', partyId: '', amount: '', paidNow: '', partHow: '' }}
+      initial={{ kind: preset?.itemId ? 'sale' : '', itemId: preset?.itemId ?? '', qty: '', price: preset?.itemId ? String(item(preset.itemId)?.salePrice || '') : '', buyer: '', phone: '', how: '', partyId: '', amount: '', paidNow: '', partHow: '', matchId: '' }}
       busy={save.busy} error={save.error} onCancel={onClose}
       sentence={d => d.kind === 'sale'
         ? t(`You sold ${label(item(d.itemId), n(d.qty))} at ${fmtMoney(n(d.price), lang)} each = ${fmtMoney(total(d), lang)}${buyerName(d) ? ` to ${buyerName(d)}` : ''}, ${howWord(d)}.`,
@@ -250,7 +247,7 @@ export function SaleFlow({ onClose, preset }: { onClose: () => void; preset?: Sa
         : t(`You received ${fmtMoney(n(d.amount), lang)}, ${howWord(d)}.`, `আপনি ${fmtMoney(n(d.amount), lang)} পেয়েছেন, ${howWord(d)}।`)}
       onSave={d => save.run([d.kind === 'sale'
         ? save.post('/invoices', {
-          date, ...(preset?.customerId ? { customerId: preset.customerId } : { customer: d.buyer || d.phone ? { name: d.buyer || null, phone: d.phone || null } : null }),
+          date, ...(preset?.customerId || d.matchId ? { customerId: preset?.customerId || d.matchId } : { customer: d.buyer || d.phone ? { name: d.buyer || null, phone: d.phone || null } : null }),
           lines: [{ itemId: d.itemId, quantity: n(d.qty), unitPrice: n(d.price) }],
           received: d.how === 'credit' ? null : { amount: d.how === 'part' ? n(d.paidNow) : total(d), cashAccountId: account(d), method: way(d) === 'mobile' ? 'MOBILE' : 'CASH' },
         })
@@ -267,6 +264,29 @@ export function SaleFlow({ onClose, preset }: { onClose: () => void; preset?: Sa
         }])}
     />
   );
+}
+
+/** Buyer, phone first: the mobile number is the customer's identity. A known number shows that customer to tap
+ *  (so a name typed differently never makes a second customer); a new number asks for the name; no number is a
+ *  walk-in sale, where a name is only noted. */
+function BuyerByPhone({ phone, name, matchId, set, next }: { phone: string; name: string; matchId: string; set: (p: Partial<SaleData>) => void; next: () => void }) {
+  const { t } = usePrefs();
+  const valid = isMobile(phone);
+  const q = useApi<{ match: { id: string; name: string; phone: string } | null }>(valid ? '/parties/lookup' : null, { phone });
+  const match = valid ? q.data?.match ?? null : null;
+  return <>
+    <Input className="input-lg" type="tel" inputMode="tel" autoFocus placeholder={t('Mobile number', 'মোবাইল নম্বর')} value={phone}
+      onChange={e => set({ phone: e.target.value, matchId: '', ...(matchId ? { buyer: '' } : {}) })} />
+    {phone.trim() && !valid && <p className="wizard-q">{t('11 digits starting 01, like 01711-223344.', '০১ দিয়ে শুরু ১১ সংখ্যা, যেমন ০১৭১১-২২৩৩৪৪।')}</p>}
+    {valid && q.isLoading && <Loading />}
+    {match && <>
+      <p className="wizard-q">{t('This number belongs to:', 'এই নম্বরটি যার:')}</p>
+      <ChoiceButtons value={matchId || undefined} onChange={v => set({ matchId: v, buyer: match.name })} onPick={next}
+        options={[{ value: match.id, label: match.name, sub: match.phone, picture: <Pic name="sale" /> }]} />
+    </>}
+    {valid && q.data && !match && <Input className="input-lg" autoFocus placeholder={t('New buyer’s name', 'নতুন ক্রেতার নাম')} value={name} onChange={e => set({ buyer: e.target.value })} />}
+    {!phone.trim() && <Input className="input-lg" placeholder={t('Name (optional, walk-in, cash only)', 'নাম (ঐচ্ছিক, খুচরা, শুধু নগদ)')} value={name} onChange={e => set({ buyer: e.target.value })} />}
+  </>;
 }
 
 function CustomerChoice({ value, onChange, onPick }: { value: string; onChange: (v: string) => void; onPick: () => void }) {
